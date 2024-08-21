@@ -22,6 +22,9 @@ TOKEN_PROVIDER_URL = "https://login-service-dev.npintdebdtools.aws.dsarena.com/t
 with open("topics.json", "r") as file:
     TOPICS = json.load(file)
 
+with open("access.json", "r") as file:
+    ACCESS = json.load(file)
+
 def getToken():
     return {
         "statusCode": 303,
@@ -53,7 +56,9 @@ def postTopicMessage(topicName, topicMessage, jwt):
     if topicName not in TOPICS:
         return { "statusCode": 404 } 
 
-    # TODO: USER UNATHORIZED
+    user = "FooUser" # TODO: PICK USER FROM JWT
+    if topicName not in ACCESS or user not in ACCESS[topicName]:
+        return { "statusCode": 403 } 
 
     try:
         validate(instance=topicMessage, schema=TOPICS[topicName])

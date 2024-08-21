@@ -1,0 +1,9 @@
+{
+    "RunTopic": [
+        "FooBarUser"
+    ],
+    "EdlaChangeTopic": [
+        "FooUser",
+        "BarUser"
+    ]
+}

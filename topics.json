@@ -110,7 +110,7 @@
             "guid",
             "app_id_snow",
             "source_app",
-            " timestamp_event ",
+            "timestamp_event",
             "data_definition_id",
             "operation",
             "location",
