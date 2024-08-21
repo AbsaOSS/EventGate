@@ -17,12 +17,12 @@ import json
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-TOKEN_PROVIDER_URL = "https://login-service-dev.npintdebdtools.aws.dsarena.com/token/generate"
+TOKEN_PROVIDER_URL = "https://<redacted>"
 
-with open("topics.json", "r") as file:
+with open("conf/topics.json", "r") as file:
     TOPICS = json.load(file)
 
-with open("access.json", "r") as file:
+with open("conf/access.json", "r") as file:
     ACCESS = json.load(file)
 
 def getToken():
