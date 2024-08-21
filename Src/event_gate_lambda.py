@@ -16,14 +16,26 @@
 import json
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
+from kafka import KafkaProducer
 
-TOKEN_PROVIDER_URL = "https://<redacted>"
+with open("conf/config.json", "r") as file:
+    CONFIG = json.load(file)
 
-with open("conf/topics.json", "r") as file:
+with open(CONFIG["topicsConfig"], "r") as file:
     TOPICS = json.load(file)
 
-with open("conf/access.json", "r") as file:
+with open(CONFIG["accessConfig"], "r") as file:
     ACCESS = json.load(file)
+    
+TOKEN_PROVIDER_URL = CONFIG["tokenProviderUrl"]
+
+kafka_producer = KafkaProducer(
+    bootstrap_servers=[CONFIG["kafkaBootstrapServer"]]
+)
+
+def kafkaWrite(topicName, message):
+    kafka_producer.send(topicName, value=json.dumps(message).encode("utf-8"))  
+    kafka_producer.flush()
 
 def getToken():
     return {
@@ -70,7 +82,7 @@ def postTopicMessage(topicName, topicMessage, jwt):
          }
     
 
-    # TODO: SEND MESSAGE
+    kafkaWrite(topicName, topicMessage)
     return {"statusCode": 202}
 
 def lambda_handler(event, context):

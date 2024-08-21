@@ -1,0 +1,6 @@
+{
+    "accessConfig": "conf/access.json",
+    "topicsConfig": "conf/topics.json",
+    "tokenProviderUrl": "https://<redacted>",
+    "kafkaBootstrapServer": "localhost:9092"
+}
