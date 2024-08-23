@@ -13,9 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
+import base64
 import json
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
+import jwt
+import requests
+
 from confluent_kafka import Producer
 
 with open("conf/config.json", "r") as file:
@@ -28,22 +36,39 @@ with open(CONFIG["accessConfig"], "r") as file:
     ACCESS = json.load(file)
     
 TOKEN_PROVIDER_URL = CONFIG["tokenProviderUrl"]
+print("Loaded config")
 
-kafka_producer = Producer({
-    "bootstrap.servers": CONFIG["kafkaBootstrapServer"]
-})
+token_public_key_encoded = requests.get(CONFIG["tokenPublicKeyUrl"], verify=False).json()["key"]
+TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
+print("Loaded token public key")
+
+kafka_producer = Producer({"bootstrap.servers": CONFIG["kafkaBootstrapServer"]})
+print("Initialized kafka producer")
 
 def kafkaWrite(topicName, message):
-    kafka_producer.produce(topicName, key="", value=json.dumps(message).encode("utf-8"))  
+    print(f"Sending to kafka {topicName}")
+    error = []
+    kafka_producer.produce(topicName, 
+                           key="", 
+                           value=json.dumps(message).encode("utf-8"),
+                           callback = lambda err, msg: error.append(err) if err is not None else None)
     kafka_producer.flush()
+    if error:
+        print(error)
+        return 500
+    else:
+        print("OK")
+        return 202
 
 def getToken():
+    print("Handling GET Token")
     return {
         "statusCode": 303,
         "headers": {"Location": TOKEN_PROVIDER_URL}
     }
     
 def getTopics():
+    print("Handling GET Topics")
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
@@ -51,6 +76,7 @@ def getTopics():
     }
     
 def getTopicSchema(topicName):
+    print(f"Handling GET TopicSchema({topicName})")
     if topicName not in TOPICS:
         return { "statusCode": 404 }    
         
@@ -60,15 +86,16 @@ def getTopicSchema(topicName):
         "body": json.dumps(TOPICS[topicName])
     }
 
-def postTopicMessage(topicName, topicMessage, jwt):
-    # TODO: JWT INVALID
+def postTopicMessage(topicName, topicMessage, tokenEncoded):
+    print(f"Handling POST {topicName}")
+    token = jwt.decode(tokenEncoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])
 
-    # TODO: JWT EXPIRED
+    print(token)
     
     if topicName not in TOPICS:
         return { "statusCode": 404 } 
 
-    user = "FooUser" # TODO: PICK USER FROM JWT
+    user = token["sub"]
     if topicName not in ACCESS or user not in ACCESS[topicName]:
         return { "statusCode": 403 } 
 
@@ -81,9 +108,7 @@ def postTopicMessage(topicName, topicMessage, jwt):
             "body": e.message
          }
     
-
-    kafkaWrite(topicName, topicMessage)
-    return {"statusCode": 202}
+    return {"statusCode": kafkaWrite(topicName, topicMessage)}
 
 def lambda_handler(event, context):
     if event["resource"] == "/Token":
