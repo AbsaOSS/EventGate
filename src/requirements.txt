@@ -1,0 +1,6 @@
+urllib3
+cryptography
+jsonschema
+PyJWT
+requests
+confluent_kafka
