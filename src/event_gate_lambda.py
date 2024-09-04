@@ -88,7 +88,14 @@ def getTopicSchema(topicName):
 
 def postTopicMessage(topicName, topicMessage, tokenEncoded):
     print(f"Handling POST {topicName}")
-    token = jwt.decode(tokenEncoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])
+    try:
+        token = jwt.decode(tokenEncoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])
+    except Exception as e:
+         return {
+            "statusCode": 401,
+            "headers": {"Content-Type": "text/plain"},
+            "body": str(e)
+         }
 
     if topicName not in TOPICS:
         return { "statusCode": 404 } 
@@ -109,13 +116,17 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
     return {"statusCode": kafkaWrite(topicName, topicMessage)}
 
 def lambda_handler(event, context):
-    if event["resource"] == "/Token":
-        return getToken()
-    if event["resource"] == "/Topics":
-        return getTopics()
-    if event["resource"] == "/Topics/{topicName}":
-        if event["httpMethod"] == "GET":
-            return getTopicSchema(event["pathParameters"]["topicName"])
-        if event["httpMethod"] == "POST":
-            return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])    
-    return {"statusCode": 404}
+    try:
+        if event["resource"] == "/Token":
+            return getToken()
+        if event["resource"] == "/Topics":
+            return getTopics()
+        if event["resource"] == "/Topics/{topicName}":
+            if event["httpMethod"] == "GET":
+                return getTopicSchema(event["pathParameters"]["topicName"])
+            if event["httpMethod"] == "POST":
+                return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])    
+        return {"statusCode": 404}
+    except Exception as e:
+        print(f"Unexpected exception: {e}")
+        return {"statusCode": 500}
