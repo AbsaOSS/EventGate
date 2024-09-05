@@ -15,6 +15,7 @@
 # 
 import base64
 import json
+import sys
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -118,4 +119,6 @@ def lambda_handler(event, context):
             return getTopicSchema(event["pathParameters"]["topicName"])
         if event["httpMethod"] == "POST":
             return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])    
+    if event["resource"] == "/Terminate":
+        sys.exit("TERMINATING")
     return {"statusCode": 404}
