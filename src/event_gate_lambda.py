@@ -90,8 +90,6 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
     print(f"Handling POST {topicName}")
     token = jwt.decode(tokenEncoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])
 
-    print(token)
-    
     if topicName not in TOPICS:
         return { "statusCode": 404 } 
 
@@ -119,5 +117,5 @@ def lambda_handler(event, context):
         if event["httpMethod"] == "GET":
             return getTopicSchema(event["pathParameters"]["topicName"])
         if event["httpMethod"] == "POST":
-            return postTopicMessage(event["pathParameters"]["topicName"], event["body"], event["headers"]["bearer"])    
+            return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])    
     return {"statusCode": 404}
