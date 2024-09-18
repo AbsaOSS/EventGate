@@ -3,4 +3,5 @@ cryptography
 jsonschema
 PyJWT
 requests
+boto3
 confluent_kafka
