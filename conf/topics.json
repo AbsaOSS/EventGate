@@ -13,7 +13,7 @@
                 "description": "Environment",
                 "type": "string"
             },
-            "id": {
+            "guid": {
                 "description": "Unique identifier for the event (GUID)",
                 "type": "string"
             },
@@ -76,7 +76,7 @@
                 "description": "Format of the data",
                 "type": "string"
             },
-            "id": {
+            "guid": {
                 "description": "Unique identifier for the event (GUID)",
                 "type": "string"
             },
