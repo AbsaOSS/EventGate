@@ -134,16 +134,16 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
 
 def lambda_handler(event, context):
     try:
-        if event["resource"] == "/Token":
+        if event["resource"].lower() == "/token":
             return getToken()
-        if event["resource"] == "/Topics":
+        if event["resource"].lower() == "/topics":
             return getTopics()
-        if event["resource"] == "/Topics/{topicName}":
+        if event["resource"].lower() == "/topics/{topic_name}":
             if event["httpMethod"] == "GET":
-                return getTopicSchema(event["pathParameters"]["topicName"])
+                return getTopicSchema(event["pathParameters"]["topic_name"].lower())
             if event["httpMethod"] == "POST":
-                return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])  
-        if event["resource"] == "/Terminate":
+                return postTopicMessage(event["pathParameters"]["topic_name"].lower(), json.loads(event["body"]), event["headers"]["bearer"])  
+        if event["resource"].lower() == "/terminate":
             sys.exit("TERMINATING")
         return {"statusCode": 404}
     except Exception as e:

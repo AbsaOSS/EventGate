@@ -21,7 +21,7 @@ resource "aws_api_gateway_rest_api" "event_gate_api" {
 resource "aws_api_gateway_resource" "event_gate_api_token" {
   rest_api_id = aws_api_gateway_rest_api.event_gate_api.id
   parent_id = aws_api_gateway_rest_api.event_gate_api.root_resource_id
-  path_part = "Token"
+  path_part = "token"
 }
 
 resource "aws_api_gateway_method" "event_gate_api_token_get" {
@@ -43,7 +43,7 @@ resource "aws_api_gateway_integration" "event_gate_api_token_get_integration" {
 resource "aws_api_gateway_resource" "event_gate_api_topics" {
   rest_api_id = aws_api_gateway_rest_api.event_gate_api.id
   parent_id = aws_api_gateway_rest_api.event_gate_api.root_resource_id
-  path_part = "Topics"
+  path_part = "topics"
 }
 
 resource "aws_api_gateway_method" "event_gate_api_topics_get" {
@@ -65,7 +65,7 @@ resource "aws_api_gateway_integration" "event_gate_api_topics_get_integration" {
 resource "aws_api_gateway_resource" "event_gate_api_topic_name" {
   rest_api_id = aws_api_gateway_rest_api.event_gate_api.id
   parent_id = aws_api_gateway_resource.event_gate_api_topics.id
-  path_part = "{topicName}"
+  path_part = "{topic_name}"
 }
 
 resource "aws_api_gateway_method" "event_gate_api_topic_name_get" {
@@ -74,7 +74,7 @@ resource "aws_api_gateway_method" "event_gate_api_topic_name_get" {
   authorization = "NONE"
   http_method = "GET"
   request_parameters = {
-    "method.request.path.topicName" = true
+    "method.request.path.topic_name" = true
   }
 }
 
@@ -93,7 +93,7 @@ resource "aws_api_gateway_method" "event_gate_api_topic_name_post" {
   authorization = "NONE"
   http_method = "POST"
   request_parameters = {
-    "method.request.path.topicName" = true
+    "method.request.path.topic_name" = true
   }
 }
 
@@ -109,7 +109,7 @@ resource "aws_api_gateway_integration" "event_gate_api_topic_name_post_integrati
 resource "aws_api_gateway_resource" "event_gate_api_terminate" {
   rest_api_id = aws_api_gateway_rest_api.event_gate_api.id
   parent_id = aws_api_gateway_rest_api.event_gate_api.root_resource_id
-  path_part = "Terminate"
+  path_part = "terminate"
 }
 
 resource "aws_api_gateway_method" "event_gate_api_terminate_post" {

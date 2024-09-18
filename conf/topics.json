@@ -1,5 +1,5 @@
 {
-    "RunTopic": {
+    "run.topic": {
         "properties": {
             "app_id_snow": {
                 "description": "Application ID or ServiceNow identifier",
@@ -58,7 +58,7 @@
         ],
         "type": "object"
     },
-    "EdlaChangeTopic": {
+    "edla.change.topic": {
         "properties": {
             "app_id_snow": {
                 "description": "Application ID or ServiceNow identifier",
