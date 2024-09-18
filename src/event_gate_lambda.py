@@ -15,6 +15,7 @@
 # 
 import base64
 import json
+import sys
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -24,19 +25,35 @@ from jsonschema.exceptions import ValidationError
 import jwt
 import requests
 
+import boto3
 from confluent_kafka import Producer
 
 with open("conf/config.json", "r") as file:
     CONFIG = json.load(file)
 
-with open(CONFIG["topicsConfig"], "r") as file:
-    TOPICS = json.load(file)
+aws_session = boto3.Session()
+aws_s3 = aws_session.resource('s3', verify=False)
 
-with open(CONFIG["accessConfig"], "r") as file:
-    ACCESS = json.load(file)
+if CONFIG["topicsConfig"].startswith("s3://"):
+    name_parts = CONFIG["topicsConfig"].split('/')
+    bucket_name = name_parts[2]
+    bucket_object = "/".join(name_parts[3:])
+    TOPICS = json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object).get()["Body"].read().decode("utf-8"))
+else:
+    with open(CONFIG["topicsConfig"], "r") as file:
+        TOPICS = json.load(file)
+
+if CONFIG["accessConfig"].startswith("s3://"):
+    name_parts = CONFIG["accessConfig"].split('/')
+    bucket_name = name_parts[2]
+    bucket_object = "/".join(name_parts[3:])
+    ACCESS = json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object).get()["Body"].read().decode("utf-8"))
+else:
+    with open(CONFIG["accessConfig"], "r") as file:
+        ACCESS = json.load(file)
     
 TOKEN_PROVIDER_URL = CONFIG["tokenProviderUrl"]
-print("Loaded config")
+print("Loaded configs")
 
 token_public_key_encoded = requests.get(CONFIG["tokenPublicKeyUrl"], verify=False).json()["key"]
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
@@ -125,7 +142,9 @@ def lambda_handler(event, context):
             if event["httpMethod"] == "GET":
                 return getTopicSchema(event["pathParameters"]["topicName"])
             if event["httpMethod"] == "POST":
-                return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])    
+                return postTopicMessage(event["pathParameters"]["topicName"], json.loads(event["body"]), event["headers"]["bearer"])  
+        if event["resource"] == "/Terminate":
+            sys.exit("TERMINATING")
         return {"statusCode": 404}
     except Exception as e:
         print(f"Unexpected exception: {e}")
