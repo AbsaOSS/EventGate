@@ -1,8 +1,8 @@
 {
-    "RunTopic": [
+    "run.topic": [
         "FooBarUser"
     ],
-    "EdlaChangeTopic": [
+    "edla.change.topic": [
         "FooUser",
         "BarUser"
     ]
