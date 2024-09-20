@@ -29,14 +29,15 @@ POST 🔒 method is guarded by JWT token in standard header "bearer"
 There are 3 configs for this solution (in conf folder)
 
 - config.json
-- - this one needs to live in the conf folder
-- - defines where are other resources/configs
+  - this one needs to live in the conf folder
+  - defines where are other resources/configs
 - access.json
-- - this one could be local or in AWS S3
-- - defines who has access to post to individual topics
+  - this one could be local or in AWS S3
+  - defines who has access to post to individual topics
 - topics.json
-- - this one could be local or in AWS S3
-- - defines schema of the topics, as well as enumerates those
+  - this one could be local or in AWS S3
+  - defines schema of the topics, as well as enumerates those
+
 
 ## Terraform Deplyoment
 Whole solution expects to be deployed as lambda in AWS,
