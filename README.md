@@ -18,7 +18,8 @@ POST 🔒 method is guarded by JWT token in standard header "bearer"
 
 | Method  | Endpoint              | Info                                                                         |
 |---------|-----------------------|------------------------------------------------------------------------------|
-| GET     | `/token`              | forwards (HTTP3003) caller to where to obtain JWT token for posting to topic |
+| GET     | `/token`              | forwards (HTTP303) caller to where to obtain JWT token for posting to topic |
+
 | GET     | `/topics`             | lists available topics                                                       |
 | GET     | `/topics/{topicName}` | schema for given topic                                                       |
 | POST 🔒  | `/topics/{topicName}` | posts payload (after authorization and schema validation) into kafka topic   |
