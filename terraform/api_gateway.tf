@@ -4,6 +4,7 @@ resource "aws_api_gateway_rest_api" "event_gate_api" {
   tags = {"BuiltBy" = "Terraform"}
   endpoint_configuration {
     types = ["PRIVATE"]
+    vpc_endpoint_ids = [var.vpc_endpoint]
   }
   policy = jsonencode({
     Version = "2012-10-17",
@@ -13,6 +14,11 @@ resource "aws_api_gateway_rest_api" "event_gate_api" {
         Action = "execute-api:Invoke",
         Resource = "*",
         Principal = "*"
+		Condition = {
+          StringEquals = {
+            "aws:sourceVpce" = var.vpc_endpoint
+          }
+        }
       }
     ]
   })
