@@ -167,6 +167,7 @@ resource "aws_api_gateway_deployment" "event_gate_api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.event_gate_api.id
   triggers = {
     redeployment = sha1(jsonencode([
+	  aws_api_gateway_integration.event_gate_api_api_get_integration,
       aws_api_gateway_integration.event_gate_api_token_get_integration,
 	  aws_api_gateway_integration.event_gate_api_topics_get_integration,
 	  aws_api_gateway_integration.event_gate_api_topic_name_get_integration,
