@@ -82,6 +82,149 @@ def kafkaWrite(topicName, message):
         logger.info("OK")
         return 202
 
+def getApi():
+    return {
+        "statusCode": 200,
+        "body": """openapi: 3.0.0
+info:
+  title: Event Gate
+  version: 0.0.0
+  description: This API provides topic management for an event bus.
+
+servers:
+  - url: https://{id}-vpce-{vpce}.execute-api.{region}.amazonaws.com/DEV
+    variables:
+      id:
+        default: 01234567ab
+        description: API Gateway ID
+      vpce:
+        default: '01234567abcdef012'
+        description: VPC endpoint
+      region:
+        default: 'af-south-1'
+        description: AWS Region
+
+paths:
+  /token:
+    get:
+      summary: Login to the service
+      description: Allows a user to obtain credentials (JWT token) from LoginService for the service
+      responses:
+        '303':
+          description: Redirect to actual address of Loing service which performs auth up to its capabilities
+
+  /topics:
+    get:
+      summary: Get a list of topics
+      description: Returns a list of all available topics.
+      responses:
+        '200':
+          description: A list of topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /topics/{topicName}:
+    get:
+      summary: Get schema for a specific topic
+      description: Returns the schema for a specified topic using [JSON Schema](https://json-schema.org/).
+      parameters:
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the topic
+      responses:
+        '200':
+          description: Key-value pairs representing the schema for the topic
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+    put:
+      summary: Publish an event to a topic
+      description: Publishes an event to the event bus under the specified topic. User must be authenticated with a JWT token.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the topic
+      requestBody:
+        description: Event data to be published
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Event successfully published
+        '400':
+          description: Invalid event data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT"""
+    }
+
 def getToken():
     logger.info("Handling GET Token")
     return {
@@ -139,6 +282,8 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
 
 def lambda_handler(event, context):
     try:
+        if event["resource"].lower() == "/api":
+            return getApi()
         if event["resource"].lower() == "/token":
             return getToken()
         if event["resource"].lower() == "/topics":
