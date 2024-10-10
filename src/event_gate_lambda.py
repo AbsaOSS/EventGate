@@ -105,6 +105,18 @@ servers:
         description: AWS Region
 
 paths:
+  /api:
+    get:
+      summary: Open API specification
+      description: Open API specification
+      responses:
+        '200':
+          description: Open API specification
+          content:
+            application/vnd.oai.openapi:
+              schema:
+                type: string
+
   /token:
     get:
       summary: Login to the service
@@ -282,7 +294,7 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
 
 def lambda_handler(event, context):
     try:
-        if event["resource"].lower() == "/api":
+        if event["resource"].lower() == "/oas3":
             return getApi()
         if event["resource"].lower() == "/token":
             return getToken()
