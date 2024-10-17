@@ -1,3 +1,8 @@
 .ipynb_checkpoints
 .venv
 __pycache__
+/dependencies
+/lambda_function.zip
+/terraform/*.tfvars
+/terraform/*.tfstate*
+/terraform/.terraform*
