@@ -1,122 +1,119 @@
 {
     "run.topic": {
+        "type": "object",
         "properties": {
-            "app_id_snow": {
-                "description": "Application ID or ServiceNow identifier",
-                "type": "string"
-            },
-            "data_definition_id": {
-                "description": "Identifier for the data definition",
-                "type": "string"
-            },
-            "environment": {
-                "description": "Environment",
-                "type": "string"
-            },
-            "guid": {
-                "description": "Unique identifier for the event (GUID)",
-                "type": "string"
+            "event_id": {
+                "type": "string",
+                "description": "Unique identifier for the event (GUID), generated for each unique event, for de-duplication purposes"
             },
             "job_ref": {
-                "description": "Identifier of the job in it’s respective system.",
-                "type": "string"
+                "type": "string",
+                "description": "Identifier of the job in it’s respective system (e.g. Spark Application Id, Glue Job Id, EMR Step Id, etc)."
             },
-            "message": {
-                "description": "Pipeline status message.",
-                "type": "string"
+            "tenant_id ": {
+                "type": "string",
+                "description": "Application ID (4 letter code) or ServiceNow identifier related to the pipeline/domain/process owner (tenant of the tool)"
             },
             "source_app": {
-                "description": "Source application name",
-                "type": "string"
+                "type": "string",
+                "description": "Standardized source application name (aqueduct, unify, lum, etc)"
             },
-            "status": {
-                "description": "Status of the run. Does not speak of the quality.",
-                "enum": [
-                    "Finished",
-                    "Failed",
-                    "Killed"
-                ],
-                "type": "string"
-            },
-            "timestamp_end": {
-                "description": "End timestamp of the run in epoch milliseconds",
-                "type": "number"
-            },
-            "timestamp_start": {
-                "description": "Start timestamp of the run in epoch milliseconds",
-                "type": "number"
-            }
-        },
-        "required": [
-            "guid",
-            "app_id_snow",
-            "source_app",
-            "timestamp_start",
-            "timestamp_end",
-            "data_definition_id",
-            "status"
-        ],
-        "type": "object"
-    },
-    "edla.change.topic": {
-        "properties": {
-            "app_id_snow": {
-                "description": "Application ID or ServiceNow identifier",
-                "type": "string"
-            },
-            "data_definition_id": {
-                "description": "Identifier for the data definition",
-                "type": "string"
+            "source_app_version": {
+                "type": "string",
+                "description": "Source application version (SemVer preferred)"
             },
             "environment": {
-                "description": "Environment",
-                "type": "string"
+                "type": "string",
+                "description": "Environment (dev, uat, pre-prod, prod, test or others)"
             },
-            "format": {
-                "description": "Format of the data",
-                "type": "string"
+            "timestamp_start": {
+                "type": "number",
+                "description": "Start timestamp of the run in epoch milliseconds"
             },
-            "guid": {
-                "description": "Unique identifier for the event (GUID)",
-                "type": "string"
+            "timestamp_end": {
+                "type": "number",
+                "description": "End timestamp of the run in epoch milliseconds"
             },
-            "location": {
-                "description": "Location of the data",
-                "type": "string"
-            },
-            "operation": {
-                "description": "Operation performed",
-                "enum": [
-                    "CREATE",
-                    "UPDATE",
-                    "ARCHIVE"
-                ],
-                "type": "string"
-            },
-            "schema_link": {
-                "description": "Link to the data schema",
-                "type": "string"
-            },
-            "source_app": {
-                "description": "Source application name",
-                "type": "string"
-            },
-            "timestamp_event": {
-                "description": "Timestamp of the event in epoch milliseconds",
-                "type": "number"
+            "jobs": {
+                "type": "array",
+                "description": "List of individual jobs withing the run",
+                "element_type": "object",
+                "object_schema": {
+                    "catalog_id": {
+                        "type": "string",
+                        "description": "Identifier for the data definition (Glue/Hive) database and table name for  example"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["succeeded", "failed", "killed", "skipped"],
+                        "description": "Status of the job."
+                    },
+                    "timestamp_start": {
+                        "type": "number",
+                        "description": "Start timestamp of a job that is a part of a run in epoch milliseconds"
+                    },
+                    "timestamp_end": {
+                        "type": "number",
+                        "description": "End timestamp of a job that is a part of a run in epoch milliseconds"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Job status/error message."
+                    }
+                }
             }
         },
-        "required": [
-            "guid",
-            "app_id_snow",
-            "source_app",
-            "timestamp_event",
-            "data_definition_id",
-            "operation",
-            "location",
-            "format",
-            "schema_link"
-        ],
-        "type": "object"
+        "required": ["event_id", "job_ref", "tenant_id", "source_app", "source_app_version", "environment", "timestamp_start", "timestamp_end", "jobs"]
+    },
+    "edla.change.topic": {
+        "type": "object",
+        "properties": {
+            "event_id": {
+                "type": "string",
+                "description": "Unique identifier for the event (GUID)"
+            },
+            "tenant_id": {
+                "type": "string",
+                "description": "Application ID or ServiceNow identifier"
+            },
+            "source_app": {
+                "type": "string",
+                "description": " Standardized source application name (aqueduct, unify, lum, etc)"
+            },
+            "source_app_version": {
+                "type": "string",
+                "description": "Source application version (SemVer preferred)"
+            },
+            "environment": {
+                "type": "string",
+                "description": "Environment (dev, uat, pre-prod, prod, test or others)"
+            },
+            "timestamp_event": {
+                "type": "number",
+                "description": "Timestamp of the event in epoch milliseconds"
+            },
+            "catalog_id": {
+                "type": "string",
+                "description": "Identifier for the data definition (Glue/Hive) database and table name for example "
+            },
+            "operation": {
+                "type": "string",
+                "enum": ["overwrite", "append", "archive", "delete"],
+                "description": "Operation performed"
+            },
+            "location": {
+                "type": "string",
+                "description": "Location of the data"
+            },
+            "format": {
+                "type": "string",
+                "description": "Format of the data (parquet, delta, crunch, etc)."
+            },
+            "format_options": {
+                "type": "object",
+                "description": "When possible, add additional options related to the format"
+            }
+        },
+        "required": ["event_id", "tenant_id", "source_app", "source_app_version", "environment", "timestamp_event", "catalog_id", "operation", "format"]
     }
 }
