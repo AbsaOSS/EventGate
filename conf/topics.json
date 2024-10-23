@@ -63,7 +63,7 @@
                 }
             }
         },
-        "required": ["event_id", "job_ref", "tenant_id", "source_app", "source_app_version", "environment", "timestamp_start", "timestamp_end", "jobs", "jobs.catalog_id", "jobs.status", " jobs.timestamp_start", "jobs.timestamp_end"]
+        "required": ["event_id", "job_ref", "tenant_id", "source_app", "source_app_version", "environment", "timestamp_start", "timestamp_end", "jobs"]
     },
     "edla.change.topic": {
         "type": "object",
