@@ -18,6 +18,7 @@ POST 🔒 method is guarded by JWT token in standard header "bearer"
 
 | Method  | Endpoint              | Info                                                                         |
 |---------|-----------------------|------------------------------------------------------------------------------|
+| GET     | `/api`                | OpenAPI 3 definition                                                         |
 | GET     | `/token`              | forwards (HTTP303) caller to where to obtain JWT token for posting to topic |
 | GET     | `/topics`             | lists available topics                                                       |
 | GET     | `/topics/{topicName}` | schema for given topic                                                       |
@@ -41,11 +42,16 @@ There are 3 configs for this solution (in conf folder)
 
 ## Terraform Deplyoment
 Whole solution expects to be deployed as lambda in AWS,
-there are prepared terraform scripts to make initial deplyoment, and can be found in "terraform" fodler
-All that is needed is supplementing variables for
+there are prepared terraform scripts to make initial deplyoment, and can be found in "terraform" folder
+
+Resulting lambda_function zip file needs to be uploaded to aws s3 bucket (since direct upload of zip likes to fail, might be related to poor network though)
+
+All that is needed afterwards is supplementing variables for
  - aws_region
  - vpc_id
+ - vpc_endpoint
  - resource prefix - all terraform resources would be prefixed my this prefix, usefull when mixed-in with something else
+ - lambda_source_bucket - the bucket where "lambda_function.zip" is already uploaded
  - lambda_role_arn - the role for the lambda, should be able to make HTTP calls to wherever kafka server lives
  - lambda_vpc_subnet_ids
  
@@ -59,4 +65,5 @@ Jupyter notebook, with one cell for lambda initialization and one cell per metho
 Obviously using it requires correct configs to be in place (PUBLIC key is being loaded during initilization)
 
 ### Preapare Deployment
-shell script for fetching pithon requirements and ziping it together with sources and config into lambda archive, ready to be used by terraform
+shell script for fetching pithon requirements and ziping it together with sources and config into lambda archive
+it needs to be uploaded to s3 bucket first before running the terraform

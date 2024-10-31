@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
+with open("conf/api.yaml", "r") as file:
+    API = file.read()
+
 with open("conf/config.json", "r") as file:
     CONFIG = json.load(file)
 
@@ -81,6 +84,12 @@ def kafkaWrite(topicName, message):
     else:
         logger.info("OK")
         return 202
+
+def getApi():
+    return {
+        "statusCode": 200,
+        "body": API
+    }
 
 def getToken():
     logger.info("Handling GET Token")
@@ -139,6 +148,8 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
 
 def lambda_handler(event, context):
     try:
+        if event["resource"].lower() == "/api":
+            return getApi()
         if event["resource"].lower() == "/token":
             return getToken()
         if event["resource"].lower() == "/topics":

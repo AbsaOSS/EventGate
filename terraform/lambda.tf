@@ -12,11 +12,11 @@ resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
 }
 
 resource "aws_lambda_function" "event_gate_lambda" {
-  filename = "../lambda_function.zip"
+  s3_bucket = var.lambda_source_bucket
+  s3_key = "lambda_function.zip"
   function_name = "${var.resource_prefix}event-gate-lambda"
   role = var.lambda_role_arn
   handler = "event_gate_lambda.lambda_handler"
-  source_code_hash = filebase64sha256("../lambda_function.zip")
   runtime = "python3.12"
   vpc_config {
     subnet_ids = var.lambda_vpc_subnet_ids
