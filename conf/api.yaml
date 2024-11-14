@@ -82,7 +82,7 @@ paths:
                   error:
                     type: string
 
-    put:
+    post:
       summary: Publish an event to a topic
       description: Publishes an event to the event bus under the specified topic. User must be authenticated with a JWT token.
       security:
@@ -143,7 +143,7 @@ paths:
                     type: string
                     
   /terminate:
-    get:
+    post:
       summary: Terminates lambda environment
       description: Facilitates fresh start of lambda environment on next invocation (i.e. loads fresh public keys and configs)
       responses:
