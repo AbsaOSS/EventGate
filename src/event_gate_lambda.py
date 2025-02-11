@@ -67,7 +67,22 @@ token_public_key_encoded = requests.get(CONFIG["tokenPublicKeyUrl"], verify=Fals
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
 logger.info("Loaded token public key")
 
-kafka_producer = Producer({"bootstrap.servers": CONFIG["kafkaBootstrapServer"]})
+producer_config = {"bootstrap.servers": CONFIG["kafkaBootstrapServer"]}
+if CONFIG["kafka_sasl_principal"] and CONFIG["kafka_ssl_key_path"]:
+    producer_config.update({
+        "security.protocol": "SASL_SSL",
+        "sasl.mechanism": "GSSAPI",
+        "sasl.kerberos.service.name": "kafka",
+        "sasl.kerberos.keytab": CONFIG["kafka_sasl_keytab_path"],
+        "sasl.kerberos.principal": CONFIG["kafka_sasl_principal"],
+        "ssl.ca.location": CONFIG["kafka_ssl_ca_path"],
+        "ssl.certificate.location": CONFIG["kafka_ssl_cert_path"],
+        "ssl.key.location": CONFIG["kafka_ssl_key_path"],
+        "ssl.key.password": CONFIG["kafka_ssl_key_password"]
+    })
+    logger.info("producer will use SASL_SSL")
+
+kafka_producer = Producer(producer_config)
 logger.info("Initialized kafka producer")
 
 def kafkaWrite(topicName, message):
