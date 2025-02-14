@@ -25,9 +25,9 @@ ARG SASL_SSL_ARTIFACTS=./sasl_ssl_artifacts
 # Import trusted certs before doing anything else
 RUN mkdir -p /opt/certs
 COPY $TRUSTED_SSL_CERTS /opt/certs/
-RUN for file in `ls /opt/certs/*.pem`; \
+RUN for FILE in `ls /opt/certs/*.pem`; \
 do \
-    cat $file >> /etc/pki/tls/certs/ca-bundle.crt \
+    cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt \
 done
 
 # Install
@@ -70,8 +70,8 @@ RUN pip install requests==2.31.0 urllib3==1.26.18
 
 # Lambda and SASL_SSL_Artifacts
 RUN mkdir -p /opt/sasl_ssl_artifacts
-COPY SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
-COPY src/event_gate_lambda.py ${LAMBDA_TASK_ROOT}
+COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
+COPY src/event_gate_lambda.py $LAMBDA_TASK_ROOT
 
 # Kerberos default CCACHE override due to KEYRING issues
 ENV KRB5CCNAME=FILE:/tmp/krb5cc
