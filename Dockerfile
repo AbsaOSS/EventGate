@@ -66,7 +66,7 @@ WORKDIR /root
 RUN rm -rf /tmp/env-install-workdir
 
 # PIP install
-RUN pip install requests==2.31.0 urllib3==1.26.18
+RUN pip install requests==2.31.0 urllib3==1.26.18 cryptography jsonschema PyJWT
 
 # Lambda and SASL_SSL_Artifacts
 RUN mkdir -p /opt/sasl_ssl_artifacts
