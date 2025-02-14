@@ -27,7 +27,7 @@ RUN mkdir -p /opt/certs
 COPY $TRUSTED_SSL_CERTS /opt/certs/
 RUN for FILE in `ls /opt/certs/*.pem`; \
 do \
-    cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt \
+    cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt ;\
 done
 
 # Install
