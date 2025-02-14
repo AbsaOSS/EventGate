@@ -72,6 +72,7 @@ RUN pip install requests==2.31.0 urllib3==1.26.18 cryptography jsonschema PyJWT
 RUN mkdir -p /opt/sasl_ssl_artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
 COPY src/event_gate_lambda.py $LAMBDA_TASK_ROOT
+COPY conf $LAMBDA_TASK_ROOT/conf
 
 # Kerberos default CCACHE override due to KEYRING issues
 ENV KRB5CCNAME=FILE:/tmp/krb5cc
