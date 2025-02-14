@@ -42,39 +42,39 @@ with open("conf/config.json", "r") as file:
 aws_session = boto3.Session()
 aws_s3 = aws_session.resource('s3', verify=False)
 
-if CONFIG["topicsConfig"].startswith("s3://"):
-    name_parts = CONFIG["topicsConfig"].split('/')
+if CONFIG["topics_config"].startswith("s3://"):
+    name_parts = CONFIG["topics_config"].split('/')
     bucket_name = name_parts[2]
     bucket_object = "/".join(name_parts[3:])
     TOPICS = json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object).get()["Body"].read().decode("utf-8"))
 else:
-    with open(CONFIG["topicsConfig"], "r") as file:
+    with open(CONFIG["topics_config"], "r") as file:
         TOPICS = json.load(file)
 
-if CONFIG["accessConfig"].startswith("s3://"):
-    name_parts = CONFIG["accessConfig"].split('/')
+if CONFIG["access_config"].startswith("s3://"):
+    name_parts = CONFIG["access_config"].split('/')
     bucket_name = name_parts[2]
     bucket_object = "/".join(name_parts[3:])
     ACCESS = json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object).get()["Body"].read().decode("utf-8"))
 else:
-    with open(CONFIG["accessConfig"], "r") as file:
+    with open(CONFIG["access_config"], "r") as file:
         ACCESS = json.load(file)
     
-TOKEN_PROVIDER_URL = CONFIG["tokenProviderUrl"]
+TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
 logger.info("Loaded configs")
 
-token_public_key_encoded = requests.get(CONFIG["tokenPublicKeyUrl"], verify=False).json()["key"]
+token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
 logger.info("Loaded token public key")
 
-producer_config = {"bootstrap.servers": CONFIG["kafkaBootstrapServer"]}
-if CONFIG["kafka_sasl_principal"] and CONFIG["kafka_ssl_key_path"]:
+producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
+if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
     producer_config.update({
         "security.protocol": "SASL_SSL",
         "sasl.mechanism": "GSSAPI",
         "sasl.kerberos.service.name": "kafka",
-        "sasl.kerberos.keytab": CONFIG["kafka_sasl_keytab_path"],
-        "sasl.kerberos.principal": CONFIG["kafka_sasl_principal"],
+        "sasl.kerberos.keytab": CONFIG["kafka_sasl_kerberos_keytab_path"],
+        "sasl.kerberos.principal": CONFIG["kafka_sasl_kerberos_principal"],
         "ssl.ca.location": CONFIG["kafka_ssl_ca_path"],
         "ssl.certificate.location": CONFIG["kafka_ssl_cert_path"],
         "ssl.key.location": CONFIG["kafka_ssl_key_path"],
