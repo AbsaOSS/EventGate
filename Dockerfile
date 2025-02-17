@@ -22,63 +22,63 @@ ARG TRUSTED_SSL_CERTS=./trusted_certs
 # Artifacts for kerberized sasl_ssl
 ARG SASL_SSL_ARTIFACTS=./sasl_ssl_artifacts
 
-# Import trusted certs before doing anything else
-RUN mkdir -p /opt/certs
+# Trusted certs
 COPY $TRUSTED_SSL_CERTS /opt/certs/
-RUN for FILE in `ls /opt/certs/*.pem`; \
-do \
-    cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt ;\
-done
 
-# Install
-#  -  basics
-RUN yum install -y wget tar xz bzip2-devel zlib-devel 
-#  -  GCC ("which" is required during some makefiles)
-RUN yum install -y which make gcc gcc-c++
-#  -  dependencies for kerberos SASL_SSL
-RUN yum install -y libffi-devel cyrus-sasl-devel cyrus-sasl-gssapi openssl-devel krb5-workstation
-
-# librdkafka 
-#  -  fetch 
-RUN mkdir -p /tmp/env-install-workdir/librdkafka
-WORKDIR /tmp/env-install-workdir/librdkafka
-RUN wget https://github.com/edenhill/librdkafka/archive/v2.4.0.tar.gz
-#  -  unpack
-RUN tar -xf v2.4.0.tar.gz
-#  -  build
-WORKDIR /tmp/env-install-workdir/librdkafka/librdkafka-2.4.0
-RUN ./configure && make && make install
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
-
-# confluent-kafka
-#  -  fetch
-RUN mkdir -p /tmp/env-install-workdir/confluent-kafka
-WORKDIR /tmp/env-install-workdir/confluent-kafka
-RUN wget https://github.com/confluentinc/confluent-kafka-python/archive/v2.4.0.tar.gz
-#  -  unpack
-RUN tar -xf v2.4.0.tar.gz
-#  -  build
-WORKDIR /tmp/env-install-workdir/confluent-kafka/confluent-kafka-python-2.4.0
-RUN CPPFLAGS="-I/usr/local/include" LDFLAGS="-L/opt" python setup.py install
-
-# Cleanup
-WORKDIR /root
-RUN rm -rf /tmp/env-install-workdir
-
-# PIP install
-RUN pip install requests==2.31.0 urllib3==1.26.18 cryptography jsonschema PyJWT
-
+RUN \
+  echo "######################################################" && \
+  echo "### Import trusted certs before doing anything else ###" && \
+  echo "######################################################" && \
+  for FILE in `ls /opt/certs/*.pem`; \
+    do cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt ; done && \
+  echo "###############################################" && \
+  echo "### Install                                  ###" && \
+  echo "### -> Basics                                 ###" && \
+  echo "### -> GCC (some makefiles require cmd which)###" && \
+  echo "### -> dependencies for kerberos SASL_SSL   ###" && \
+  echo "##############################################" && \
+    yum install -y \
+      wget tar xz bzip2-devel zlib-devel \
+      which make gcc gcc-c++ \
+      libffi-devel cyrus-sasl-devel cyrus-sasl-gssapi openssl-devel krb5-workstation && \
+  echo "#################" && \
+  echo "### librdkafka ###" && \
+  echo "#################" && \
+    mkdir -p /tmp/env-install-workdir/librdkafka && \
+    cd /tmp/env-install-workdir/librdkafka && \
+    wget https://github.com/edenhill/librdkafka/archive/v2.4.0.tar.gz && \
+    tar -xf v2.4.0.tar.gz && \
+    cd /tmp/env-install-workdir/librdkafka/librdkafka-2.4.0 && \
+    ./configure && make && make install && \
+  echo "######################" && \
+  echo "### confluent-kafka ###" && \
+  echo "######################" && \
+    mkdir -p /tmp/env-install-workdir/confluent-kafka && \
+    cd /tmp/env-install-workdir/confluent-kafka && \
+    wget https://github.com/confluentinc/confluent-kafka-python/archive/v2.4.0.tar.gz && \
+    tar -xf v2.4.0.tar.gz && \
+    cd /tmp/env-install-workdir/confluent-kafka/confluent-kafka-python-2.4.0 && \
+    CPPFLAGS="-I/usr/local/include" LDFLAGS="-L/opt" python setup.py install && \
+  echo "##############" && \
+  echo "### cleanup ###" && \
+  echo "##############" && \
+    cd /root && \
+    rm -rf /tmp/env-install-workdir && \
+  echo "###################" && \
+  echo "### pip installs ###" && \
+  echo "###################" && \
+    pip install requests==2.31.0 urllib3==1.26.18 cryptography jsonschema PyJWT
+  
 # Lambda and SASL_SSL_Artifacts
-RUN mkdir -p /opt/sasl_ssl_artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
 COPY src/event_gate_lambda.py $LAMBDA_TASK_ROOT
 COPY conf $LAMBDA_TASK_ROOT/conf
 
+# Mark librdkafka to LD_LIBRARY_PATH  
 # Kerberos default CCACHE override due to KEYRING issues
-ENV KRB5CCNAME=FILE:/tmp/krb5cc
-
-# restore AWS Lambda working directory
-WORKDIR /var/task
+ENV \
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib \
+  KRB5CCNAME=FILE:/tmp/krb5cc
 
 # Set lambda entry point as CMD
 CMD ["event_gate_lambda.lambda_handler"]
