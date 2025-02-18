@@ -1,7 +1,7 @@
 {
-    "accessConfig": "s3://<redacted>/access.json",
-    "topicsConfig": "s3://<redacted>/topics.json",
-    "tokenProviderUrl": "https://<redacted>",
-    "tokenPublicKeyUrl": "https://<redacted>",
-    "kafkaBootstrapServer": "localhost:9092"
+    "access_config": "s3://<redacted>/access.json",
+    "topics_config": "s3://<redacted>/topics.json",
+    "token_provider_url": "https://<redacted>",
+    "token_public_key_url": "https://<redacted>",
+    "kafka_bootstrap_server": "localhost:9092"
 }
