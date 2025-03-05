@@ -8,14 +8,14 @@
 # .
 #
 # run locally via:
-# docker run --platform=linux/amd64 -p 9000:8080 absaoss/eventgate:latest &
+# docker run --platform=linux/arm64 -p 9000:8080 absaoss/eventgate:latest &
 # 
 # test via (provide payload):
 # curl http://localhost:9000/2015-03-31/functions/function/invocations -d "{payload}"
 #
 # Deploy to AWS Lambda via ACR
 
-FROM public.ecr.aws/lambda/python:3.11
+FROM --platform=linux/arm64 public.ecr.aws/lambda/python:3.11-arm64
 
 # Directory with TRUSTED certs in PEM format
 ARG TRUSTED_SSL_CERTS=./trusted_certs
