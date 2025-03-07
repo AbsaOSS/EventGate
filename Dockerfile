@@ -15,7 +15,7 @@
 #
 # Deploy to AWS Lambda via ACR
 
-FROM --platform=linux/arm64 public.ecr.aws/lambda/python:3.11-arm64
+FROM --platform=linux/arm64 public.ecr.aws/lambda/python:3.13-arm64
 
 # Directory with TRUSTED certs in PEM format
 ARG TRUSTED_SSL_CERTS=./trusted_certs
@@ -37,7 +37,7 @@ RUN \
   echo "### -> GCC (some makefiles require cmd which)###" && \
   echo "### -> dependencies for kerberos SASL_SSL   ###" && \
   echo "##############################################" && \
-    yum install -y \
+    dnf install -y \
       wget tar xz bzip2-devel zlib-devel \
       which make gcc gcc-c++ \
       libffi-devel cyrus-sasl-devel cyrus-sasl-gssapi openssl-devel krb5-workstation && \
@@ -50,6 +50,10 @@ RUN \
     tar -xf v2.4.0.tar.gz && \
     cd /tmp/env-install-workdir/librdkafka/librdkafka-2.4.0 && \
     ./configure && make && make install && \
+  echo "###################" && \
+  echo "### pip installs ###" && \
+  echo "###################" && \
+    pip install requests==2.31.0 urllib3==1.26.18 setuptools cryptography jsonschema PyJWT && \
   echo "######################" && \
   echo "### confluent-kafka ###" && \
   echo "######################" && \
@@ -63,11 +67,7 @@ RUN \
   echo "### cleanup ###" && \
   echo "##############" && \
     cd /root && \
-    rm -rf /tmp/env-install-workdir && \
-  echo "###################" && \
-  echo "### pip installs ###" && \
-  echo "###################" && \
-    pip install requests==2.31.0 urllib3==1.26.18 cryptography jsonschema PyJWT
+    rm -rf /tmp/env-install-workdir
   
 # Lambda and SASL_SSL_Artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
