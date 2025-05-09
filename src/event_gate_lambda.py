@@ -41,6 +41,7 @@ with open("conf/config.json", "r") as file:
 
 aws_session = boto3.Session()
 aws_s3 = aws_session.resource('s3', verify=False)
+aws_eventbridge = boto3.client('events')
 
 if CONFIG["topics_config"].startswith("s3://"):
     name_parts = CONFIG["topics_config"].split('/')
@@ -61,6 +62,12 @@ else:
         ACCESS = json.load(file)
     
 TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
+
+if "event_bus_arn" in CONFIG:
+    EVENT_BUS_ARN = CONFIG["event_bus_arn"]
+else:
+    EVENT_BUS_ARN = ""
+    
 logger.info("Loaded configs")
 
 token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
@@ -94,11 +101,26 @@ def kafkaWrite(topicName, message):
                            callback = lambda err, msg: error.append(err) if err is not None else None)
     kafka_producer.flush()
     if error:
-        logger.error(error)
-        return 500
-    else:
-        logger.info("OK")
-        return 202
+        raise Exception(error)
+
+def eventBridgeWrite(topicName, message):
+    if not EVENT_BUS_ARN:
+        logger.info("No EventBus Arn - skipping")
+        return
+
+    logger.info(f"Sending to eventBridge {topicName}")
+    response = aws_eventbridge.put_events(
+        Entries=[
+            {
+                "Source": topicName,
+                'DetailType': 'JSON',
+                'Detail': json.dumps(message),
+                'EventBusName': EVENT_BUS_ARN,
+            }
+        ]
+    )
+    if response["FailedEntryCount"] > 0:
+        raise Exception(response)
 
 def getApi():
     return {
@@ -159,7 +181,13 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
             "body": e.message
          }
     
-    return {"statusCode": kafkaWrite(topicName, topicMessage)}
+    try:
+        kafkaWrite(topicName, topicMessage)
+        eventBridgeWrite(topicName, topicMessage)
+        return {"statusCode": 202}
+    except Exception as e:
+        logger.error(str(e))
+        return {"statusCode": 500}
 
 def lambda_handler(event, context):
     try:

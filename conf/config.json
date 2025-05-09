@@ -3,5 +3,6 @@
     "topics_config": "s3://<redacted>/topics.json",
     "token_provider_url": "https://<redacted>",
     "token_public_key_url": "https://<redacted>",
-    "kafka_bootstrap_server": "localhost:9092"
+    "kafka_bootstrap_server": "localhost:9092",
+    "event_bus_arn": "arn:aws:events:<redacted>"
 }
