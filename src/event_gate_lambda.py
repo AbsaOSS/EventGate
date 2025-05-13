@@ -181,13 +181,21 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
             "body": e.message
          }
     
+    wasError = False
     try:
         kafka_write(topicName, topicMessage)
-        event_bridge_write(topicName, topicMessage)
-        return {"statusCode": 202}
     except Exception as e:
         logger.error(str(e))
+        wasError = True
+    try:
+        event_bridge_write(topicName, topicMessage)
+    except Exception as e:
+        logger.error(str(e))
+        wasError = True
+    if wasError:
         return {"statusCode": 500}
+    else:
+        return {"statusCode": 202}
 
 def lambda_handler(event, context):
     try:
