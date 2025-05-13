@@ -92,7 +92,7 @@ if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
 kafka_producer = Producer(producer_config)
 logger.info("Initialized kafka producer")
 
-def kafkaWrite(topicName, message):
+def kafka_write(topicName, message):
     logger.info(f"Sending to kafka {topicName}")
     error = []
     kafka_producer.produce(topicName, 
@@ -103,7 +103,7 @@ def kafkaWrite(topicName, message):
     if error:
         raise Exception(error)
 
-def eventBridgeWrite(topicName, message):
+def event_bridge_write(topicName, message):
     if not EVENT_BUS_ARN:
         logger.info("No EventBus Arn - skipping")
         return
@@ -122,20 +122,20 @@ def eventBridgeWrite(topicName, message):
     if response["FailedEntryCount"] > 0:
         raise Exception(response)
 
-def getApi():
+def get_api():
     return {
         "statusCode": 200,
         "body": API
     }
 
-def getToken():
+def get_token():
     logger.info("Handling GET Token")
     return {
         "statusCode": 303,
         "headers": {"Location": TOKEN_PROVIDER_URL}
     }
     
-def getTopics():
+def get_topics():
     logger.info("Handling GET Topics")
     return {
         "statusCode": 200,
@@ -143,7 +143,7 @@ def getTopics():
         "body": json.dumps([topicName for topicName in TOPICS])
     }
     
-def getTopicSchema(topicName):
+def get_topic_schema(topicName):
     logger.info(f"Handling GET TopicSchema({topicName})")
     if topicName not in TOPICS:
         return { "statusCode": 404 }    
@@ -154,7 +154,7 @@ def getTopicSchema(topicName):
         "body": json.dumps(TOPICS[topicName])
     }
 
-def postTopicMessage(topicName, topicMessage, tokenEncoded):
+def post_topic_message(topicName, topicMessage, tokenEncoded):
     logger.info(f"Handling POST {topicName}")
     try:
         token = jwt.decode(tokenEncoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])
@@ -182,8 +182,8 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
          }
     
     try:
-        kafkaWrite(topicName, topicMessage)
-        eventBridgeWrite(topicName, topicMessage)
+        kafka_write(topicName, topicMessage)
+        event_bridge_write(topicName, topicMessage)
         return {"statusCode": 202}
     except Exception as e:
         logger.error(str(e))
@@ -192,16 +192,16 @@ def postTopicMessage(topicName, topicMessage, tokenEncoded):
 def lambda_handler(event, context):
     try:
         if event["resource"].lower() == "/api":
-            return getApi()
+            return get_api()
         if event["resource"].lower() == "/token":
-            return getToken()
+            return get_token()
         if event["resource"].lower() == "/topics":
-            return getTopics()
+            return get_topics()
         if event["resource"].lower() == "/topics/{topic_name}":
             if event["httpMethod"] == "GET":
-                return getTopicSchema(event["pathParameters"]["topic_name"].lower())
+                return get_topic_schema(event["pathParameters"]["topic_name"].lower())
             if event["httpMethod"] == "POST":
-                return postTopicMessage(event["pathParameters"]["topic_name"].lower(), json.loads(event["body"]), event["headers"]["bearer"])  
+                return post_topic_message(event["pathParameters"]["topic_name"].lower(), json.loads(event["body"]), event["headers"]["bearer"])  
         if event["resource"].lower() == "/terminate":
             sys.exit("TERMINATING")
         return {"statusCode": 404}
