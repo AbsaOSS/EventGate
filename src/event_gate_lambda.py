@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
+import os
 import base64
 import json
 import logging
@@ -30,7 +31,8 @@ import boto3
 from confluent_kafka import Producer
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+log_level = os.environ.get('LOG_LEVEL', 'INFO')
+logger.setLevel(log_level)
 logger.addHandler(logging.StreamHandler())
 
 with open("conf/api.yaml", "r") as file:
@@ -68,11 +70,11 @@ if "event_bus_arn" in CONFIG:
 else:
     EVENT_BUS_ARN = ""
     
-logger.info("Loaded configs")
+logger.debug("Loaded configs")
 
 token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
-logger.info("Loaded token public key")
+logger.debug("Loaded token public key")
 
 producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
 if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
@@ -87,13 +89,13 @@ if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
         "ssl.key.location": CONFIG["kafka_ssl_key_path"],
         "ssl.key.password": CONFIG["kafka_ssl_key_password"]
     })
-    logger.info("producer will use SASL_SSL")
+    logger.debug("producer will use SASL_SSL")
 
 kafka_producer = Producer(producer_config)
-logger.info("Initialized kafka producer")
+logger.debug("Initialized kafka producer")
 
 def kafka_write(topicName, message):
-    logger.info(f"Sending to kafka {topicName}")
+    logger.debug(f"Sending to kafka {topicName}")
     error = []
     kafka_producer.produce(topicName, 
                            key="", 
@@ -105,10 +107,10 @@ def kafka_write(topicName, message):
 
 def event_bridge_write(topicName, message):
     if not EVENT_BUS_ARN:
-        logger.info("No EventBus Arn - skipping")
+        logger.debug("No EventBus Arn - skipping")
         return
 
-    logger.info(f"Sending to eventBridge {topicName}")
+    logger.debug(f"Sending to eventBridge {topicName}")
     response = aws_eventbridge.put_events(
         Entries=[
             {
@@ -129,14 +131,14 @@ def get_api():
     }
 
 def get_token():
-    logger.info("Handling GET Token")
+    logger.debug("Handling GET Token")
     return {
         "statusCode": 303,
         "headers": {"Location": TOKEN_PROVIDER_URL}
     }
     
 def get_topics():
-    logger.info("Handling GET Topics")
+    logger.debug("Handling GET Topics")
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
@@ -144,7 +146,7 @@ def get_topics():
     }
     
 def get_topic_schema(topicName):
-    logger.info(f"Handling GET TopicSchema({topicName})")
+    logger.debug(f"Handling GET TopicSchema({topicName})")
     if topicName not in TOPICS:
         return { "statusCode": 404 }    
         
@@ -155,7 +157,7 @@ def get_topic_schema(topicName):
     }
 
 def post_topic_message(topicName, topicMessage, tokenEncoded):
-    logger.info(f"Handling POST {topicName}")
+    logger.debug(f"Handling POST {topicName}")
     try:
         token = jwt.decode(tokenEncoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])
     except Exception as e:
