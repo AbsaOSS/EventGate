@@ -30,4 +30,10 @@ resource "aws_lambda_function" "event_gate_lambda" {
     security_group_ids = [aws_security_group.event_gate_sg.id]
   }
   tags = {"BuiltBy" = "Terraform"}
+  
+  environment {
+   variables = {
+    LOG_LEVEL = "INFO"
+   }
+  }
 }
