@@ -21,6 +21,7 @@ resource "aws_lambda_function" "event_gate_lambda" {
   function_name = "${var.resource_prefix}event-gate-lambda"
   role = var.lambda_role_arn
   architectures = ["x86_64"]
+  timeout = 60
   runtime = "python3.11"
   package_type = var.lambda_package_type
   
