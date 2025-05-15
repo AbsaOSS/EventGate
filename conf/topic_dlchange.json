@@ -1,0 +1,55 @@
+{
+    "type": "object",
+    "properties": {
+        "event_id": {
+            "type": "string",
+            "description": "Unique identifier for the event (GUID)"
+        },
+        "tenant_id": {
+            "type": "string",
+            "description": "Application ID or ServiceNow identifier"
+        },
+        "source_app": {
+            "type": "string",
+            "description": " Standardized source application name (aqueduct, unify, lum, etc)"
+        },
+        "source_app_version": {
+            "type": "string",
+            "description": "Source application version (SemVer preferred)"
+        },
+        "environment": {
+            "type": "string",
+            "description": "Environment (dev, uat, pre-prod, prod, test or others)"
+        },
+        "timestamp_event": {
+            "type": "number",
+            "description": "Timestamp of the event in epoch milliseconds"
+        },
+        "catalog_id": {
+            "type": "string",
+            "description": "Identifier for the data definition (Glue/Hive) database and table name for example "
+        },
+        "operation": {
+            "type": "string",
+            "enum": ["overwrite", "append", "archive", "delete"],
+            "description": "Operation performed"
+        },
+        "location": {
+            "type": "string",
+            "description": "Location of the data"
+        },
+        "format": {
+            "type": "string",
+            "description": "Format of the data (parquet, delta, crunch, etc)."
+        },
+        "format_options": {
+            "type": "object",
+            "description": "When possible, add additional options related to the format"
+        },
+        "additional_info": {
+            "type": "object",
+            "description": "Optional additional fields structured as an inner JSON"
+        }
+    },
+    "required": ["event_id", "tenant_id", "source_app", "source_app_version", "environment", "timestamp_event", "catalog_id", "operation", "format"]
+}

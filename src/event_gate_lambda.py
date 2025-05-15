@@ -34,25 +34,27 @@ logger = logging.getLogger(__name__)
 log_level = os.environ.get('LOG_LEVEL', 'INFO')
 logger.setLevel(log_level)
 logger.addHandler(logging.StreamHandler())
+logger.debug("Initialized LOGGER")
 
 with open("conf/api.yaml", "r") as file:
     API = file.read()
+logger.debug("Loaded API definition")
+
+TOPICS = {}
+with open("conf/topic_runs.json", "r") as file:
+    TOPICS["public.cps.za.runs"] = json.load(file)
+with open("conf/topic_dlchange.json", "r") as file:
+    TOPICS["public.cps.za.dlchange"] = json.load(file)
+logger.debug("Loaded TOPICS")
 
 with open("conf/config.json", "r") as file:
     CONFIG = json.load(file)
+logger.debug("Loaded main CONFIG")
 
 aws_session = boto3.Session()
 aws_s3 = aws_session.resource('s3', verify=False)
 aws_eventbridge = boto3.client('events')
-
-if CONFIG["topics_config"].startswith("s3://"):
-    name_parts = CONFIG["topics_config"].split('/')
-    bucket_name = name_parts[2]
-    bucket_object = "/".join(name_parts[3:])
-    TOPICS = json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object).get()["Body"].read().decode("utf-8"))
-else:
-    with open(CONFIG["topics_config"], "r") as file:
-        TOPICS = json.load(file)
+logger.debug("Initialized AWS Clients")
 
 if CONFIG["access_config"].startswith("s3://"):
     name_parts = CONFIG["access_config"].split('/')
@@ -62,19 +64,17 @@ if CONFIG["access_config"].startswith("s3://"):
 else:
     with open(CONFIG["access_config"], "r") as file:
         ACCESS = json.load(file)
+logger.debug("Loaded ACCESS definitions")
     
-TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
-
 if "event_bus_arn" in CONFIG:
     EVENT_BUS_ARN = CONFIG["event_bus_arn"]
 else:
     EVENT_BUS_ARN = ""
-    
-logger.debug("Loaded configs")
 
+TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
 token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
-logger.debug("Loaded token public key")
+logger.debug("Loaded TOKEN_PUBLIC_KEY")
 
 producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
 if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
@@ -92,7 +92,7 @@ if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
     logger.debug("producer will use SASL_SSL")
 
 kafka_producer = Producer(producer_config)
-logger.debug("Initialized kafka producer")
+logger.debug("Initialized KAFKA producer")
 
 def kafka_write(topicName, message):
     logger.debug(f"Sending to kafka {topicName}")
