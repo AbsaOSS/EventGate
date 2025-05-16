@@ -26,6 +26,7 @@ from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 import jwt
 import requests
+import psycopg2
 
 import boto3
 from confluent_kafka import Producer
@@ -124,6 +125,78 @@ def event_bridge_write(topicName, message):
     if response["FailedEntryCount"] > 0:
         raise Exception(response)
 
+def postgres_edla_write(cursor, table, message):
+    cursor.execute(f"""
+        INSERT INTO {table} 
+        (
+            event_id, 
+            tenant_id, 
+            source_app, 
+            source_app_version, 
+            environment, 
+            timestamp_event, 
+            catalog_id, 
+            operation, 
+            "location", 
+            "format", 
+            format_options, 
+            additional_info
+        ) 
+        VALUES
+        (
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s,
+            %s, 
+            %s, 
+            %s
+        )""", (
+            message["event_id"],
+            message["tenant_id"],
+            message["source_app"],
+            message["source_app_version"],
+            message["environment"],
+            message["timestamp_event"],
+            message["catalog_id"],
+            message["operation"],
+            message["location"] if "location" in message else None,
+            message["format"],
+            json.dumps(message["format_options"]) if "format_options" in message else None,
+            json.dumps(message["additional_info"] if "additional_info" in message else None)
+        )
+    )
+
+def postgres_run_write(message):
+    pass
+    
+def postgres_write(topicName, message):
+    if not POSTGRES:
+        logger.debug("No Postgress - skipping")
+        return
+        
+    with psycopg2.connect(
+        database=POSTGRES["database"],
+        host=POSTGRES["host"],
+        user=POSTGRES["user"],
+        password=POSTGRES["password"],
+        port=POSTGRESS["port"]
+    ) as connection:
+        with connection.cursor() as cursor:
+            if topicName == "public.cps.za.dlchange":
+                postgres_edla_write(cursor, "public_cps_za_dlchange", message)
+            else if topic == "public.cps.za.runs"
+                postgres_run_write(cursor, "public_cps_za_runs", message)
+            else:
+                raise Exception(f"unknown topic for postgres {topicName}")
+                
+        connection.commit()
+
 def get_api():
     return {
         "statusCode": 200,
@@ -191,6 +264,11 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
         wasError = True
     try:
         event_bridge_write(topicName, topicMessage)
+    except Exception as e:
+        logger.error(str(e))
+        wasError = True
+    try:
+        postgress_write(topicName, topicMessage)
     except Exception as e:
         logger.error(str(e))
         wasError = True

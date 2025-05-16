@@ -5,3 +5,4 @@ PyJWT
 requests
 boto3
 confluent_kafka
+psycopg2
