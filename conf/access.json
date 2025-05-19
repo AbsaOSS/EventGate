@@ -1,8 +1,8 @@
 {
-    "run.topic": [
+    "public.cps.za.runs": [
         "FooBarUser"
     ],
-    "edla.change.topic": [
+    "public.cps.za.dlchange": [
         "FooUser",
         "BarUser"
     ]
