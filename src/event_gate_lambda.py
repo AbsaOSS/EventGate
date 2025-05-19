@@ -32,7 +32,7 @@ import boto3
 from confluent_kafka import Producer
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get('LOG_LEVEL', 'INFO')
+log_level = os.environ.get("LOG_LEVEL", "INFO")
 logger.setLevel(log_level)
 logger.addHandler(logging.StreamHandler())
 logger.debug("Initialized LOGGER")
@@ -66,11 +66,8 @@ else:
     with open(CONFIG["access_config"], "r") as file:
         ACCESS = json.load(file)
 logger.debug("Loaded ACCESS definitions")
-    
-if "event_bus_arn" in CONFIG:
-    EVENT_BUS_ARN = CONFIG["event_bus_arn"]
-else:
-    EVENT_BUS_ARN = ""
+
+EVENT_BUS_ARN = CONFIG["event_bus_arn"] if "event_bus_arn" in CONFIG else ""
 
 TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
 token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
@@ -91,9 +88,18 @@ if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
         "ssl.key.password": CONFIG["kafka_ssl_key_password"]
     })
     logger.debug("producer will use SASL_SSL")
-
 kafka_producer = Producer(producer_config)
 logger.debug("Initialized KAFKA producer")
+
+POSTGRES = {
+    "host": os.environ.get("POSTGRES_HOST", ""),
+    "port": os.environ.get("POSTGRES_PORT", ""),
+    "user": os.environ.get("POSTGRES_USER", ""),
+    "password": os.environ.get("POSTGRES_PASSWORD", ""),
+    "database": os.environ.get("POSTGRES_DATABASE", "")
+}
+
+logger.debug("Loaded POSTGRES parameters")
 
 def kafka_write(topicName, message):
     logger.debug(f"Sending to kafka {topicName}")
@@ -126,6 +132,7 @@ def event_bridge_write(topicName, message):
         raise Exception(response)
 
 def postgres_edla_write(cursor, table, message):
+    logger.debug(f"Sending to Postgres - {table}")
     cursor.execute(f"""
         INSERT INTO {table} 
         (
@@ -176,7 +183,7 @@ def postgres_run_write(message):
     pass
     
 def postgres_write(topicName, message):
-    if not POSTGRES:
+    if not POSTGRES["database"]:
         logger.debug("No Postgress - skipping")
         return
         
@@ -185,7 +192,7 @@ def postgres_write(topicName, message):
         host=POSTGRES["host"],
         user=POSTGRES["user"],
         password=POSTGRES["password"],
-        port=POSTGRESS["port"]
+        port=POSTGRES["port"]
     ) as connection:
         with connection.cursor() as cursor:
             if topicName == "public.cps.za.dlchange":
