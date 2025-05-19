@@ -190,7 +190,7 @@ def postgres_write(topicName, message):
         with connection.cursor() as cursor:
             if topicName == "public.cps.za.dlchange":
                 postgres_edla_write(cursor, "public_cps_za_dlchange", message)
-            else if topic == "public.cps.za.runs"
+            elif topic == "public.cps.za.runs":
                 postgres_run_write(cursor, "public_cps_za_runs", message)
             else:
                 raise Exception(f"unknown topic for postgres {topicName}")
@@ -268,7 +268,7 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
         logger.error(str(e))
         wasError = True
     try:
-        postgress_write(topicName, topicMessage)
+        postgres_write(topicName, topicMessage)
     except Exception as e:
         logger.error(str(e))
         wasError = True
