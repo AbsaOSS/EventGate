@@ -175,12 +175,77 @@ def postgres_edla_write(cursor, table, message):
             message["location"] if "location" in message else None,
             message["format"],
             json.dumps(message["format_options"]) if "format_options" in message else None,
-            json.dumps(message["additional_info"] if "additional_info" in message else None)
+            json.dumps(message["additional_info"]) if "additional_info" in message else None
         )
     )
 
-def postgres_run_write(message):
-    pass
+def postgres_run_write(cursor, table_runs, table_jobs, message):
+    logger.debug(f"Sending to Postgres - {table_runs} and {table_jobs}")
+    cursor.execute(f"""
+        INSERT INTO {table_runs} 
+        (
+                event_id,
+                job_ref,
+                tenant_id,
+                soure_app,
+                source_app_version,
+                environment,
+                timestamp_start,
+                timestamp_end
+        ) 
+        VALUES
+        (
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s,
+            %s, 
+            %s, 
+            %s
+        )""", (
+            message["event_id"],
+            message["job_ref"],
+            message["tenant_id"],
+            message["source_app"],
+            message["source_app_version"],
+            message["environment"],
+            message["timestamp_start"],
+            message["timestamp_end"]
+        )
+    )
+        
+    for job in message["jobs"]:
+        cursor.execute(f"""
+        INSERT INTO {table_jobs} 
+        (
+                event_id,
+                catalog_id,
+                status,
+                timestamp_start,
+                timestamp_end,
+                message,
+                additional_info
+        ) 
+        VALUES
+        (
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s
+        )""", (
+            message["event_id"],
+            job["catalog_id"],
+            job["status"],
+            job["timestamp_start"],
+            job["timestamp_end"],
+            job["message"] if "message" in job else None,
+            json.dumps(job["additional_info"]) if "additional_info" in job else None
+        )
+    )
     
 def postgres_write(topicName, message):
     if not POSTGRES["database"]:
@@ -197,8 +262,8 @@ def postgres_write(topicName, message):
         with connection.cursor() as cursor:
             if topicName == "public.cps.za.dlchange":
                 postgres_edla_write(cursor, "public_cps_za_dlchange", message)
-            elif topic == "public.cps.za.runs":
-                postgres_run_write(cursor, "public_cps_za_runs", message)
+            elif topicName == "public.cps.za.runs":
+                postgres_run_write(cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message)
             else:
                 raise Exception(f"unknown topic for postgres {topicName}")
                 
