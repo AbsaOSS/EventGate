@@ -13,23 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
-import os
 import base64
 import json
 import logging
+import os
 import sys
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+import jwt
+import requests
 from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
-import jwt
-import requests
-import psycopg2
 
-import boto3
-from confluent_kafka import Producer
+import writer_eventbridge
+import writer_kafka
+import writer_postgres
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -52,10 +53,8 @@ with open("conf/config.json", "r") as file:
     CONFIG = json.load(file)
 logger.debug("Loaded main CONFIG")
 
-aws_session = boto3.Session()
-aws_s3 = aws_session.resource('s3', verify=False)
-aws_eventbridge = boto3.client('events')
-logger.debug("Initialized AWS Clients")
+aws_s3 = boto3.Session().resource('s3', verify=False)
+logger.debug("Initialized AWS S3 Client")
 
 if CONFIG["access_config"].startswith("s3://"):
     name_parts = CONFIG["access_config"].split('/')
@@ -67,207 +66,14 @@ else:
         ACCESS = json.load(file)
 logger.debug("Loaded ACCESS definitions")
 
-EVENT_BUS_ARN = CONFIG["event_bus_arn"] if "event_bus_arn" in CONFIG else ""
-
 TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
 token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
 logger.debug("Loaded TOKEN_PUBLIC_KEY")
 
-producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
-if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
-    producer_config.update({
-        "security.protocol": "SASL_SSL",
-        "sasl.mechanism": "GSSAPI",
-        "sasl.kerberos.service.name": "kafka",
-        "sasl.kerberos.keytab": CONFIG["kafka_sasl_kerberos_keytab_path"],
-        "sasl.kerberos.principal": CONFIG["kafka_sasl_kerberos_principal"],
-        "ssl.ca.location": CONFIG["kafka_ssl_ca_path"],
-        "ssl.certificate.location": CONFIG["kafka_ssl_cert_path"],
-        "ssl.key.location": CONFIG["kafka_ssl_key_path"],
-        "ssl.key.password": CONFIG["kafka_ssl_key_password"]
-    })
-    logger.debug("producer will use SASL_SSL")
-kafka_producer = Producer(producer_config)
-logger.debug("Initialized KAFKA producer")
-
-POSTGRES = {
-    "host": os.environ.get("POSTGRES_HOST", ""),
-    "port": os.environ.get("POSTGRES_PORT", ""),
-    "user": os.environ.get("POSTGRES_USER", ""),
-    "password": os.environ.get("POSTGRES_PASSWORD", ""),
-    "database": os.environ.get("POSTGRES_DATABASE", "")
-}
-
-logger.debug("Loaded POSTGRES parameters")
-
-def kafka_write(topicName, message):
-    logger.debug(f"Sending to kafka {topicName}")
-    error = []
-    kafka_producer.produce(topicName, 
-                           key="", 
-                           value=json.dumps(message).encode("utf-8"),
-                           callback = lambda err, msg: error.append(err) if err is not None else None)
-    kafka_producer.flush()
-    if error:
-        raise Exception(error)
-
-def event_bridge_write(topicName, message):
-    if not EVENT_BUS_ARN:
-        logger.debug("No EventBus Arn - skipping")
-        return
-
-    logger.debug(f"Sending to eventBridge {topicName}")
-    response = aws_eventbridge.put_events(
-        Entries=[
-            {
-                "Source": topicName,
-                'DetailType': 'JSON',
-                'Detail': json.dumps(message),
-                'EventBusName': EVENT_BUS_ARN,
-            }
-        ]
-    )
-    if response["FailedEntryCount"] > 0:
-        raise Exception(response)
-
-def postgres_edla_write(cursor, table, message):
-    logger.debug(f"Sending to Postgres - {table}")
-    cursor.execute(f"""
-        INSERT INTO {table} 
-        (
-            event_id, 
-            tenant_id, 
-            source_app, 
-            source_app_version, 
-            environment, 
-            timestamp_event, 
-            catalog_id, 
-            operation, 
-            "location", 
-            "format", 
-            format_options, 
-            additional_info
-        ) 
-        VALUES
-        (
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s,
-            %s, 
-            %s, 
-            %s
-        )""", (
-            message["event_id"],
-            message["tenant_id"],
-            message["source_app"],
-            message["source_app_version"],
-            message["environment"],
-            message["timestamp_event"],
-            message["catalog_id"],
-            message["operation"],
-            message["location"] if "location" in message else None,
-            message["format"],
-            json.dumps(message["format_options"]) if "format_options" in message else None,
-            json.dumps(message["additional_info"]) if "additional_info" in message else None
-        )
-    )
-
-def postgres_run_write(cursor, table_runs, table_jobs, message):
-    logger.debug(f"Sending to Postgres - {table_runs} and {table_jobs}")
-    cursor.execute(f"""
-        INSERT INTO {table_runs} 
-        (
-                event_id,
-                job_ref,
-                tenant_id,
-                soure_app,
-                source_app_version,
-                environment,
-                timestamp_start,
-                timestamp_end
-        ) 
-        VALUES
-        (
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s,
-            %s, 
-            %s, 
-            %s
-        )""", (
-            message["event_id"],
-            message["job_ref"],
-            message["tenant_id"],
-            message["source_app"],
-            message["source_app_version"],
-            message["environment"],
-            message["timestamp_start"],
-            message["timestamp_end"]
-        )
-    )
-        
-    for job in message["jobs"]:
-        cursor.execute(f"""
-        INSERT INTO {table_jobs} 
-        (
-                event_id,
-                catalog_id,
-                status,
-                timestamp_start,
-                timestamp_end,
-                message,
-                additional_info
-        ) 
-        VALUES
-        (
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s
-        )""", (
-            message["event_id"],
-            job["catalog_id"],
-            job["status"],
-            job["timestamp_start"],
-            job["timestamp_end"],
-            job["message"] if "message" in job else None,
-            json.dumps(job["additional_info"]) if "additional_info" in job else None
-        )
-    )
-    
-def postgres_write(topicName, message):
-    if not POSTGRES["database"]:
-        logger.debug("No Postgress - skipping")
-        return
-        
-    with psycopg2.connect(
-        database=POSTGRES["database"],
-        host=POSTGRES["host"],
-        user=POSTGRES["user"],
-        password=POSTGRES["password"],
-        port=POSTGRES["port"]
-    ) as connection:
-        with connection.cursor() as cursor:
-            if topicName == "public.cps.za.dlchange":
-                postgres_edla_write(cursor, "public_cps_za_dlchange", message)
-            elif topicName == "public.cps.za.runs":
-                postgres_run_write(cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message)
-            else:
-                raise Exception(f"unknown topic for postgres {topicName}")
-                
-        connection.commit()
+writer_eventbridge.init()
+writer_kafka.init()
+writer_postgres.init()
 
 def get_api():
     return {
@@ -328,26 +134,12 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
             "body": e.message
          }
     
-    wasError = False
-    try:
-        kafka_write(topicName, topicMessage)
-    except Exception as e:
-        logger.error(str(e))
-        wasError = True
-    try:
-        event_bridge_write(topicName, topicMessage)
-    except Exception as e:
-        logger.error(str(e))
-        wasError = True
-    try:
-        postgres_write(topicName, topicMessage)
-    except Exception as e:
-        logger.error(str(e))
-        wasError = True
-    if wasError:
-        return {"statusCode": 500}
-    else:
-        return {"statusCode": 202}
+    success = (
+        writer_kafka.write(topicName, topicMessage) and 
+        writer_eventbridge.write(topicName, topicMessage) and 
+        writer_postgres.write(topicName, topicMessage)
+    )
+    return {"statusCode": 202} if success else {"statusCode": 500}
 
 def lambda_handler(event, context):
     try:
