@@ -2,18 +2,24 @@ import json
 
 import boto3
 
-def init():
+def init(logger, CONFIG):
+    global _logger
+    global EVENT_BUS_ARN
+    global aws_eventbridge
+    
+    _logger = logger
+    
     aws_eventbridge = boto3.client('events')
     EVENT_BUS_ARN = CONFIG["event_bus_arn"] if "event_bus_arn" in CONFIG else ""
-    logger.debug("Initialized EVENTBRIDGE writer")
+    _logger.debug("Initialized EVENTBRIDGE writer")
 
 def write(topicName, message):
-    if not EVENT_BUS_ARN:
-        logger.debug("No EventBus Arn - skipping")
+    if not aws_eventbridge:
+        _logger.debug("No EventBus Arn - skipping")
         return True
 
     try:
-        logger.debug(f"Sending to eventBridge {topicName}")
+        _logger.debug(f"Sending to eventBridge {topicName}")
         response = aws_eventbridge.put_events(
             Entries=[
                 {
@@ -25,10 +31,10 @@ def write(topicName, message):
             ]
         )
         if response["FailedEntryCount"] > 0:
-            logger.error(str(response))
+            _logger.error(str(response))
             return False
     except Exception as e:
-        logger.error(str(e))
+        _logger.error(str(e))
         return False
         
     return True

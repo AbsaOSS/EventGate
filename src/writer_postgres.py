@@ -1,6 +1,14 @@
+import json
+import os
+
 import psycopg2
 
-def init():
+def init(logger):
+    global _logger
+    global POSTGRES
+    
+    _logger = logger
+    
     POSTGRES = {
     "host": os.environ.get("POSTGRES_HOST", ""),
     "port": os.environ.get("POSTGRES_PORT", ""),
@@ -8,11 +16,10 @@ def init():
     "password": os.environ.get("POSTGRES_PASSWORD", ""),
     "database": os.environ.get("POSTGRES_DATABASE", "")
     }
-    logger.debug("Initialized POSTGRES writer")
-    
+    _logger.debug("Initialized POSTGRES writer")
 
 def postgres_edla_write(cursor, table, message):
-    logger.debug(f"Sending to Postgres - {table}")
+    _logger.debug(f"Sending to Postgres - {table}")
     cursor.execute(f"""
         INSERT INTO {table} 
         (
@@ -60,7 +67,7 @@ def postgres_edla_write(cursor, table, message):
     )
 
 def postgres_run_write(cursor, table_runs, table_jobs, message):
-    logger.debug(f"Sending to Postgres - {table_runs} and {table_jobs}")
+    _logger.debug(f"Sending to Postgres - {table_runs} and {table_jobs}")
     cursor.execute(f"""
         INSERT INTO {table_runs} 
         (
@@ -130,7 +137,7 @@ def postgres_run_write(cursor, table_runs, table_jobs, message):
 def write(topicName, message):
     try:
         if not POSTGRES["database"]:
-            logger.debug("No Postgress - skipping")
+            _logger.debug("No Postgress - skipping")
             return
             
         with psycopg2.connect(
@@ -146,12 +153,12 @@ def write(topicName, message):
                 elif topicName == "public.cps.za.runs":
                     postgres_run_write(cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message)
                 else:
-                    logger.error(f"unknown topic for postgres {topicName}")
+                    _logger.error(f"unknown topic for postgres {topicName}")
                     return False
                     
             connection.commit()
     except Exception as e:
-        logger.error(str(e))
+        _logger.error(str(e))
         return False
         
     return True

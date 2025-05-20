@@ -20,15 +20,16 @@ import os
 import sys
 import urllib3
 
+import boto3
 import jwt
 import requests
 from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-import writer_eventbridge
-import writer_kafka
-import writer_postgres
+from . import writer_eventbridge
+from . import writer_kafka
+from . import writer_postgres
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -71,9 +72,9 @@ token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=F
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
 logger.debug("Loaded TOKEN_PUBLIC_KEY")
 
-writer_eventbridge.init()
-writer_kafka.init()
-writer_postgres.init()
+writer_eventbridge.init(logger, CONFIG)
+writer_kafka.init(logger, CONFIG)
+writer_postgres.init(logger)
 
 def get_api():
     return {

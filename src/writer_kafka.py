@@ -3,7 +3,12 @@ import json
 import boto3
 from confluent_kafka import Producer
 
-def init():
+def init(logger, CONFIG):
+    global _logger
+    global kafka_producer
+    
+    _logger = logger
+    
     producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
     if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
         producer_config.update({
@@ -17,14 +22,13 @@ def init():
             "ssl.key.location": CONFIG["kafka_ssl_key_path"],
             "ssl.key.password": CONFIG["kafka_ssl_key_password"]
         })
-        logger.debug("producer will use SASL_SSL")
+        _logger.debug("producer will use SASL_SSL")
     kafka_producer = Producer(producer_config)
-    logger.debug("Initialized KAFKA writer")
-
+    _logger.debug("Initialized KAFKA writer")
 
 def write(topicName, message):
     try:
-        logger.debug(f"Sending to kafka {topicName}")
+        _logger.debug(f"Sending to kafka {topicName}")
         error = []
         kafka_producer.produce(topicName, 
                                key="", 
@@ -32,9 +36,10 @@ def write(topicName, message):
                                callback = lambda err, msg: error.append(err) if err is not None else None)
         kafka_producer.flush()
         if error:
-            logger.error(str(e))
+            _logger.error(str(error))
             return False
     except Exception as e:
+        _logger.error(str(e))
         return False
         
     return True
