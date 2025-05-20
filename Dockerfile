@@ -71,7 +71,7 @@ RUN \
   
 # Lambda and SASL_SSL_Artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
-COPY src/event_gate_lambda.py $LAMBDA_TASK_ROOT
+COPY src/ $LAMBDA_TASK_ROOT/
 COPY conf $LAMBDA_TASK_ROOT/conf
 
 # Mark librdkafka to LD_LIBRARY_PATH  
