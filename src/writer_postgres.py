@@ -140,7 +140,7 @@ def postgres_run_write(cursor, table_runs, table_jobs, message):
 def write(topicName, message):
     try:
         if not POSTGRES["database"]:
-            _logger.debug("No Postgress - skipping")
+            _logger.debug("No Postgres - skipping")
             return
             
         with psycopg2.connect(

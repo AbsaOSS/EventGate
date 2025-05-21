@@ -14,7 +14,7 @@ def init(logger, CONFIG):
     _logger.debug("Initialized EVENTBRIDGE writer")
 
 def write(topicName, message):
-    if not aws_eventbridge:
+    if not EVENT_BUS_ARN:
         _logger.debug("No EventBus Arn - skipping")
         return True
 
