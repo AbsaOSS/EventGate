@@ -13,46 +13,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
-import os
 import base64
 import json
 import logging
+import os
 import sys
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+import boto3
+import jwt
+import requests
 from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
-import jwt
-import requests
 
-import boto3
-from confluent_kafka import Producer
+sys.path.append(os.path.join(os.path.dirname(__file__)))
+
+import writer_eventbridge
+import writer_kafka
+import writer_postgres
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get('LOG_LEVEL', 'INFO')
+log_level = os.environ.get("LOG_LEVEL", "INFO")
 logger.setLevel(log_level)
 logger.addHandler(logging.StreamHandler())
+logger.debug("Initialized LOGGER")
 
 with open("conf/api.yaml", "r") as file:
     API = file.read()
+logger.debug("Loaded API definition")
+
+TOPICS = {}
+with open("conf/topic_runs.json", "r") as file:
+    TOPICS["public.cps.za.runs"] = json.load(file)
+with open("conf/topic_dlchange.json", "r") as file:
+    TOPICS["public.cps.za.dlchange"] = json.load(file)
+logger.debug("Loaded TOPICS")
 
 with open("conf/config.json", "r") as file:
     CONFIG = json.load(file)
+logger.debug("Loaded main CONFIG")
 
-aws_session = boto3.Session()
-aws_s3 = aws_session.resource('s3', verify=False)
-aws_eventbridge = boto3.client('events')
-
-if CONFIG["topics_config"].startswith("s3://"):
-    name_parts = CONFIG["topics_config"].split('/')
-    bucket_name = name_parts[2]
-    bucket_object = "/".join(name_parts[3:])
-    TOPICS = json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object).get()["Body"].read().decode("utf-8"))
-else:
-    with open(CONFIG["topics_config"], "r") as file:
-        TOPICS = json.load(file)
+aws_s3 = boto3.Session().resource('s3', verify=False)
+logger.debug("Initialized AWS S3 Client")
 
 if CONFIG["access_config"].startswith("s3://"):
     name_parts = CONFIG["access_config"].split('/')
@@ -62,67 +67,16 @@ if CONFIG["access_config"].startswith("s3://"):
 else:
     with open(CONFIG["access_config"], "r") as file:
         ACCESS = json.load(file)
-    
+logger.debug("Loaded ACCESS definitions")
+
 TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
-
-if "event_bus_arn" in CONFIG:
-    EVENT_BUS_ARN = CONFIG["event_bus_arn"]
-else:
-    EVENT_BUS_ARN = ""
-    
-logger.debug("Loaded configs")
-
 token_public_key_encoded = requests.get(CONFIG["token_public_key_url"], verify=False).json()["key"]
 TOKEN_PUBLIC_KEY = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
-logger.debug("Loaded token public key")
+logger.debug("Loaded TOKEN_PUBLIC_KEY")
 
-producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
-if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
-    producer_config.update({
-        "security.protocol": "SASL_SSL",
-        "sasl.mechanism": "GSSAPI",
-        "sasl.kerberos.service.name": "kafka",
-        "sasl.kerberos.keytab": CONFIG["kafka_sasl_kerberos_keytab_path"],
-        "sasl.kerberos.principal": CONFIG["kafka_sasl_kerberos_principal"],
-        "ssl.ca.location": CONFIG["kafka_ssl_ca_path"],
-        "ssl.certificate.location": CONFIG["kafka_ssl_cert_path"],
-        "ssl.key.location": CONFIG["kafka_ssl_key_path"],
-        "ssl.key.password": CONFIG["kafka_ssl_key_password"]
-    })
-    logger.debug("producer will use SASL_SSL")
-
-kafka_producer = Producer(producer_config)
-logger.debug("Initialized kafka producer")
-
-def kafka_write(topicName, message):
-    logger.debug(f"Sending to kafka {topicName}")
-    error = []
-    kafka_producer.produce(topicName, 
-                           key="", 
-                           value=json.dumps(message).encode("utf-8"),
-                           callback = lambda err, msg: error.append(err) if err is not None else None)
-    kafka_producer.flush()
-    if error:
-        raise Exception(error)
-
-def event_bridge_write(topicName, message):
-    if not EVENT_BUS_ARN:
-        logger.debug("No EventBus Arn - skipping")
-        return
-
-    logger.debug(f"Sending to eventBridge {topicName}")
-    response = aws_eventbridge.put_events(
-        Entries=[
-            {
-                "Source": topicName,
-                'DetailType': 'JSON',
-                'Detail': json.dumps(message),
-                'EventBusName': EVENT_BUS_ARN,
-            }
-        ]
-    )
-    if response["FailedEntryCount"] > 0:
-        raise Exception(response)
+writer_eventbridge.init(logger, CONFIG)
+writer_kafka.init(logger, CONFIG)
+writer_postgres.init(logger)
 
 def get_api():
     return {
@@ -183,21 +137,12 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
             "body": e.message
          }
     
-    wasError = False
-    try:
-        kafka_write(topicName, topicMessage)
-    except Exception as e:
-        logger.error(str(e))
-        wasError = True
-    try:
-        event_bridge_write(topicName, topicMessage)
-    except Exception as e:
-        logger.error(str(e))
-        wasError = True
-    if wasError:
-        return {"statusCode": 500}
-    else:
-        return {"statusCode": 202}
+    success = (
+        writer_kafka.write(topicName, topicMessage) and 
+        writer_eventbridge.write(topicName, topicMessage) and 
+        writer_postgres.write(topicName, topicMessage)
+    )
+    return {"statusCode": 202} if success else {"statusCode": 500}
 
 def lambda_handler(event, context):
     try:

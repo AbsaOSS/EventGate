@@ -13,7 +13,7 @@
 # test via (provide payload):
 # curl http://localhost:9000/2015-03-31/functions/function/invocations -d "{payload}"
 #
-# Deploy to AWS Lambda via ACR
+# Deploy to AWS Lambda via ECR
 
 FROM --platform=linux/arm64 public.ecr.aws/lambda/python:3.13-arm64
 
@@ -53,7 +53,7 @@ RUN \
   echo "###################" && \
   echo "### pip installs ###" && \
   echo "###################" && \
-    pip install requests==2.31.0 urllib3==1.26.18 setuptools cryptography jsonschema PyJWT && \
+    pip install requests==2.31.0 urllib3==1.26.18 setuptools cryptography jsonschema PyJWT psycopg2-binary && \
   echo "######################" && \
   echo "### confluent-kafka ###" && \
   echo "######################" && \
@@ -71,7 +71,7 @@ RUN \
   
 # Lambda and SASL_SSL_Artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
-COPY src/event_gate_lambda.py $LAMBDA_TASK_ROOT
+COPY src/ $LAMBDA_TASK_ROOT/
 COPY conf $LAMBDA_TASK_ROOT/conf
 
 # Mark librdkafka to LD_LIBRARY_PATH  

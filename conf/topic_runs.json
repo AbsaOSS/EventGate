@@ -1,0 +1,73 @@
+{
+    "type": "object",
+    "properties": {
+        "event_id": {
+            "type": "string",
+            "description": "Unique identifier for the event (GUID), generated for each unique event, for de-duplication purposes"
+        },
+        "job_ref": {
+            "type": "string",
+            "description": "Identifier of the job in it’s respective system (e.g. Spark Application Id, Glue Job Id, EMR Step Id, etc)."
+        },
+        "tenant_id ": {
+            "type": "string",
+            "description": "Application ID (4 letter code) or ServiceNow identifier related to the pipeline/domain/process owner (tenant of the tool)"
+        },
+        "source_app": {
+            "type": "string",
+            "description": "Standardized source application name (aqueduct, unify, lum, etc)"
+        },
+        "source_app_version": {
+            "type": "string",
+            "description": "Source application version (SemVer preferred)"
+        },
+        "environment": {
+            "type": "string",
+            "description": "Environment (dev, uat, pre-prod, prod, test or others)"
+        },
+        "timestamp_start": {
+            "type": "number",
+            "description": "Start timestamp of the run in epoch milliseconds"
+        },
+        "timestamp_end": {
+            "type": "number",
+            "description": "End timestamp of the run in epoch milliseconds"
+        },
+        "jobs": {
+            "type": "array",
+            "description": "List of individual jobs withing the run",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "catalog_id": {
+                        "type": "string",
+                        "description": "Identifier for the data definition (Glue/Hive) database and table name for  example"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["succeeded", "failed", "killed", "skipped"],
+                        "description": "Status of the job."
+                    },
+                    "timestamp_start": {
+                        "type": "number",
+                        "description": "Start timestamp of a job that is a part of a run in epoch milliseconds"
+                    },
+                    "timestamp_end": {
+                        "type": "number",
+                        "description": "End timestamp of a job that is a part of a run in epoch milliseconds"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Job status/error message."
+                    },
+                    "additional_info": {
+                        "type": "object",
+                        "description": "Optional additional fields structured as an inner JSON"
+                    }
+                },
+                "required": ["catalog_id", "status", "timestamp_start", "timestamp_end"]
+            }
+        }
+    },
+    "required": ["event_id", "job_ref", "tenant_id", "source_app", "source_app_version", "environment", "timestamp_start", "timestamp_end", "jobs"]
+}
