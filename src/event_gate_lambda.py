@@ -27,9 +27,11 @@ from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-from . import writer_eventbridge
-from . import writer_kafka
-from . import writer_postgres
+sys.path.append(os.path.join(os.path.dirname(__file__)))
+
+import writer_eventbridge
+import writer_kafka
+import writer_postgres
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
