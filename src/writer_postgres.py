@@ -143,7 +143,7 @@ def write(topicName, message):
     try:
         if not POSTGRES["database"]:
             _logger.debug("No Postgres - skipping")
-            return
+            return True
             
         with psycopg2.connect(
             database=POSTGRES["database"],
