@@ -144,6 +144,16 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
     )
     return {"statusCode": 202} if success else {"statusCode": 500}
 
+def extract_token(eventHeaders):
+    # Initial implementation used bearer header directly
+    if "bearer" in eventHeaders:
+        return eventHeaders["bearer"]
+        
+    if "Authorization" in eventHeaders and eventHeaders["Authorization"].startswith("Bearer "):
+        return eventHeaders["Authorization"][len("Bearer "):]
+        
+    return "" # Will result in 401
+
 def lambda_handler(event, context):
     try:
         if event["resource"].lower() == "/api":
@@ -156,7 +166,7 @@ def lambda_handler(event, context):
             if event["httpMethod"] == "GET":
                 return get_topic_schema(event["pathParameters"]["topic_name"].lower())
             if event["httpMethod"] == "POST":
-                return post_topic_message(event["pathParameters"]["topic_name"].lower(), json.loads(event["body"]), event["headers"]["bearer"])  
+                return post_topic_message(event["pathParameters"]["topic_name"].lower(), json.loads(event["body"]), extract_token(event["headers"]))  
         if event["resource"].lower() == "/terminate":
             sys.exit("TERMINATING")
         return {"statusCode": 404}
