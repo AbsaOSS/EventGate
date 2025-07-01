@@ -18,6 +18,8 @@ def init(logger):
         aws_secrets = boto3.Session().client(service_name='secretsmanager', region_name=secret_region)
         postgres_secret = aws_secrets.get_secret_value(SecretId=secret_name)["SecretString"]
         POSTGRES = json.loads(postgres_secret)
+    else:
+        POSTGRES = {"database": ""}
 
     _logger.debug("Initialized POSTGRES writer")
 
@@ -141,7 +143,7 @@ def write(topicName, message):
     try:
         if not POSTGRES["database"]:
             _logger.debug("No Postgres - skipping")
-            return
+            return True
             
         with psycopg2.connect(
             database=POSTGRES["database"],
