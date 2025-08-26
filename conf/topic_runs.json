@@ -57,7 +57,7 @@
                         "description": "End timestamp of a job that is a part of a run in epoch milliseconds"
                     },
                     "message": {
-                        "type": "string",
+                        "type": ["string", "null"],
                         "description": "Job status/error message."
                     },
                     "additional_info": {
