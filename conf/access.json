@@ -5,5 +5,8 @@
     "public.cps.za.dlchange": [
         "FooUser",
         "BarUser"
+    ],
+    "public.cps.za.test": [
+        "TestUser"
     ]
 }

@@ -9,7 +9,7 @@
             "type": "string",
             "description": "Identifier of the job in it’s respective system (e.g. Spark Application Id, Glue Job Id, EMR Step Id, etc)."
         },
-        "tenant_id ": {
+        "tenant_id": {
             "type": "string",
             "description": "Application ID (4 letter code) or ServiceNow identifier related to the pipeline/domain/process owner (tenant of the tool)"
         },
