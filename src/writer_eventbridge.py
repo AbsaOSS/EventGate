@@ -34,7 +34,7 @@ def write(topicName, message):
             _logger.error(str(response))
             return False
     except Exception as e:
-        _logger.error(f'The EventBridge writer with unknown error: {str(e)}')
+        _logger.error(f'The EventBridge writer failed with unknown error: {str(e)}')
         return False
         
     return True

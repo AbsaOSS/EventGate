@@ -26,5 +26,5 @@
       "description": "Optional additional fields structured as an inner JSON"
     }
   },
-  "required": ["event_id", "source_app", "environment", "timestamp"]
+  "required": ["event_id", "tenant_id", "source_app", "environment", "timestamp"]
 }

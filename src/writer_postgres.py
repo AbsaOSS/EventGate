@@ -3,7 +3,10 @@ import os
 
 import boto3
 from botocore.exceptions import ClientError
-import psycopg2
+try:
+    import psycopg2  # noqa: F401
+except ImportError:  # pragma: no cover - environment without psycopg2
+    psycopg2 = None
 
 def init(logger):
     global _logger
@@ -64,10 +67,10 @@ def postgres_edla_write(cursor, table, message):
             message["timestamp_event"],
             message["catalog_id"],
             message["operation"],
-            message["location"] if "location" in message else None,
+            message.get("location"),
             message["format"],
-            json.dumps(message["format_options"]) if "format_options" in message else None,
-            json.dumps(message["additional_info"]) if "additional_info" in message else None
+            json.dumps(message.get("format_options")) if "format_options" in message else None,
+            json.dumps(message.get("additional_info")) if "additional_info" in message else None
         )
     )
 
@@ -79,7 +82,7 @@ def postgres_run_write(cursor, table_runs, table_jobs, message):
                 event_id,
                 job_ref,
                 tenant_id,
-                soure_app,
+                source_app,
                 source_app_version,
                 environment,
                 timestamp_start,
@@ -134,8 +137,8 @@ def postgres_run_write(cursor, table_runs, table_jobs, message):
             job["status"],
             job["timestamp_start"],
             job["timestamp_end"],
-            job["message"] if "message" in job else None,
-            json.dumps(job["additional_info"]) if "additional_info" in job else None
+            job.get("message"),
+            json.dumps(job.get("additional_info")) if "additional_info" in job else None
         )
     )
 
@@ -144,7 +147,8 @@ def postgres_test_write(cursor, table, message):
     cursor.execute(f"""
         INSERT INTO {table} 
         (
-            event_id, 
+            event_id,
+            tenant_id,
             source_app, 
             environment, 
             timestamp_event, 
@@ -152,17 +156,19 @@ def postgres_test_write(cursor, table, message):
         ) 
         VALUES
         (
-            %s, 
+            %s,
+            %s,
             %s, 
             %s, 
             %s, 
             %s
         )""", (
             message["event_id"],
+            message["tenant_id"],
             message["source_app"],
             message["environment"],
             message["timestamp"],
-            json.dumps(message["additional_info"]) if "additional_info" in message else None
+            json.dumps(message.get("additional_info")) if "additional_info" in message else None
         )
     )
 
@@ -170,6 +176,9 @@ def write(topicName, message):
     try:
         if not POSTGRES["database"]:
             _logger.debug("No Postgres - skipping")
+            return True
+        if psycopg2 is None:
+            _logger.debug("psycopg2 not available - skipping actual Postgres write")
             return True
             
         with psycopg2.connect(
@@ -192,7 +201,7 @@ def write(topicName, message):
                     
             connection.commit()
     except Exception as e:
-        _logger.error(f'The Postgres writer with unknown error: {str(e)}')
+        _logger.error(f'The Postgres writer with failed unknown error: {str(e)}')
         return False
         
     return True
