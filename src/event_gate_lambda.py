@@ -139,12 +139,38 @@ def post_topic_message(topicName, topicMessage, tokenEncoded):
             "body": e.message
          }
     
-    success = (
-        writer_kafka.write(topicName, topicMessage) and 
-        writer_eventbridge.write(topicName, topicMessage) and 
-        writer_postgres.write(topicName, topicMessage)
-    )
-    return {"statusCode": 202} if success else {"statusCode": 500}
+    # Run all writers independently (avoid short-circuit so failures in one don't skip others)
+    kafka_ok, kafka_err = writer_kafka.write(topicName, topicMessage)
+    eventbridge_ok, eventbridge_err = writer_eventbridge.write(topicName, topicMessage)
+    postgres_ok, postgres_err = writer_postgres.write(topicName, topicMessage)
+
+    errors = []
+    if not kafka_ok:
+        errors.append({"type": "kafka", "message": kafka_err})
+    if not eventbridge_ok:
+        errors.append({"type": "eventbridge", "message": eventbridge_err})
+    if not postgres_ok:
+        errors.append({"type": "postgres", "message": postgres_err})
+
+    if errors:
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "success": False,
+                "statusCode": 500,
+                "errors": errors
+            })
+        }
+
+    return {
+        "statusCode": 202,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({
+            "success": True,
+            "statusCode": 202
+        })
+    }
 
 def extract_token(eventHeaders):
     # Initial implementation used bearer header directly
