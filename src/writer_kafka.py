@@ -29,17 +29,21 @@ def init(logger, CONFIG):
 def write(topicName, message):
     try:
         _logger.debug(f"Sending to kafka {topicName}")
-        error = []
-        kafka_producer.produce(topicName, 
-                               key="", 
-                               value=json.dumps(message).encode("utf-8"),
-                               callback = lambda err, msg: error.append(err) if err is not None else None)
+        errors = []
+        kafka_producer.produce(
+            topicName,
+            key="",
+            value=json.dumps(message).encode("utf-8"),
+            callback=lambda err, msg: errors.append(str(err)) if err is not None else None
+        )
         kafka_producer.flush()
-        if error:
-            _logger.error(str(error))
-            return False
+        if errors:
+            msg = "; ".join(errors)
+            _logger.error(msg)
+            return False, msg
     except Exception as e:
-        _logger.error(f'The Kafka writer failed with unknown error: {str(e)}')
-        return False
+        err_msg = f'The Kafka writer failed with unknown error: {str(e)}'
+        _logger.error(err_msg)
+        return False, err_msg
         
-    return True
+    return True, None
