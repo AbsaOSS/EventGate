@@ -138,7 +138,34 @@ def postgres_run_write(cursor, table_runs, table_jobs, message):
             json.dumps(job["additional_info"]) if "additional_info" in job else None
         )
     )
-    
+
+def postgres_test_write(cursor, table, message):
+    _logger.debug(f"Sending to Postgres - {table}")
+    cursor.execute(f"""
+        INSERT INTO {table} 
+        (
+            event_id, 
+            source_app, 
+            environment, 
+            timestamp_event, 
+            additional_info
+        ) 
+        VALUES
+        (
+            %s, 
+            %s, 
+            %s, 
+            %s, 
+            %s
+        )""", (
+            message["event_id"],
+            message["source_app"],
+            message["environment"],
+            message["timestamp"],
+            json.dumps(message["additional_info"]) if "additional_info" in message else None
+        )
+    )
+
 def write(topicName, message):
     try:
         if not POSTGRES["database"]:
@@ -157,13 +184,15 @@ def write(topicName, message):
                     postgres_edla_write(cursor, "public_cps_za_dlchange", message)
                 elif topicName == "public.cps.za.runs":
                     postgres_run_write(cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message)
+                elif topicName == "public.cps.za.test":
+                    postgres_test_write(cursor, "public_cps_za_test", message)
                 else:
                     _logger.error(f"unknown topic for postgres {topicName}")
                     return False
                     
             connection.commit()
     except Exception as e:
-        _logger.error(str(e))
+        _logger.error(f'The Postgres writer with unknown error: {str(e)}')
         return False
         
     return True

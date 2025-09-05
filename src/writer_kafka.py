@@ -39,7 +39,7 @@ def write(topicName, message):
             _logger.error(str(error))
             return False
     except Exception as e:
-        _logger.error(str(e))
+        _logger.error(f'The Kafka writer with unknown error: {str(e)}')
         return False
         
     return True

@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "Unique identifier for the event (GUID), generated for each unique event, for de-duplication purposes"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Application ID (4 letter code) or ServiceNow identifier related to the pipeline/domain/process owner (tenant of the tool)"
+    },
+    "source_app": {
+      "type": "string",
+      "description": "Standardized source application name (aqueduct, unify, lum, etc)"
+    },
+    "environment": {
+      "type": "string",
+      "description": "Environment (dev, uat, pre-prod, prod, test or others)"
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Timestamp of the event in epoch milliseconds"
+    },
+    "additional_info": {
+      "type": "object",
+      "description": "Optional additional fields structured as an inner JSON"
+    }
+  },
+  "required": ["event_id", "source_app", "environment", "timestamp"]
+}
