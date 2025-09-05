@@ -54,7 +54,7 @@ with open("conf/topic_test.json", "r") as file:
     TOPICS["public.cps.za.test"] = json.load(file)
 logger.debug("Loaded TOPICS")
 
-with open("conf/config.dev.json", "r") as file:
+with open("conf/config.json", "r") as file:
     CONFIG = json.load(file)
 logger.debug("Loaded main CONFIG")
 
