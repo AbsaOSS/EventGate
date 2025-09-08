@@ -27,16 +27,14 @@ from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-from . import conf_path  # new import for CONF_DIR resolution
-try:  # fallback if relative import fails (e.g., executed as a script)
-    from . import conf_path as _conf_mod
-except Exception:  # pragma: no cover
-    import conf_path as _conf_mod
-conf_path = _conf_mod
+try:
+    from .conf_path import CONF_DIR, INVALID_CONF_ENV
+except ImportError:  # fallback when executed outside package context
+    from conf_path import CONF_DIR, INVALID_CONF_ENV
 
-# Remove old resolution logic, use module instead
-_CONF_DIR = conf_path.CONF_DIR
-_INVALID_CONF_ENV = conf_path.INVALID_CONF_ENV
+# Use imported symbols for internal variables
+_CONF_DIR = CONF_DIR
+_INVALID_CONF_ENV = INVALID_CONF_ENV
 
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 
