@@ -6,3 +6,4 @@ __pycache__
 /terraform/*.tfvars
 /terraform/*.tfstate*
 /terraform/.terraform*
+/.idea/
