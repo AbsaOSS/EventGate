@@ -21,4 +21,4 @@ jobs:
         with:
           github-repository: ${{ github.repository }}
           pr-number: ${{ github.event.number }}
-          title: '**[Rr]elease [Nn]otes**'
+          title: '(\*\*[Rr]elease [Nn]otes\*\*|[Rr]elease [Nn]otes:)'
