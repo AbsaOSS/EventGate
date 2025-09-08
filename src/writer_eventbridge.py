@@ -2,16 +2,18 @@ import json
 
 import boto3
 
+
 def init(logger, CONFIG):
     global _logger
     global EVENT_BUS_ARN
     global aws_eventbridge
-    
+
     _logger = logger
-    
-    aws_eventbridge = boto3.client('events')
+
+    aws_eventbridge = boto3.client("events")
     EVENT_BUS_ARN = CONFIG["event_bus_arn"] if "event_bus_arn" in CONFIG else ""
     _logger.debug("Initialized EVENTBRIDGE writer")
+
 
 def write(topicName, message):
     if not EVENT_BUS_ARN:
@@ -24,9 +26,9 @@ def write(topicName, message):
             Entries=[
                 {
                     "Source": topicName,
-                    'DetailType': 'JSON',
-                    'Detail': json.dumps(message),
-                    'EventBusName': EVENT_BUS_ARN,
+                    "DetailType": "JSON",
+                    "Detail": json.dumps(message),
+                    "EventBusName": EVENT_BUS_ARN,
                 }
             ]
         )
@@ -35,8 +37,8 @@ def write(topicName, message):
             _logger.error(msg)
             return False, msg
     except Exception as e:
-        err_msg = f'The EventBridge writer failed with unknown error: {str(e)}'
+        err_msg = f"The EventBridge writer failed with unknown error: {str(e)}"
         _logger.error(err_msg)
         return False, err_msg
-        
+
     return True, None
