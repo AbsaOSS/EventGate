@@ -16,7 +16,7 @@ def init(logger, CONFIG):
 def write(topicName, message):
     if not EVENT_BUS_ARN:
         _logger.debug("No EventBus Arn - skipping")
-        return True
+        return True, None
 
     try:
         _logger.debug(f"Sending to eventBridge {topicName}")
@@ -31,10 +31,12 @@ def write(topicName, message):
             ]
         )
         if response["FailedEntryCount"] > 0:
-            _logger.error(str(response))
-            return False
+            msg = str(response)
+            _logger.error(msg)
+            return False, msg
     except Exception as e:
-        _logger.error(f'The EventBridge writer failed with unknown error: {str(e)}')
-        return False
+        err_msg = f'The EventBridge writer failed with unknown error: {str(e)}'
+        _logger.error(err_msg)
+        return False, err_msg
         
-    return True
+    return True, None

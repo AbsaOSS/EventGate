@@ -176,10 +176,10 @@ def write(topicName, message):
     try:
         if not POSTGRES["database"]:
             _logger.debug("No Postgres - skipping")
-            return True
+            return True, None
         if psycopg2 is None:
             _logger.debug("psycopg2 not available - skipping actual Postgres write")
-            return True
+            return True, None
             
         with psycopg2.connect(
             database=POSTGRES["database"],
@@ -196,12 +196,14 @@ def write(topicName, message):
                 elif topicName == "public.cps.za.test":
                     postgres_test_write(cursor, "public_cps_za_test", message)
                 else:
-                    _logger.error(f"unknown topic for postgres {topicName}")
-                    return False
+                    msg = f"unknown topic for postgres {topicName}"
+                    _logger.error(msg)
+                    return False, msg
                     
             connection.commit()
     except Exception as e:
-        _logger.error(f'The Postgres writer with failed unknown error: {str(e)}')
-        return False
+        err_msg = f'The Postgres writer with failed unknown error: {str(e)}'
+        _logger.error(err_msg)
+        return False, err_msg
         
-    return True
+    return True, None
