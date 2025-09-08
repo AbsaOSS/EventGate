@@ -1,8 +1,0 @@
-urllib3
-cryptography
-jsonschema
-PyJWT
-requests
-boto3
-confluent_kafka
-psycopg2

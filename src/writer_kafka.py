@@ -1,41 +1,70 @@
-import json
+"""Kafka writer module.
 
-import boto3
+Initializes a Confluent Kafka Producer and publishes messages for a topic.
+"""
+
+import json
+import logging
+from typing import Any, Dict, Optional, Tuple
+
 from confluent_kafka import Producer
 
+STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None}
 
-def init(logger, CONFIG):
-    global _logger
-    global kafka_producer
+# Module globals for typing
+_logger: logging.Logger = logging.getLogger(__name__)
+kafka_producer: Optional[Producer] = None
 
-    _logger = logger
+def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
+    """Initialize Kafka producer.
 
-    producer_config = {"bootstrap.servers": CONFIG["kafka_bootstrap_server"]}
-    if "kafka_sasl_kerberos_principal" in CONFIG and "kafka_ssl_key_path" in CONFIG:
+    Args:
+        logger: Shared application logger.
+        config: Configuration dictionary (expects 'kafka_bootstrap_server' plus optional SASL/SSL fields).
+    """
+    STATE["logger"] = logger
+
+    producer_config: Dict[str, Any] = {"bootstrap.servers": config["kafka_bootstrap_server"]}
+    if "kafka_sasl_kerberos_principal" in config and "kafka_ssl_key_path" in config:
         producer_config.update(
             {
                 "security.protocol": "SASL_SSL",
                 "sasl.mechanism": "GSSAPI",
                 "sasl.kerberos.service.name": "kafka",
-                "sasl.kerberos.keytab": CONFIG["kafka_sasl_kerberos_keytab_path"],
-                "sasl.kerberos.principal": CONFIG["kafka_sasl_kerberos_principal"],
-                "ssl.ca.location": CONFIG["kafka_ssl_ca_path"],
-                "ssl.certificate.location": CONFIG["kafka_ssl_cert_path"],
-                "ssl.key.location": CONFIG["kafka_ssl_key_path"],
-                "ssl.key.password": CONFIG["kafka_ssl_key_password"],
+                "sasl.kerberos.keytab": config["kafka_sasl_kerberos_keytab_path"],
+                "sasl.kerberos.principal": config["kafka_sasl_kerberos_principal"],
+                "ssl.ca.location": config["kafka_ssl_ca_path"],
+                "ssl.certificate.location": config["kafka_ssl_cert_path"],
+                "ssl.key.location": config["kafka_ssl_key_path"],
+                "ssl.key.password": config["kafka_ssl_key_password"],
             }
         )
-        _logger.debug("producer will use SASL_SSL")
-    kafka_producer = Producer(producer_config)
-    _logger.debug("Initialized KAFKA writer")
+        STATE["logger"].debug("Kafka producer will use SASL_SSL")
+
+    STATE["producer"] = Producer(producer_config)
+    STATE["logger"].debug("Initialized KAFKA writer")
 
 
-def write(topicName, message):
+def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """Publish a message to Kafka.
+
+    Args:
+        topic_name: Kafka topic to publish to.
+        message: JSON-serializable payload.
+    Returns:
+        Tuple[success flag, optional error message].
+    """
+    logger = STATE["logger"]
+    producer: Optional[Producer] = STATE.get("producer")  # type: ignore[assignment]
+
     try:
-        _logger.debug(f"Sending to kafka {topicName}")
-        errors = []
+        if producer is None:
+            logger.debug("Kafka producer not initialized - skipping")
+            return True, None
+        _logger.debug(f"Sending to kafka {topic_name}")
+        errors: list[Any] = []
         kafka_producer.produce(
-            topicName,
+            topic_name,
             key="",
             value=json.dumps(message).encode("utf-8"),
             callback=lambda err, msg: (

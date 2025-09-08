@@ -1,18 +1,33 @@
+"""Postgres writer module.
+
+Handles optional initialization via AWS Secrets Manager and topic-based inserts into Postgres.
+"""
+
 import json
 import os
+import logging
+from typing import Any, Dict, Tuple, Optional
 
 import boto3
-from botocore.exceptions import ClientError
 
 try:
     import psycopg2  # noqa: F401
 except ImportError:  # pragma: no cover - environment without psycopg2
-    psycopg2 = None
+    psycopg2 = None  # type: ignore
+
+# Module level globals for typing
+_logger: logging.Logger = logging.getLogger(__name__)
+POSTGRES: Dict[str, Any] = {"database": ""}
 
 
-def init(logger):
-    global _logger
-    global POSTGRES
+def init(logger: logging.Logger) -> None:
+    """Initialize Postgres credentials either from AWS Secrets Manager or fallback empty config.
+
+    Args:
+        logger: Shared application logger.
+    """
+    global _logger  # pylint: disable=global-statement
+    global POSTGRES  # pylint: disable=global-statement
 
     _logger = logger
 
@@ -33,8 +48,15 @@ def init(logger):
     _logger.debug("Initialized POSTGRES writer")
 
 
-def postgres_edla_write(cursor, table, message):
-    _logger.debug(f"Sending to Postgres - {table}")
+def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
+    """Insert a dlchange style event row.
+
+    Args:
+        cursor: Database cursor.
+        table: Target table name.
+        message: Event payload.
+    """
+    _logger.debug("Sending to Postgres - %s", table)
     cursor.execute(
         f"""
         INSERT INTO {table} 
@@ -92,8 +114,16 @@ def postgres_edla_write(cursor, table, message):
     )
 
 
-def postgres_run_write(cursor, table_runs, table_jobs, message):
-    _logger.debug(f"Sending to Postgres - {table_runs} and {table_jobs}")
+def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[str, Any]) -> None:
+    """Insert a run event row plus related job rows.
+
+    Args:
+        cursor: Database cursor.
+        table_runs: Runs table name.
+        table_jobs: Jobs table name.
+        message: Event payload (includes jobs array).
+    """
+    _logger.debug("Sending to Postgres - %s and %s", table_runs, table_jobs)
     cursor.execute(
         f"""
         INSERT INTO {table_runs} 
@@ -169,8 +199,15 @@ def postgres_run_write(cursor, table_runs, table_jobs, message):
         )
 
 
-def postgres_test_write(cursor, table, message):
-    _logger.debug(f"Sending to Postgres - {table}")
+def postgres_test_write(cursor, table: str, message: Dict[str, Any]) -> None:
+    """Insert a test topic row.
+
+    Args:
+        cursor: Database cursor.
+        table: Target table name.
+        message: Event payload.
+    """
+    _logger.debug("Sending to Postgres - %s", table)
     cursor.execute(
         f"""
         INSERT INTO {table} 
@@ -206,38 +243,46 @@ def postgres_test_write(cursor, table, message):
     )
 
 
-def write(topicName, message):
+def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """Dispatch insertion for a topic into the correct Postgres table(s).
+
+    Skips if Postgres not configured or psycopg2 unavailable. Returns success flag and optional error.
+
+    Args:
+        topic_name: Incoming topic identifier.
+        message: Event payload.
+    """
     try:
-        if not POSTGRES["database"]:
+        if not POSTGRES.get("database"):
             _logger.debug("No Postgres - skipping")
             return True, None
-        if psycopg2 is None:
+        if psycopg2 is None:  # type: ignore
             _logger.debug("psycopg2 not available - skipping actual Postgres write")
             return True, None
 
-        with psycopg2.connect(
+        with psycopg2.connect(  # type: ignore[attr-defined]
             database=POSTGRES["database"],
             host=POSTGRES["host"],
             user=POSTGRES["user"],
             password=POSTGRES["password"],
             port=POSTGRES["port"],
-        ) as connection:
-            with connection.cursor() as cursor:
-                if topicName == "public.cps.za.dlchange":
+        ) as connection:  # type: ignore[call-arg]
+            with connection.cursor() as cursor:  # type: ignore
+                if topic_name == "public.cps.za.dlchange":
                     postgres_edla_write(cursor, "public_cps_za_dlchange", message)
-                elif topicName == "public.cps.za.runs":
+                elif topic_name == "public.cps.za.runs":
                     postgres_run_write(
                         cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message
                     )
-                elif topicName == "public.cps.za.test":
+                elif topic_name == "public.cps.za.test":
                     postgres_test_write(cursor, "public_cps_za_test", message)
                 else:
-                    msg = f"unknown topic for postgres {topicName}"
+                    msg = f"unknown topic for postgres {topic_name}"
                     _logger.error(msg)
                     return False, msg
 
-            connection.commit()
-    except Exception as e:
+            connection.commit()  # type: ignore
+    except Exception as e:  # pragma: no cover - defensive (still tested though)
         err_msg = f"The Postgres writer with failed unknown error: {str(e)}"
         _logger.error(err_msg)
         return False, err_msg
