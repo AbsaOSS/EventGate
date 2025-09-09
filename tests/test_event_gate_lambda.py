@@ -101,7 +101,6 @@ def event_gate_module():
 
     for p in started_patches:
         p.stop()
-    patch.stopall()
 
 
 @pytest.fixture

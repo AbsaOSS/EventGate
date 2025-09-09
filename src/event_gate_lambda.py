@@ -29,12 +29,16 @@ from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
+# Unified import pattern to avoid mypy no-redef on symbol names
 try:
-    from .conf_path import CONF_DIR, INVALID_CONF_ENV
+    from . import conf_path as _conf_mod
 except ImportError:  # fallback when executed outside package context
-    from conf_path import CONF_DIR, INVALID_CONF_ENV
+    import conf_path as _conf_mod  # type: ignore[no-redef]
 
-# Use imported symbols for internal variables
+CONF_DIR = _conf_mod.CONF_DIR
+INVALID_CONF_ENV = _conf_mod.INVALID_CONF_ENV
+
+# Internal aliases used by rest of module
 _CONF_DIR = CONF_DIR
 _INVALID_CONF_ENV = INVALID_CONF_ENV
 
@@ -51,10 +55,6 @@ logger.debug("Initialized LOGGER")
 logger.debug(f"Using CONF_DIR={_CONF_DIR}")
 if _INVALID_CONF_ENV:
     logger.warning(f"CONF_DIR env var set to non-existent path: {_INVALID_CONF_ENV}; fell back to {_CONF_DIR}")
-
-# Resolve project root (parent directory of this file's directory)
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_CONF_DIR = os.path.join(_PROJECT_ROOT, "conf")
 
 with open(os.path.join(_CONF_DIR, "api.yaml"), "r", encoding="utf-8") as file:
     API = file.read()

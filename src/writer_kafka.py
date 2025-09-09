@@ -8,12 +8,16 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 
 from confluent_kafka import Producer
+try:  # KafkaException may not exist in stubbed test module
+    from confluent_kafka import KafkaException  # type: ignore
+except Exception:  # pragma: no cover - fallback for test stub
+    class KafkaException(Exception):  # type: ignore
+        pass
 
 STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None}
 
 # Module globals for typing
 _logger: logging.Logger = logging.getLogger(__name__)
-kafka_producer: Optional[Producer] = None
 
 
 def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
@@ -22,10 +26,16 @@ def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
     Args:
         logger: Shared application logger.
         config: Configuration dictionary (expects 'kafka_bootstrap_server' plus optional SASL/SSL fields).
+    Raises:
+        ValueError: if required 'kafka_bootstrap_server' is missing or empty.
     """
     STATE["logger"] = logger
 
-    producer_config: Dict[str, Any] = {"bootstrap.servers": config["kafka_bootstrap_server"]}
+    if "kafka_bootstrap_server" not in config or not config.get("kafka_bootstrap_server"):
+        raise ValueError("Missing required config: kafka_bootstrap_server")
+    bootstrap = config["kafka_bootstrap_server"]
+
+    producer_config: Dict[str, Any] = {"bootstrap.servers": bootstrap}
     if "kafka_sasl_kerberos_principal" in config and "kafka_ssl_key_path" in config:
         producer_config.update(
             {
@@ -58,26 +68,28 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     logger = STATE["logger"]
     producer: Optional[Producer] = STATE.get("producer")  # type: ignore[assignment]
 
+    if producer is None:
+        logger.debug("Kafka producer not initialized - skipping")
+        return True, None
+
+    errors: list[Any] = []
     try:
-        if producer is None:
-            logger.debug("Kafka producer not initialized - skipping")
-            return True, None
         _logger.debug(f"Sending to kafka {topic_name}")
-        errors: list[Any] = []
-        kafka_producer.produce(
+        producer.produce(
             topic_name,
             key="",
             value=json.dumps(message).encode("utf-8"),
             callback=lambda err, msg: (errors.append(str(err)) if err is not None else None),
         )
-        kafka_producer.flush()
-        if errors:
-            msg = "; ".join(errors)
-            _logger.error(msg)
-            return False, msg
-    except Exception as e:
+        producer.flush()
+    except KafkaException as e:  # narrow exception capture
         err_msg = f"The Kafka writer failed with unknown error: {str(e)}"
-        _logger.error(err_msg)
+        _logger.exception(err_msg)
         return False, err_msg
+
+    if errors:
+        msg = "; ".join(errors)
+        _logger.error(msg)
+        return False, msg
 
     return True, None
