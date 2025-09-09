@@ -5,7 +5,7 @@ Provides initialization and write functionality for publishing events to AWS Eve
 
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -24,6 +24,12 @@ def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
     STATE["client"] = boto3.client("events")
     STATE["event_bus_arn"] = config.get("event_bus_arn", "")
     STATE["logger"].debug("Initialized EVENTBRIDGE writer")
+
+
+def _format_failed_entries(entries: List[Dict[str, Any]]) -> str:
+    failed = [e for e in entries if "ErrorCode" in e or "ErrorMessage" in e]
+    # Keep message concise but informative
+    return json.dumps(failed) if failed else "[]"
 
 
 def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -58,21 +64,16 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
                 }
             ]
         )
-        if response.get("FailedEntryCount", 0) > 0:
-            msg = str(response)
+        failed_count = response.get("FailedEntryCount", 0)
+        if failed_count > 0:
+            entries = response.get("Entries", [])
+            failed_repr = _format_failed_entries(entries)
+            msg = f"{failed_count} EventBridge entries failed: {failed_repr}"
             logger.error(msg)
             return False, msg
-    except (BotoCoreError, ClientError) as err:
-        err_msg = f"The EventBridge writer failed: {err}"  # specific AWS error
-        logger.error(err_msg)
-        return False, err_msg
-    except Exception as err:  # pragma: no cover - unexpected failure path
-        err_msg = (
-            f"The EventBridge writer failed with unknown error: {err}"
-            if not isinstance(err, (BotoCoreError, ClientError))
-            else str(err)
-        )
-        logger.error(err_msg)
-        return False, err_msg
+    except (BotoCoreError, ClientError) as err:  # explicit AWS client-related errors
+        logger.exception("EventBridge put_events call failed")
+        return False, str(err)
 
+    # Let any unexpected exception propagate for upstream handler (avoids broad except BLE001 / TRY400)
     return True, None

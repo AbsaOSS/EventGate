@@ -50,9 +50,7 @@ if not logger.handlers:
 logger.debug("Initialized LOGGER")
 logger.debug(f"Using CONF_DIR={_CONF_DIR}")
 if _INVALID_CONF_ENV:
-    logger.warning(
-        f"CONF_DIR env var set to non-existent path: {_INVALID_CONF_ENV}; fell back to {_CONF_DIR}"
-    )
+    logger.warning(f"CONF_DIR env var set to non-existent path: {_INVALID_CONF_ENV}; fell back to {_CONF_DIR}")
 
 # Resolve project root (parent directory of this file's directory)
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -210,17 +208,38 @@ def post_topic_message(topic_name: str, topic_message: Dict[str, Any], token_enc
 
 
 def extract_token(event_headers: Dict[str, str]) -> str:
-    """Extract bearer token from headers.
+    """Extract bearer token from headers (case-insensitive).
 
-    Supports lowercase custom 'bearer' header or standard 'Authorization: Bearer <token>'.
-    Returns empty string if not present (caller handles auth error response).
+    Supports:
+      - Custom 'bearer' header (any casing) whose value is the raw token
+      - Standard 'Authorization: Bearer <token>' header (case-insensitive scheme & key)
+    Returns empty string if token not found or malformed.
     """
-    if "bearer" in event_headers:
-        return event_headers["bearer"]
-    auth_header = event_headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        return auth_header[len("Bearer ") :]
-    return ""
+    if not event_headers:
+        return ""
+
+    # Normalize keys to lowercase for case-insensitive lookup
+    lowered = {str(k).lower(): v for k, v in event_headers.items()}
+
+    # Direct bearer header (raw token)
+    if "bearer" in lowered and isinstance(lowered["bearer"], str):
+        token_candidate = lowered["bearer"].strip()
+        if token_candidate:
+            return token_candidate
+
+    # Authorization header with Bearer scheme
+    auth_val = lowered.get("authorization", "")
+    if not isinstance(auth_val, str):  # defensive
+        return ""
+    auth_val = auth_val.strip()
+    if not auth_val:
+        return ""
+
+    # Case-insensitive match for 'Bearer ' prefix
+    if not auth_val.lower().startswith("bearer "):
+        return ""
+    token_part = auth_val[7:].strip()  # len('Bearer ')==7
+    return token_part
 
 
 def lambda_handler(event: Dict[str, Any], context: Any):  # pylint: disable=unused-argument,too-many-return-statements

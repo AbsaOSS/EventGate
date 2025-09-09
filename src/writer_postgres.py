@@ -35,12 +35,8 @@ def init(logger: logging.Logger) -> None:
     secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
 
     if secret_name and secret_region:
-        aws_secrets = boto3.Session().client(
-            service_name="secretsmanager", region_name=secret_region
-        )
-        postgres_secret = aws_secrets.get_secret_value(SecretId=secret_name)[
-            "SecretString"
-        ]
+        aws_secrets = boto3.Session().client(service_name="secretsmanager", region_name=secret_region)
+        postgres_secret = aws_secrets.get_secret_value(SecretId=secret_name)["SecretString"]
         POSTGRES = json.loads(postgres_secret)
     else:
         POSTGRES = {"database": ""}
@@ -100,16 +96,8 @@ def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
             message["operation"],
             message.get("location"),
             message["format"],
-            (
-                json.dumps(message.get("format_options"))
-                if "format_options" in message
-                else None
-            ),
-            (
-                json.dumps(message.get("additional_info"))
-                if "additional_info" in message
-                else None
-            ),
+            (json.dumps(message.get("format_options")) if "format_options" in message else None),
+            (json.dumps(message.get("additional_info")) if "additional_info" in message else None),
         ),
     )
 
@@ -190,11 +178,7 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
                 job["timestamp_start"],
                 job["timestamp_end"],
                 job.get("message"),
-                (
-                    json.dumps(job.get("additional_info"))
-                    if "additional_info" in job
-                    else None
-                ),
+                (json.dumps(job.get("additional_info")) if "additional_info" in job else None),
             ),
         )
 
@@ -234,11 +218,7 @@ def postgres_test_write(cursor, table: str, message: Dict[str, Any]) -> None:
             message["source_app"],
             message["environment"],
             message["timestamp"],
-            (
-                json.dumps(message.get("additional_info"))
-                if "additional_info" in message
-                else None
-            ),
+            (json.dumps(message.get("additional_info")) if "additional_info" in message else None),
         ),
     )
 
@@ -271,9 +251,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
                 if topic_name == "public.cps.za.dlchange":
                     postgres_edla_write(cursor, "public_cps_za_dlchange", message)
                 elif topic_name == "public.cps.za.runs":
-                    postgres_run_write(
-                        cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message
-                    )
+                    postgres_run_write(cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message)
                 elif topic_name == "public.cps.za.test":
                     postgres_test_write(cursor, "public_cps_za_test", message)
                 else:

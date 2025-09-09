@@ -15,6 +15,7 @@ STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None
 _logger: logging.Logger = logging.getLogger(__name__)
 kafka_producer: Optional[Producer] = None
 
+
 def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
     """Initialize Kafka producer.
 
@@ -67,9 +68,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
             topic_name,
             key="",
             value=json.dumps(message).encode("utf-8"),
-            callback=lambda err, msg: (
-                errors.append(str(err)) if err is not None else None
-            ),
+            callback=lambda err, msg: (errors.append(str(err)) if err is not None else None),
         )
         kafka_producer.flush()
         if errors:

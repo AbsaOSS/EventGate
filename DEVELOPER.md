@@ -14,7 +14,7 @@ Clone the repository and navigate to the project directory:
 
 ```shell
 git clone https://github.com/AbsaOSS/EventGate.git
-cd event-gate
+cd EventGate
 ```
 
 ## Set Up Python Environment
@@ -75,23 +75,23 @@ All done! ✨ 🍰 ✨
 
 ## Run mypy Tool Locally
 
-This project uses the [my[py]](https://mypy.readthedocs.io/en/stable/) tool, a static type checker for Python.
+This project uses the [mypy](https://mypy.readthedocs.io/en/stable/) tool, a static type checker for Python.
 
 > Type checkers help ensure that you correctly use variables and functions in your code.
 > With mypy, add type hints (PEP 484) to your Python programs,
 > and mypy will warn you when you use those types incorrectly.
-my[py] configuration is in `pyproject.toml` file.
+mypy configuration is in `pyproject.toml` file.
 
-Follow these steps to format your code with my[py] locally:
+Follow these steps to type-check your code with mypy locally:
 
-### Run my[py]
+### Run mypy
 
-Run my[py] on all files in the project.
+Run mypy on all files in the project.
 ```shell
 mypy .
 ```
 
-To run my[py] check on a specific file, follow the pattern `mypy <path_to_file>/<name_of_file>.py --check-untyped-defs`.
+To run mypy on a specific file, follow the pattern `mypy <path_to_file>/<name_of_file>.py --check-untyped-defs`.
 
 Example:
 ```shell
@@ -124,4 +124,4 @@ See the coverage report on the path:
 open htmlcov/index.html
 ```
 
-## 
+##

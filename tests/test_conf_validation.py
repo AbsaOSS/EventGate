@@ -1,4 +1,5 @@
 import os
+
 #
 # Copyright 2025 ABSA Group Limited
 #
@@ -28,24 +29,25 @@ REQUIRED_CONFIG_KEYS = {
     "event_bus_arn",
 }
 
+
 def load_json(path):
     with open(path, "r") as f:
         return json.load(f)
 
+
 @pytest.fixture(scope="module")
 def config_files():
-    files = [
-        f for f in glob(os.path.join(CONF_DIR, "config*.json"))
-        if os.path.basename(f) not in {"access.json"}
-    ]
+    files = [f for f in glob(os.path.join(CONF_DIR, "config*.json")) if os.path.basename(f) not in {"access.json"}]
     assert files, "No config files found matching pattern config*.json"
     return files
+
 
 @pytest.mark.parametrize("key", sorted(REQUIRED_CONFIG_KEYS))
 def test_config_files_have_required_keys(config_files, key):
     for path in config_files:
         data = load_json(path)
         assert key in data, f"Config {path} missing key: {key}"
+
 
 def test_access_json_structure():
     path = os.path.join(CONF_DIR, "access.json")
@@ -55,6 +57,7 @@ def test_access_json_structure():
         assert isinstance(topic, str)
         assert isinstance(users, list), f"Topic {topic} value must be a list of users"
         assert all(isinstance(u, str) for u in users), f"All users for topic {topic} must be strings"
+
 
 @pytest.mark.parametrize("topic_file", glob(os.path.join(CONF_DIR, "topic_*.json")))
 def test_topic_json_schemas_basic(topic_file):

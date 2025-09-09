@@ -87,9 +87,6 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Set PYTHONPATH environment variable
-        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/release_notes_generator/release_notes_generator" >> $GITHUB_ENV
-
       - name: Check code coverage with Pytest
         run: pytest --cov=. -v tests/ --cov-fail-under=80
 
