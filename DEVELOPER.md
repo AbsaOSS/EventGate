@@ -6,7 +6,6 @@
 - [Run Black Tool Locally](#run-black-tool-locally)
 - [Run mypy Tool Locally](#run-mypy-tool-locally)
 - [Run Unit Test](#running-unit-test)
-- [Run Action Locally](#run-action-locally)
 
 ## Get Started
 
