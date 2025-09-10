@@ -203,6 +203,27 @@ def test_post_schema_validation_error(event_gate_module, make_event):
         assert body["errors"][0]["type"] == "validation"
 
 
+def test_post_invalid_token_decode(event_gate_module, make_event, valid_payload):
+    class DummyJwtError(Exception):
+        pass
+
+    # Patch jwt.decode to raise PyJWTError-like exception; use existing attribute if present
+    with patch.object(
+        event_gate_module.jwt, "decode", side_effect=event_gate_module.jwt.PyJWTError("bad"), create=True
+    ):
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer abc"},
+        )
+        resp = event_gate_module.lambda_handler(event, None)
+        assert resp["statusCode"] == 401
+        body = json.loads(resp["body"])
+        assert body["errors"][0]["type"] == "auth"
+
+
 # --- POST success & failure aggregation ---
 
 

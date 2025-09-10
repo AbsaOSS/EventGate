@@ -5,6 +5,7 @@ Initializes a Confluent Kafka Producer and publishes messages for a topic.
 
 import json
 import logging
+import os
 from typing import Any, Dict, Optional, Tuple
 
 from confluent_kafka import Producer
@@ -18,6 +19,8 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - fallback for te
 
 
 STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None}
+# Configurable flush timeout (seconds) to avoid hanging indefinitely
+_KAFKA_FLUSH_TIMEOUT_SEC = float(os.environ.get("KAFKA_FLUSH_TIMEOUT", "5"))
 
 
 def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
@@ -81,7 +84,15 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
             value=json.dumps(message).encode("utf-8"),
             callback=lambda err, msg: (errors.append(str(err)) if err is not None else None),
         )
-        producer.flush()
+        try:
+            remaining = producer.flush(_KAFKA_FLUSH_TIMEOUT_SEC)  # type: ignore[arg-type]
+        except TypeError:  # Fallback for stub producers without timeout parameter
+            remaining = producer.flush()  # type: ignore[call-arg]
+        # remaining can be number of undelivered messages (confluent_kafka returns int)
+        if not errors and isinstance(remaining, int) and remaining > 0:
+            timeout_msg = f"Kafka flush timeout after {_KAFKA_FLUSH_TIMEOUT_SEC}s: {remaining} message(s) still pending"
+            logger.error(timeout_msg)
+            return False, timeout_msg
     except KafkaException as e:  # narrow exception capture
         err_msg = f"The Kafka writer failed with unknown error: {str(e)}"
         logger.exception(err_msg)
