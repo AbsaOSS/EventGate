@@ -29,6 +29,12 @@ from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
+# Register custom TRACE level before using LOG_LEVEL env var
+try:
+    from .logging_levels import TRACE_LEVEL  # noqa: F401
+except Exception:  # pragma: no cover - defensive
+    TRACE_LEVEL = 5  # type: ignore
+
 # Import configuration directory symbols with explicit ImportError fallback
 try:
     from .conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
