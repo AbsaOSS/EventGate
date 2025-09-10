@@ -135,34 +135,3 @@ Open the HTML coverage report:
 ```shell
 open htmlcov/index.html
 ```
-
-### Test Environment Variables
-The following environment variables influence runtime behavior under test:
-- LOG_LEVEL – override logging verbosity (default INFO)
-- KAFKA_FLUSH_TIMEOUT – seconds passed to confluent_kafka Producer.flush(timeout) (default 5)
-- POSTGRES_SECRET_NAME / POSTGRES_SECRET_REGION – when set, writer_postgres.init() fetches secret via AWS Secrets Manager (tests usually leave unset or patch boto3)
-
-### Mocking / Isolation Strategy
-- External network calls (requests.get for token public key, S3 object fetch, EventBridge put_events, Kafka producer) are monkeypatched or patched with unittest.mock before importing modules that perform side-effect initialization (notably src/event_gate_lambda).
-- Tests that need to exercise alternate import-time paths (e.g., local vs S3 access_config) patch builtins.open and reload the module (see tests/test_event_gate_lambda_local_access.py).
-- Optional dependencies (confluent_kafka, psycopg2) are stubbed only when truly absent using importlib.util.find_spec to avoid masking real installations.
-- Kafka producer errors are simulated via callback error injection or custom stub classes; flush timeout path covered by setting KAFKA_FLUSH_TIMEOUT and custom producer returning non-zero remaining messages.
-
-### Type Checking / Lint / Format
-Run static type checks:
-```shell
-mypy .
-```
-Run lint (pylint over tracked Python files):
-```shell
-pylint $(git ls-files '*.py')
-```
-Auto-format:
-```shell
-black $(git ls-files '*.py')
-```
-
-### Quick CI Smoke (local approximation)
-```shell
-mypy . && pylint $(git ls-files '*.py') && pytest --cov=. --cov-fail-under=80 -q
-```

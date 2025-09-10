@@ -1,3 +1,19 @@
+#
+# Copyright 2025 ABSA Group Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 """Postgres writer module.
 
 Handles optional initialization via AWS Secrets Manager and topic-based inserts into Postgres.
@@ -14,6 +30,21 @@ try:
     import psycopg2  # noqa: F401
 except ImportError:  # pragma: no cover - environment without psycopg2
     psycopg2 = None  # type: ignore
+
+# Define a unified psycopg2 error base for safe exception handling even if psycopg2 missing
+if psycopg2 is not None:  # type: ignore
+    try:  # pragma: no cover - attribute presence depends on installed psycopg2 variant
+        PsycopgError = psycopg2.Error  # type: ignore[attr-defined]
+    except AttributeError:  # pragma: no cover
+
+        class PsycopgError(Exception):  # type: ignore
+            """Shim psycopg2 error base when psycopg2 provides no Error attribute."""
+
+else:  # fallback shim when psycopg2 absent
+
+    class PsycopgError(Exception):  # type: ignore
+        """Shim psycopg2 error base when psycopg2 is not installed."""
+
 
 # Module level globals for typing
 _logger: logging.Logger = logging.getLogger(__name__)
@@ -260,7 +291,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
                     return False, msg
 
             connection.commit()  # type: ignore
-    except Exception as e:  # pragma: no cover - defensive (still tested though)
+    except (RuntimeError, PsycopgError) as e:  # narrowed exception set
         err_msg = f"The Postgres writer with failed unknown error: {str(e)}"
         _logger.error(err_msg)
         return False, err_msg

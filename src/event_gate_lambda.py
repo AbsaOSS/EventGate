@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+"""Event Gate Lambda function implementation."""
 import base64
 import json
 import logging
@@ -29,6 +31,8 @@ from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
+from . import writer_eventbridge, writer_kafka, writer_postgres
+
 # Import configuration directory symbols with explicit ImportError fallback
 try:
     from .conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
@@ -39,8 +43,6 @@ except ImportError:  # fallback when executed outside package context
 _CONF_DIR = CONF_DIR
 _INVALID_CONF_ENV = INVALID_CONF_ENV
 
-from . import writer_eventbridge, writer_kafka, writer_postgres
-
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
@@ -49,9 +51,9 @@ logger.setLevel(log_level)
 if not logger.handlers:
     logger.addHandler(logging.StreamHandler())
 logger.debug("Initialized LOGGER")
-logger.debug(f"Using CONF_DIR={_CONF_DIR}")
+logger.debug("Using CONF_DIR=%s", _CONF_DIR)
 if _INVALID_CONF_ENV:
-    logger.warning(f"CONF_DIR env var set to non-existent path: {_INVALID_CONF_ENV}; fell back to {_CONF_DIR}")
+    logger.warning("CONF_DIR env var set to non-existent path: %s; fell back to %s", _INVALID_CONF_ENV, _CONF_DIR)
 
 with open(os.path.join(_CONF_DIR, "api.yaml"), "r", encoding="utf-8") as file:
     API = file.read()

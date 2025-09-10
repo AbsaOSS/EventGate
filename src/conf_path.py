@@ -13,17 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
 
-# Module providing reusable configuration directory resolution.
-# Resolution order:
-# 1. CONF_DIR env var if it exists and points to a directory
-# 2. <project_root>/conf  (project_root = parent of this file's directory)
-# 3. <this_module_dir>/conf (flattened deployment)
-# 4. Fallback to <project_root>/conf even if missing (subsequent file operations will raise)
+"""Module providing reusable configuration directory resolution.
+Resolution order:
+1. CONF_DIR env var if it exists and points to a directory
+2. <project_root>/conf  (project_root = parent of this file's directory)
+3. <this_module_dir>/conf (flattened deployment)
+4. Fallback to <project_root>/conf even if missing (subsequent file operations will raise)
+"""
+
+import os
 
 
 def resolve_conf_dir(env_var: str = "CONF_DIR"):
+    """Resolve the configuration directory path.
+
+    Args:
+        env_var: Name of the environment variable to check first (defaults to CONF_DIR).
+    Returns:
+        Tuple (conf_dir, invalid_env) where conf_dir is the chosen directory path and
+        invalid_env is the rejected env var path if provided but invalid, else None.
+    """
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     current_dir = os.path.dirname(__file__)
 
