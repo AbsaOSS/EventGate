@@ -316,3 +316,18 @@ def test_internal_error_path(event_gate_module, make_event):
         assert resp["statusCode"] == 500
         body = json.loads(resp["body"])
         assert body["errors"][0]["type"] == "internal"
+
+
+def test_post_invalid_json_body(event_gate_module, make_event):
+    # Invalid JSON triggers json.loads exception and returns 500 internal error
+    event = make_event(
+        "/topics/{topic_name}",
+        method="POST",
+        topic="public.cps.za.test",
+        body="{invalid json",
+        headers={"Authorization": "Bearer token"},
+    )
+    resp = event_gate_module.lambda_handler(event, None)
+    assert resp["statusCode"] == 500
+    body = json.loads(resp["body"])
+    assert any(e["type"] == "internal" for e in body["errors"])  # internal error path
