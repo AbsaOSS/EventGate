@@ -35,6 +35,7 @@ def _load_isolated_conf_path(structure_builder):
     and the code to write (copied from original).
     """
     import inspect
+
     code = Path(conf_path_module.__file__).read_text(encoding="utf-8")
     tmp = tempfile.TemporaryDirectory()
     base = Path(tmp.name)
@@ -90,6 +91,7 @@ def test_fallback_parent_conf_even_if_missing():
 
 def test_invalid_env_uses_current_conf_when_parent_missing(monkeypatch):
     """Invalid CONF_DIR provided, parent/conf missing, current_dir/conf present -> choose current."""
+
     def build(base: Path, code: str):
         module_dir = base / "pkg_invalid_current"
         module_dir.mkdir(parents=True)
@@ -110,6 +112,7 @@ def test_invalid_env_uses_current_conf_when_parent_missing(monkeypatch):
 
 def test_invalid_env_all_missing_fallback_parent(monkeypatch):
     """Invalid CONF_DIR provided, no parent/conf or current/conf -> fallback parent path returned."""
+
     def build(base: Path, code: str):
         module_dir = base / "pkg_invalid_all"
         module_dir.mkdir(parents=True)
@@ -126,3 +129,31 @@ def test_invalid_env_all_missing_fallback_parent(monkeypatch):
         assert invalid == os.path.abspath(bad_path)
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
+
+
+def test_module_level_constants_env_valid(monkeypatch):
+    """Ensure module-level CONF_DIR/INVALID_CONF_ENV reflect a valid env path at import time."""
+    with tempfile.TemporaryDirectory() as tmp:
+        valid_conf = Path(tmp) / "conf"
+        valid_conf.mkdir()
+        monkeypatch.setenv("CONF_DIR", str(valid_conf))
+        # Force fresh import under unique name
+        spec = importlib.util.spec_from_file_location("conf_path_valid_mod", conf_path_module.__file__)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+        assert mod.CONF_DIR == str(valid_conf)  # type: ignore[attr-defined]
+        assert mod.INVALID_CONF_ENV is None  # type: ignore[attr-defined]
+
+
+def test_module_level_constants_env_invalid(monkeypatch):
+    """Ensure module-level INVALID_CONF_ENV is populated when invalid path provided at import."""
+    bad_path = "/no/such/dir/abcXYZ123"
+    monkeypatch.setenv("CONF_DIR", bad_path)
+    spec = importlib.util.spec_from_file_location("conf_path_invalid_mod", conf_path_module.__file__)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+    # Module constant should fall back to repository conf directory
+    assert mod.CONF_DIR.endswith(os.path.join("EventGate", "conf"))  # type: ignore[attr-defined]
+    assert mod.INVALID_CONF_ENV == os.path.abspath(bad_path)  # type: ignore[attr-defined]

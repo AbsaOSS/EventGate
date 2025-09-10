@@ -8,16 +8,16 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 
 from confluent_kafka import Producer
+
 try:  # KafkaException may not exist in stubbed test module
     from confluent_kafka import KafkaException  # type: ignore
-except Exception:  # pragma: no cover - fallback for test stub
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - fallback for test stub
+
     class KafkaException(Exception):  # type: ignore
         pass
 
-STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None}
 
-# Module globals for typing
-_logger: logging.Logger = logging.getLogger(__name__)
+STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None}
 
 
 def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
@@ -74,7 +74,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
 
     errors: list[Any] = []
     try:
-        _logger.debug(f"Sending to kafka {topic_name}")
+        logger.debug(f"Sending to kafka {topic_name}")
         producer.produce(
             topic_name,
             key="",
@@ -84,12 +84,12 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
         producer.flush()
     except KafkaException as e:  # narrow exception capture
         err_msg = f"The Kafka writer failed with unknown error: {str(e)}"
-        _logger.exception(err_msg)
+        logger.exception(err_msg)
         return False, err_msg
 
     if errors:
         msg = "; ".join(errors)
-        _logger.error(msg)
+        logger.error(msg)
         return False, msg
 
     return True, None

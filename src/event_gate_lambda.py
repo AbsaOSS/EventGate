@@ -29,14 +29,11 @@ from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-# Unified import pattern to avoid mypy no-redef on symbol names
+# Import configuration directory symbols with explicit ImportError fallback
 try:
-    from . import conf_path as _conf_mod
+    from .conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
 except ImportError:  # fallback when executed outside package context
-    import conf_path as _conf_mod  # type: ignore[no-redef]
-
-CONF_DIR = _conf_mod.CONF_DIR
-INVALID_CONF_ENV = _conf_mod.INVALID_CONF_ENV
+    from conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
 
 # Internal aliases used by rest of module
 _CONF_DIR = CONF_DIR

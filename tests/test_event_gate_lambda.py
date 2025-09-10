@@ -20,39 +20,49 @@ import sys
 import types
 import pytest
 from unittest.mock import patch, MagicMock
-
-# Inject dummy confluent_kafka if not installed so patching works
-if "confluent_kafka" not in sys.modules:
-    dummy_ck = types.ModuleType("confluent_kafka")
-
-    class DummyProducer:  # minimal interface
-        def __init__(self, *a, **kw):
-            pass
-
-        def produce(self, *a, **kw):
-            cb = kw.get("callback")
-            if cb:
-                cb(None, None)
-
-        def flush(self):
-            return None
-
-    dummy_ck.Producer = DummyProducer
-    sys.modules["confluent_kafka"] = dummy_ck
-
-# Inject dummy psycopg2 (optional dependency)
-if "psycopg2" not in sys.modules:
-    sys.modules["psycopg2"] = types.ModuleType("psycopg2")
+import importlib.util
+from contextlib import ExitStack
 
 
 @pytest.fixture(scope="module")
 def event_gate_module():
     started_patches = []
+    exit_stack = ExitStack()
 
     def start_patch(target):
         p = patch(target)
         started_patches.append(p)
         return p.start()
+
+    # Local, temporary dummy modules only if truly missing
+    # confluent_kafka
+    if importlib.util.find_spec("confluent_kafka") is None:  # pragma: no cover - environment dependent
+        dummy_ck = types.ModuleType("confluent_kafka")
+
+        class DummyProducer:  # minimal interface
+            def __init__(self, *a, **kw):
+                pass
+
+            def produce(self, *a, **kw):
+                cb = kw.get("callback")
+                if cb:
+                    cb(None, None)
+
+            def flush(self):  # noqa: D401 - simple stub
+                return None
+
+        dummy_ck.Producer = DummyProducer  # type: ignore[attr-defined]
+
+        class DummyKafkaException(Exception):
+            pass
+
+        dummy_ck.KafkaException = DummyKafkaException  # type: ignore[attr-defined]
+        exit_stack.enter_context(patch.dict(sys.modules, {"confluent_kafka": dummy_ck}))
+
+    # psycopg2 optional dependency
+    if importlib.util.find_spec("psycopg2") is None:  # pragma: no cover - environment dependent
+        dummy_pg = types.ModuleType("psycopg2")
+        exit_stack.enter_context(patch.dict(sys.modules, {"psycopg2": dummy_pg}))
 
     mock_requests_get = start_patch("requests.get")
     mock_requests_get.return_value.json.return_value = {"key": base64.b64encode(b"dummy_der").decode("utf-8")}
@@ -76,11 +86,11 @@ def event_gate_module():
             return {"Body": MockS3ObjectBody()}
 
     class MockS3Bucket:
-        def Object(self, key):
+        def Object(self, key):  # noqa: D401 - simple proxy
             return MockS3Object()
 
     class MockS3Resource:
-        def Bucket(self, name):
+        def Bucket(self, name):  # noqa: D401 - simple proxy
             return MockS3Bucket()
 
     mock_session = start_patch("boto3.Session")
@@ -101,6 +111,7 @@ def event_gate_module():
 
     for p in started_patches:
         p.stop()
+    exit_stack.close()
 
 
 @pytest.fixture
