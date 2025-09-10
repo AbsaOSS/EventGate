@@ -128,12 +128,42 @@ Install Python tooling (Python 3.11 suggested) then:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+Run full test suite (quiet):
+```
 pytest -q
 ```
-To invoke handler manually:
+Run with coverage (terminal + per-file missing lines) enforcing 80% minimum:
+```
+pytest --cov=. --cov-report=term-missing --cov-fail-under=80
+```
+Run a single test file or filtered tests:
+```
+pytest tests/test_writer_kafka.py -q
+pytest -k kafka -q
+```
+Type checking & lint:
+```
+mypy .
+pylint $(git ls-files '*.py')
+```
+Format:
+```
+black $(git ls-files '*.py')
+```
+Key environment variables for local runs / tests:
+- LOG_LEVEL: Override logging level (default INFO)
+- KAFKA_FLUSH_TIMEOUT: Seconds for Kafka producer.flush(timeout) (default 5)
+
+Kafka tests stub the real producer; EventBridge & S3 interactions are patched to avoid network calls. Tests that exercise module import side-effects (like loading config from S3) first patch boto3 / requests before importing the module to ensure deterministic behavior.
+
+To simulate local (non-S3) access config branch, see tests/test_event_gate_lambda_local_access.py which reloads the module with patched open().
+
+To manually invoke the handler:
 ```python
 from src import event_gate_lambda as m
-# craft an event similar to API Gateway proxy integration
+resp = m.lambda_handler({"resource": "/topics"}, None)
+print(resp)
 ```
 
 ## Security & Authorization
