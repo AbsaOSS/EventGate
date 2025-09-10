@@ -123,48 +123,16 @@ Use when Kafka access needs Kerberos / SASL_SSL or custom `librdkafka` build.
 4. `terraform apply`
 
 ## Local Development & Testing
-Install Python tooling (Python 3.11 suggested) then:
-```
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-Run full test suite (quiet):
-```
-pytest -q
-```
-Run with coverage (terminal + per-file missing lines) enforcing 80% minimum:
-```
-pytest --cov=. --cov-report=term-missing --cov-fail-under=80
-```
-Run a single test file or filtered tests:
-```
-pytest tests/test_writer_kafka.py -q
-pytest -k kafka -q
-```
-Type checking & lint:
-```
-mypy .
-pylint $(git ls-files '*.py')
-```
-Format:
-```
-black $(git ls-files '*.py')
-```
-Key environment variables for local runs / tests:
-- LOG_LEVEL: Override logging level (default INFO)
-- KAFKA_FLUSH_TIMEOUT: Seconds for Kafka producer.flush(timeout) (default 5)
 
-Kafka tests stub the real producer; EventBridge & S3 interactions are patched to avoid network calls. Tests that exercise module import side-effects (like loading config from S3) first patch boto3 / requests before importing the module to ensure deterministic behavior.
-
-To simulate local (non-S3) access config branch, see tests/test_event_gate_lambda_local_access.py which reloads the module with patched open().
-
-To manually invoke the handler:
-```python
-from src import event_gate_lambda as m
-resp = m.lambda_handler({"resource": "/topics"}, None)
-print(resp)
-```
+| Purpose | Relative link |
+|---------|---------------|
+| Get started | [Get Started](./DEVELOPER.md#get-started) |
+| Python environment setup | [Set Up Python Environment](./DEVELOPER.md#set-up-python-environment) |
+| Static code analysis (Pylint) | [Running Static Code Analysis](./DEVELOPER.md#running-static-code-analysis) |
+| Formatting (Black) | [Run Black Tool Locally](./DEVELOPER.md#run-black-tool-locally) |
+| Type checking (mypy) | [Run mypy Tool Locally](./DEVELOPER.md#run-mypy-tool-locally) |
+| Unit tests | [Running Unit Test](./DEVELOPER.md#running-unit-test) |
+| Code coverage | [Code Coverage](./DEVELOPER.md#code-coverage) |
 
 ## Security & Authorization
 - JWT tokens must be RS256 signed; the public key is fetched at cold start from `token_public_key_url` (DER base64 inside JSON `{ "key": "..." }`).
