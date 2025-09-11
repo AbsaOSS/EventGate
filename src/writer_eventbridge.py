@@ -1,44 +1,95 @@
+#
+# Copyright 2025 ABSA Group Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""EventBridge writer module.
+
+Provides initialization and write functionality for publishing events to AWS EventBridge.
+"""
+
 import json
+import logging
+from typing import Any, Dict, Optional, Tuple, List
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "event_bus_arn": "", "client": None}
 
 
-def init(logger, CONFIG):
-    global _logger
-    global EVENT_BUS_ARN
-    global aws_eventbridge
+def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
+    """Initialize the EventBridge writer.
 
-    _logger = logger
+    Args:
+        logger: Shared application logger.
+        config: Configuration dictionary (expects optional 'event_bus_arn').
+    """
+    STATE["logger"] = logger
+    STATE["client"] = boto3.client("events")
+    STATE["event_bus_arn"] = config.get("event_bus_arn", "")
+    STATE["logger"].debug("Initialized EVENTBRIDGE writer")
 
-    aws_eventbridge = boto3.client("events")
-    EVENT_BUS_ARN = CONFIG["event_bus_arn"] if "event_bus_arn" in CONFIG else ""
-    _logger.debug("Initialized EVENTBRIDGE writer")
+
+def _format_failed_entries(entries: List[Dict[str, Any]]) -> str:
+    failed = [e for e in entries if "ErrorCode" in e or "ErrorMessage" in e]
+    # Keep message concise but informative
+    return json.dumps(failed) if failed else "[]"
 
 
-def write(topicName, message):
-    if not EVENT_BUS_ARN:
-        _logger.debug("No EventBus Arn - skipping")
+def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """Publish a message to EventBridge.
+
+    Args:
+        topic_name: Source topic name used as event Source.
+        message: JSON-serializable payload.
+    Returns:
+        Tuple of success flag and optional error message.
+    """
+    logger = STATE["logger"]
+    event_bus_arn = STATE["event_bus_arn"]
+    client = STATE["client"]
+
+    if not event_bus_arn:
+        logger.debug("No EventBus Arn - skipping")
+        return True, None
+    if client is None:  # defensive
+        logger.debug("EventBridge client not initialized - skipping")
         return True, None
 
     try:
-        _logger.debug(f"Sending to eventBridge {topicName}")
-        response = aws_eventbridge.put_events(
+        logger.debug("Sending to eventBridge %s", topic_name)
+        response = client.put_events(
             Entries=[
                 {
-                    "Source": topicName,
+                    "Source": topic_name,
                     "DetailType": "JSON",
                     "Detail": json.dumps(message),
-                    "EventBusName": EVENT_BUS_ARN,
+                    "EventBusName": event_bus_arn,
                 }
             ]
         )
-        if response["FailedEntryCount"] > 0:
-            msg = str(response)
-            _logger.error(msg)
+        failed_count = response.get("FailedEntryCount", 0)
+        if failed_count > 0:
+            entries = response.get("Entries", [])
+            failed_repr = _format_failed_entries(entries)
+            msg = f"{failed_count} EventBridge entries failed: {failed_repr}"
+            logger.error(msg)
             return False, msg
-    except Exception as e:
-        err_msg = f"The EventBridge writer failed with unknown error: {str(e)}"
-        _logger.error(err_msg)
-        return False, err_msg
+    except (BotoCoreError, ClientError) as err:  # explicit AWS client-related errors
+        logger.exception("EventBridge put_events call failed")
+        return False, str(err)
 
+    # Let any unexpected exception propagate for upstream handler (avoids broad except BLE001 / TRY400)
     return True, None

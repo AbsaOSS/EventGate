@@ -1,109 +1,179 @@
 # EventGate
-Python lambda for sending well-defined messages to confluent kafka
-assumes AWS Deployment with API Gateway exposure of endpoint
+
+Python AWS Lambda that exposes a simple HTTP API (via API Gateway) for validating and forwarding well-defined JSON messages to multiple backends (Kafka, EventBridge, Postgres). Designed for centralized, schema-governed event ingestion with pluggable writers.
+
+> Status: Internal prototype / early version
 
 <!-- toc -->
-- [Lambda itself](#lambda-itself)
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
 - [API](#api)
-- [Config](#config)
-- [Terraform Deplyoment](#terraform-deplyoment)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+  - [Zip Lambda Package](#zip-lambda-package)
+  - [Container Image Lambda](#container-image-lambda)
+- [Local Development & Testing](#local-development--testing)
+- [Security & Authorization](#security--authorization)
+- [Writers](#writers)
+  - [Kafka Writer](#kafka-writer)
+  - [EventBridge Writer](#eventbridge-writer)
+  - [Postgres Writer](#postgres-writer)
 - [Scripts](#scripts)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 <!-- tocstop -->
 
-## Lambda itself
-Hearth of the solution lives in the Src folder
+## Overview
+EventGate receives JSON payloads for registered topics, authorizes the caller via JWT, validates the payload against a JSON Schema, and then forwards the payload to one or more configured sinks (Kafka, EventBridge, Postgres). Schemas and access control are externally configurable (local file or S3) to allow runtime evolution without code changes.
+
+## Features
+- Topic registry with per-topic JSON Schema validation
+- Multiple parallel writers (Kafka / EventBridge / Postgres) — failure in one does not block the others; aggregated error reporting
+- JWT-based per-topic authorization (RS256 public key fetched remotely)
+- Runtime-configurable access rules (local or S3)
+- API-discoverable schema catalogue
+- Pluggable writer initialization via `config.json`
+- Terraform IaC examples for AWS deployment (API Gateway + Lambda)
+- Supports both Zip-based and Container Image Lambda packaging (Container path enables custom `librdkafka` / SASL_SSL / Kerberos builds)
+
+## Architecture
+High-level flow:
+1. Client requests a JWT from an external token provider (link exposed via `/token`).
+2. Client submits `POST /topics/{topicName}` with `Authorization: Bearer <JWT>` header and JSON body.
+3. Lambda resolves topic schema, validates payload, authorizes subject (`sub`) against access map.
+4. Writers invoked (Kafka, EventBridge, Postgres). Each returns success/failure.
+5. Aggregated response returned: `202 Accepted` if all succeed; `500` with per-writer error list otherwise.
+
+Key files:
+- `src/event_gate_lambda.py` – main Lambda handler and routing
+- `conf/*.json` – configuration and topic schemas
+- `conf/api.yaml` – OpenAPI 3 definition served at `/api`
+- `writer_*.py` – individual sink implementations
 
 ## API
-POST 🔒 method is guarded by JWT token in standard header "bearer"
+All responses are JSON unless otherwise noted. The POST endpoint requires a valid JWT.
 
-| Method  | Endpoint              | Info                                                                         |
-|---------|-----------------------|------------------------------------------------------------------------------|
-| GET     | `/api`                | OpenAPI 3 definition                                                         |
-| GET     | `/token`              | forwards (HTTP303) caller to where to obtain JWT token for posting to topic |
-| GET     | `/topics`             | lists available topics                                                       |
-| GET     | `/topics/{topicName}` | schema for given topic                                                       |
-| POST 🔒  | `/topics/{topicName}` | posts payload (after authorization and schema validation) into kafka topic   |
-| POST    | `terminate`           | kills lambda - useful for when forcing config reload is desired              |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api` | none | Returns OpenAPI 3 definition (raw YAML) |
+| GET | `/token` | none | 303 redirect to external token provider |
+| GET | `/topics` | none | Lists available topic names |
+| GET | `/topics/{topicName}` | none | Returns JSON Schema for the topic |
+| POST | `/topics/{topicName}` | JWT | Validates + forwards message to configured sinks |
+| POST | `/terminate` | (internal) | Forces Lambda process exit (used to trigger cold start & config reload) |
 
+Status codes:
+- 202 – Accepted (all writers succeeded)
+- 400 – Schema validation failure
+- 401 – Token missing/invalid
+- 403 – Subject unauthorized for topic
+- 404 – Unknown topic or route
+- 500 – One or more writers failed / internal error
 
-## Config
-There are 3 configs for this solution (in conf folder)
+## Configuration
+All core runtime configuration is driven by JSON files located in `conf/` unless S3 paths are specified.
 
- - config.json
- -   this one needs to live in the conf folder
- -   defines where are other resources/configs
- -   for SASL_SSL also points to required secrets
- - access.json
- -   this one could be local or in AWS S3
- -   defines who has access to post to individual topics
- - topics.json
- -   this one could be local or in AWS S3
- -   defines schema of the topics, as well as enumerates those
+Primary file: `conf/config.json`
+Example (sanitized):
+```json
+{
+  "access_config": "s3://<bucket>/access.json",
+  "token_provider_url": "https://<token-ui.example>",
+  "token_public_key_url": "https://<token-api.example>/public-key",
+  "kafka_bootstrap_server": "broker1:9092,broker2:9092",
+  "event_bus_arn": "arn:aws:events:region:acct:event-bus/your-bus"
+}
+```
+Supporting configs:
+- `access.json` – map: topicName -> array of authorized subjects (JWT `sub`). May reside locally or at S3 path referenced by `access_config`.
+- `topic_*.json` – each file contains a JSON Schema for a topic. In the current code these are explicitly loaded inside `event_gate_lambda.py`. (Future enhancement: auto-discover or index file.)
+- `api.yaml` – OpenAPI spec served verbatim at runtime.
 
-## Terraform Deplyoment
+Environment variables:
+- `LOG_LEVEL` (optional) – defaults to `INFO`.
 
-Whole solution expects to be deployed as lambda in AWS,
-there are prepared terraform scripts to make initial deplyoment, and can be found in "terraform" folder
+## Deployment
+Infrastructure-as-Code examples live in the `terraform/` directory. Variables are supplied via a `*.tfvars` file or CLI.
 
-### Zip lambda
+### Zip Lambda Package
+Use when no custom native libraries are needed.
+1. Run packaging script: `scripts/prepare.deplyoment.sh` (downloads deps + zips sources & config)
+2. Upload resulting zip to S3
+3. Provide Terraform variables:
+   - `aws_region`
+   - `vpc_id`
+   - `vpc_endpoint`
+   - `resource_prefix` (prepended to created resource names)
+   - `lambda_role_arn`
+   - `lambda_vpc_subnet_ids`
+   - `lambda_package_type = "Zip"`
+   - `lambda_src_s3_bucket`
+   - `lambda_src_s3_key`
+4. `terraform apply`
 
-Designated for use without authentication towards kafka
+### Container Image Lambda
+Use when Kafka access needs Kerberos / SASL_SSL or custom `librdkafka` build.
+1. Build image (see comments at top of `Dockerfile`)
+2. Push to ECR
+3. Terraform variables:
+   - Same networking / role vars as above
+   - `lambda_package_type = "Image"`
+   - `lambda_src_ecr_image` (ECR image reference)
+4. `terraform apply`
 
- - create **zip** archive `scripts/prepare.deplyoment.sh`
- - upload **zip** to **S3**
- - provide terraform variables with tfvars
- -   `aws_region`
- -   `vpc_id`
- -   `vpc_endpoint`
- -   `resource prefix`
- -     all terraform resources would be prefixed my this
- -   `lambda_role_arn `
- -     the role for the lambda
- -     should be able to make HTTP calls to wherever kafka server lives
- -   `lambda_vpc_subnet_ids`
- -   `lambda_package_type`
- -     `Zip`
- -   `lambda_src_s3_bucket `
- -     the bucket where **zip** is already uploaded
- -   `lambda_src_s3_key`
- -     name of already uploaded **zip**
- -   `lambda_src_ecr_image`
- -     ignored
- - `terraform apply`
- 
-### Containerized lambda
+## Local Development & Testing
 
-Designated for use with kerberizes SASL_SSL authentication towards kafka, as it requires custom librdkafka compilation
+| Purpose | Relative link |
+|---------|---------------|
+| Get started | [Get Started](./DEVELOPER.md#get-started) |
+| Python environment setup | [Set Up Python Environment](./DEVELOPER.md#set-up-python-environment) |
+| Static code analysis (Pylint) | [Running Static Code Analysis](./DEVELOPER.md#running-static-code-analysis) |
+| Formatting (Black) | [Run Black Tool Locally](./DEVELOPER.md#run-black-tool-locally) |
+| Type checking (mypy) | [Run mypy Tool Locally](./DEVELOPER.md#run-mypy-tool-locally) |
+| Unit tests | [Running Unit Test](./DEVELOPER.md#running-unit-test) |
+| Code coverage | [Code Coverage](./DEVELOPER.md#code-coverage) |
 
- - build docker (**[follow comments at the top of Dockerfile](./Dockerfile)**)
- - upload docker **image** to **ECR**
- - provide terraform variables with tfvars
- -   `aws_region`
- -   `vpc_id`
- -   `vpc_endpoint`
- -   `resource prefix`
- -     all terraform resources would be prefixed my this
- -   `lambda_role_arn `
- -     the role for the lambda
- -     should be able to make HTTP calls to wherever kafka server lives
- -   `lambda_vpc_subnet_ids`
- -   `lambda_package_type`
- -     `Image`
- -   `lambda_src_s3_bucket `
- -     ignored
- -   `lambda_src_s3_key`
- -     ignored
- -   `lambda_src_ecr_image`
- -     already uploaded **image** in **ECR**
- - `terraform apply`
+## Security & Authorization
+- JWT tokens must be RS256 signed; the public key is fetched at cold start from `token_public_key_url` (DER base64 inside JSON `{ "key": "..." }`).
+- Subject claim (`sub`) is matched against `ACCESS[topicName]`.
+- Authorization header forms accepted:
+  - `Authorization: Bearer <token>` (preferred)
+  - Legacy: `bearer: <token>` custom header
+- No token introspection beyond signature & standard claim extraction.
+
+## Writers
+Each writer is initialized during cold start. Failures are isolated; aggregated errors returned in a single `500` response if any writer fails.
+
+### Kafka Writer
+Configured via `kafka_bootstrap_server`. (Future: support auth properties / TLS configuration.)
+
+### EventBridge Writer
+Publishes events to the configured `event_bus_arn` using put events API.
+
+### Postgres Writer
+Example writer (currently a placeholder if no DSN present) demonstrating extensibility pattern.
 
 ## Scripts
-Useful scripts for dev and Deployment
+- `scripts/prepare.deplyoment.sh` – build Zip artifact for Lambda (typo in name retained for now; may rename later)
+- `scripts/notebook.ipynb` – exploratory invocation cells per endpoint
+- `scripts/get_token.http` – sample HTTP request for tooling (e.g., VSCode REST client)
 
-### Notebook
-Jupyter notebook, with one cell for lambda initialization and one cell per method, for testing purposes
-Obviously using it requires correct configs to be in place (PUBLIC key is being loaded during initilization)
+## Troubleshooting
+| Symptom | Possible Cause | Action |
+|---------|----------------|--------|
+| 401 Unauthorized | Missing / malformed token header | Ensure `Authorization: Bearer` present |
+| 403 Forbidden | Subject not listed in access map | Update `access.json` and redeploy / reload |
+| 404 Topic not found | Wrong casing or not loaded in code | Verify loaded topics & file names |
+| 500 Writer failure | Downstream (Kafka / EventBridge / DB) unreachable | Check network / VPC endpoints / security groups |
+| Lambda keeps old config | Warm container | Call `/terminate` (internal) to force cold start |
 
-### Preapare Deployment
-Shell script for fetching python requirements and ziping it together with sources and config into lambda archive
-it needs to be uploaded to s3 bucket first before running the terraform.
+## License
+Licensed under the Apache License, Version 2.0. See the [LICENSE](./LICENSE) file for full text.
+
+Copyright 2025 ABSA Group Limited.
+
+You may not use this project except in compliance with the License. Unless required by law or agreed in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied.
+
+---
+Contributions & enhancements welcome (subject to project guidelines).
