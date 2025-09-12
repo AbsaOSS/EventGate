@@ -30,8 +30,17 @@ import requests
 from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
+# Added explicit import for serialization-related exceptions
+try:  # pragma: no cover - import guard
+    from cryptography.exceptions import UnsupportedAlgorithm  # type: ignore
+except Exception:  # pragma: no cover - very defensive
+    UnsupportedAlgorithm = Exception  # type: ignore
 
-from . import writer_eventbridge, writer_kafka, writer_postgres
+# Import writer modules with explicit ImportError fallback
+try:
+    from . import writer_eventbridge, writer_kafka, writer_postgres
+except ImportError:  # fallback when executed outside package context
+    import writer_eventbridge, writer_kafka, writer_postgres  # type: ignore[no-redef]
 
 # Import configuration directory symbols with explicit ImportError fallback
 try:
@@ -86,11 +95,21 @@ else:
 logger.debug("Loaded ACCESS definitions")
 
 TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
-# Add timeout to avoid hanging requests
-response_json = requests.get(CONFIG["token_public_key_url"], verify=False, timeout=5).json()  # nosec external
-token_public_key_encoded = response_json["key"]
-TOKEN_PUBLIC_KEY: Any = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
-logger.debug("Loaded TOKEN_PUBLIC_KEY")
+# Add timeout to avoid hanging requests; wrap in robust error handling so failures are explicit
+try:
+    response_json = requests.get(
+        CONFIG["token_public_key_url"], verify=False, timeout=5
+    ).json()  # nosec external
+    token_public_key_encoded = response_json["key"]
+    TOKEN_PUBLIC_KEY: Any = serialization.load_der_public_key(
+        base64.b64decode(token_public_key_encoded)
+    )
+    logger.debug("Loaded TOKEN_PUBLIC_KEY")
+except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
+    logger.exception(
+        "Failed to fetch or deserialize token public key from %s", CONFIG.get("token_public_key_url")
+    )
+    raise RuntimeError("Token public key initialization failed") from exc
 
 writer_eventbridge.init(logger, CONFIG)
 writer_kafka.init(logger, CONFIG)
