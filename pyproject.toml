@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 120
-target-version = ['py311']
+target-version = ['py313']
 # force-exclude = '''test'''
 
 [tool.coverage.run]
@@ -10,7 +10,7 @@ omit = ["tests/*"]
 check_untyped_defs = true
 exclude = "tests"
 ignore_missing_imports = true
-python_version = "3.11"
+python_version = "3.13"
 packages = ["src"]
 explicit_package_bases = true
 disable_error_code = ["import-untyped"]
