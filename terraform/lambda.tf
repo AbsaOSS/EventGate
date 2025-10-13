@@ -22,7 +22,7 @@ resource "aws_lambda_function" "event_gate_lambda" {
   role = var.lambda_role_arn
   architectures = ["x86_64"]
   timeout = 60
-  runtime = "python3.11"
+  runtime = "python3.13"
   package_type = var.lambda_package_type
   
   s3_bucket = var.lambda_package_type == "Zip" ? var.lambda_src_s3_bucket : null
