@@ -1,9 +1,14 @@
 .ipynb_checkpoints
 .venv
 __pycache__
+/.idea/
 /dependencies
 /lambda_function.zip
+
+# Terraform files
 /terraform/*.tfvars
 /terraform/*.tfstate*
 /terraform/.terraform*
-/.idea/
+
+# Terraform Plan output files
+*.sarif
