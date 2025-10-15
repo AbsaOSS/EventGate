@@ -37,7 +37,7 @@ jobs:
           set +e
           trivy config . \
             --format sarif \
-            --output $GITHUB_WORKSPACE/trivy.sarif \
+            --output $GITHUB_WORKSPACE/terraform_trivy.sarif \
             --severity HIGH,CRITICAL \
             --exit-code 1
           code=$?
@@ -47,7 +47,7 @@ jobs:
       - name: Upload Trivy SARIF file
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ github.workspace }}/trivy.sarif
+          sarif_file: ${{ github.workspace }}/terraform_trivy.sarif
 
       - name: Enforce failure on HIGH/CRITICAL
         if: steps.scan.outputs.exit_code != '0'
@@ -71,10 +71,22 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
+        id: lint
         working-directory: terraform
-        run: tflint -f sarif > "$GITHUB_WORKSPACE/terraform_tflint.sarif" || true
+        run: |
+          set +e
+          tflint -f sarif > "$GITHUB_WORKSPACE/terraform_tflint.sarif"
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload TFLint SARIF file
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/terraform_tflint.sarif
+
+      - name: Enforce failure on TFLint findings
+        if: steps.lint.outputs.exit_code != '0'
+        run: |
+          echo "TFLint reported issues"
+          exit 1
