@@ -32,10 +32,13 @@ def test_pyproject_toml_black_config():
     path = os.path.join(PROJECT_ROOT, "pyproject.toml")
     with open(path, "r") as f:
         content = f.read()
-    
+
     assert "[tool.black]" in content, "pyproject.toml missing [tool.black] section"
     assert "line-length = 120" in content, "Black line-length should be 120"
-    assert f"target-version = ['py{EXPECTED_PYTHON_VERSION.replace('.', '')}']" in content, (
+    assert (
+        f"target-version = ['py{EXPECTED_PYTHON_VERSION.replace('.', '')}']"
+        in content
+    ), (
         f"Black target-version should be py{EXPECTED_PYTHON_VERSION.replace('.', '')}"
     )
 
@@ -45,8 +48,10 @@ def test_pyproject_toml_coverage_config():
     path = os.path.join(PROJECT_ROOT, "pyproject.toml")
     with open(path, "r") as f:
         content = f.read()
-    
-    assert "[tool.coverage.run]" in content, "pyproject.toml missing [tool.coverage.run] section"
+
+    assert (
+        "[tool.coverage.run]" in content
+    ), "pyproject.toml missing [tool.coverage.run] section"
     assert 'omit = ["tests/*"]' in content, "Coverage should omit tests directory"
 
 
@@ -55,16 +60,18 @@ def test_pyproject_toml_mypy_config():
     path = os.path.join(PROJECT_ROOT, "pyproject.toml")
     with open(path, "r") as f:
         content = f.read()
-    
+
     assert "[tool.mypy]" in content, "pyproject.toml missing [tool.mypy] section"
     assert "check_untyped_defs = true" in content, "mypy should check untyped defs"
     assert 'exclude = "tests"' in content, "mypy should exclude tests"
     assert "ignore_missing_imports = true" in content, "mypy should ignore missing imports"
-    assert f'python_version = "{EXPECTED_PYTHON_VERSION}"' in content, (
-        f"mypy python_version should be {EXPECTED_PYTHON_VERSION}"
-    )
+    assert (
+        f'python_version = "{EXPECTED_PYTHON_VERSION}"' in content
+    ), f"mypy python_version should be {EXPECTED_PYTHON_VERSION}"
     assert 'packages = ["src"]' in content, "mypy should check src package"
-    assert "explicit_package_bases = true" in content, "mypy should use explicit package bases"
+    assert (
+        "explicit_package_bases = true" in content
+    ), "mypy should use explicit package bases"
 
 
 def test_requirements_txt_exists():
@@ -78,10 +85,10 @@ def test_requirements_txt_format():
     path = os.path.join(PROJECT_ROOT, "requirements.txt")
     with open(path, "r") as f:
         lines = f.readlines()
-    
+
     # Should not be empty
     assert len(lines) > 0, "requirements.txt should not be empty"
-    
+
     # Check for required packages
     content = "".join(lines)
     required_packages = [
@@ -96,7 +103,7 @@ def test_requirements_txt_format():
         "requests",
         "psycopg2",
     ]
-    
+
     for package in required_packages:
         assert package in content, f"requirements.txt missing {package}"
 
@@ -106,7 +113,7 @@ def test_requirements_txt_no_commented_alternatives():
     path = os.path.join(PROJECT_ROOT, "requirements.txt")
     with open(path, "r") as f:
         lines = f.readlines()
-    
+
     # Should not have commented psycopg2-binary
     for line in lines:
         if line.strip().startswith("#"):
@@ -120,25 +127,25 @@ def test_requirements_txt_pinned_versions():
     path = os.path.join(PROJECT_ROOT, "requirements.txt")
     with open(path, "r") as f:
         lines = f.readlines()
-    
+
     for line in lines:
         line = line.strip()
         # Skip empty lines and comments
         if not line or line.startswith("#"):
             continue
-        
+
         # Each line should have == for version pinning
         assert "==" in line, f"Package should have pinned version: {line}"
-        
+
         # Verify version format
         parts = line.split("==")
         assert len(parts) == 2, f"Invalid package format: {line}"
         package_name, version = parts
         assert package_name.strip(), f"Empty package name: {line}"
         assert version.strip(), f"Empty version: {line}"
-        
+
         # Version should be a valid semantic version
-        version_pattern = r'^\d+\.\d+(\.\d+)?$'
+        version_pattern = r"^\d+\.\d+(\.\d+)?$"
         assert re.match(version_pattern, version.strip()), (
             f"Invalid version format for {package_name}: {version}"
         )
@@ -149,7 +156,7 @@ def test_requirements_txt_psycopg2_not_binary():
     path = os.path.join(PROJECT_ROOT, "requirements.txt")
     with open(path, "r") as f:
         content = f.read()
-    
+
     # Should have psycopg2 without -binary suffix
     assert "psycopg2==" in content, "requirements.txt should include psycopg2"
     assert "psycopg2-binary" not in content, (
@@ -168,13 +175,9 @@ def test_gitignore_python_patterns():
     path = os.path.join(PROJECT_ROOT, ".gitignore")
     with open(path, "r") as f:
         content = f.read()
-    
-    required_patterns = [
-        "__pycache__",
-        ".venv",
-        ".ipynb_checkpoints",
-    ]
-    
+
+    required_patterns = ["__pycache__", ".venv", ".ipynb_checkpoints"]
+
     for pattern in required_patterns:
         assert pattern in content, f".gitignore missing pattern: {pattern}"
 
@@ -184,13 +187,13 @@ def test_gitignore_terraform_patterns():
     path = os.path.join(PROJECT_ROOT, ".gitignore")
     with open(path, "r") as f:
         content = f.read()
-    
+
     terraform_patterns = [
         "/terraform/*.tfvars",
         "/terraform/*.tfstate",
         "/terraform/.terraform",
     ]
-    
+
     for pattern in terraform_patterns:
         assert pattern in content, f".gitignore missing Terraform pattern: {pattern}"
 
@@ -200,7 +203,7 @@ def test_gitignore_sarif_files():
     path = os.path.join(PROJECT_ROOT, ".gitignore")
     with open(path, "r") as f:
         content = f.read()
-    
+
     assert "*.sarif" in content, ".gitignore should ignore SARIF files"
 
 
@@ -209,12 +212,9 @@ def test_gitignore_build_artifacts():
     path = os.path.join(PROJECT_ROOT, ".gitignore")
     with open(path, "r") as f:
         content = f.read()
-    
-    build_patterns = [
-        "/dependencies",
-        "/lambda_function.zip",
-    ]
-    
+
+    build_patterns = ["/dependencies", "/lambda_function.zip"]
+
     for pattern in build_patterns:
         assert pattern in content, f".gitignore missing build pattern: {pattern}"
 
@@ -224,7 +224,7 @@ def test_gitignore_ide_patterns():
     path = os.path.join(PROJECT_ROOT, ".gitignore")
     with open(path, "r") as f:
         content = f.read()
-    
+
     assert "/.idea/" in content, ".gitignore should ignore .idea directory"
 
 
@@ -233,7 +233,7 @@ def test_gitignore_organized_sections():
     path = os.path.join(PROJECT_ROOT, ".gitignore")
     with open(path, "r") as f:
         content = f.read()
-    
+
     # Check for section comments
     assert "# Terraform" in content, ".gitignore should have Terraform section comment"
 
@@ -249,24 +249,24 @@ def test_codeowners_format():
     path = os.path.join(PROJECT_ROOT, ".github", "CODEOWNERS")
     with open(path, "r") as f:
         lines = f.readlines()
-    
+
     # Should not be empty
     assert len(lines) > 0, "CODEOWNERS should not be empty"
-    
+
     for line in lines:
         line = line.strip()
         # Skip empty lines and comments
         if not line or line.startswith("#"):
             continue
-        
+
         # Each line should have pattern and at least one owner
         parts = line.split()
         assert len(parts) >= 2, f"CODEOWNERS line must have pattern and owner(s): {line}"
-        
+
         # Pattern should be first
         pattern = parts[0]
         assert pattern, "CODEOWNERS pattern cannot be empty"
-        
+
         # Owners should start with @
         owners = parts[1:]
         for owner in owners:
@@ -278,7 +278,7 @@ def test_codeowners_default_pattern():
     path = os.path.join(PROJECT_ROOT, ".github", "CODEOWNERS")
     with open(path, "r") as f:
         content = f.read()
-    
+
     # Should have a default pattern (*)
     assert content.strip().startswith("*"), "CODEOWNERS should start with default pattern (*)"
 
@@ -289,17 +289,19 @@ def test_python_version_consistency():
     pyproject_path = os.path.join(PROJECT_ROOT, "pyproject.toml")
     with open(pyproject_path, "r") as f:
         pyproject_content = f.read()
-    
+
     # Extract Python version from Black config
     black_version_match = re.search(r"target-version = \['py(\d+)'\]", pyproject_content)
     assert black_version_match, "Could not find Black target-version in pyproject.toml"
     black_version = f"{black_version_match.group(1)[0]}.{black_version_match.group(1)[1:]}"
-    
+
     # Extract Python version from mypy config
-    mypy_version_match = re.search(r'python_version = "(\d+\.\d+)"', pyproject_content)
+    mypy_version_match = re.search(
+        r'python_version = "(\d+\.\d+)"', pyproject_content
+    )
     assert mypy_version_match, "Could not find mypy python_version in pyproject.toml"
     mypy_version = mypy_version_match.group(1)
-    
+
     # Both should match expected version
     assert black_version == EXPECTED_PYTHON_VERSION, (
         f"Black target-version {black_version} doesn't match expected {EXPECTED_PYTHON_VERSION}"
