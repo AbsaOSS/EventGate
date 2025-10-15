@@ -2,7 +2,7 @@ name:  Static Terraform Check
 
 on:
   pull_request:
-    types: [ opened, synchronize, reopened, edited, labeled, unlabeled ]
+    types: [ opened, synchronize, reopened ]
     paths:
       - terraform/**
   push:
@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0
+        uses: aquasecurity/setup-trivy@v0.2.4
 
       - name: Trivy config scan
         id: scan
