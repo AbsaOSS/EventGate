@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-python@v5.1.1
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: Check format of received tag
         id: check-version-tag

@@ -19,6 +19,11 @@ git clone https://github.com/AbsaOSS/EventGate.git
 cd EventGate
 ```
 
+## Prerequisites
+- Python 3.13 (current required runtime)
+- PostgreSQL client dev package
+  - For local development, you may temporarily switch to the commented `psycopg2-binary==2.9.10` in `requirements.txt`.
+
 ## Set Up Python Environment
 ```shell
 python3 -m venv .venv
