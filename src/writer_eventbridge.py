@@ -26,6 +26,10 @@ from typing import Any, Dict, Optional, Tuple, List
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+# Ensure TRACE level is registered
+from . import logging_levels  # noqa: F401
+from .logging_levels import TRACE_LEVEL
+
 STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "event_bus_arn": "", "client": None}
 
 
@@ -67,6 +71,15 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     if client is None:  # defensive
         logger.debug("EventBridge client not initialized - skipping")
         return True, None
+
+    # TRACE-level payload logging
+    if logger.isEnabledFor(TRACE_LEVEL):
+        try:
+            logger.trace(  # type: ignore[attr-defined]
+                "EventBridge payload topic=%s payload=%s", topic_name, json.dumps(message, separators=(",", ":"))
+            )
+        except Exception:  # pragma: no cover - defensive serialization guard
+            logger.trace("EventBridge payload topic=%s <unserializable>", topic_name)  # type: ignore[attr-defined]
 
     try:
         logger.debug("Sending to eventBridge %s", topic_name)

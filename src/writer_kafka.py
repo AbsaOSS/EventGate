@@ -26,6 +26,9 @@ from typing import Any, Dict, Optional, Tuple
 
 from confluent_kafka import Producer
 
+# Add TRACE level import
+from .logging_levels import TRACE_LEVEL  # type: ignore
+
 try:  # KafkaException may not exist in stubbed test module
     from confluent_kafka import KafkaException  # type: ignore
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - fallback for test stub
@@ -90,6 +93,15 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     if producer is None:
         logger.debug("Kafka producer not initialized - skipping")
         return True, None
+
+    # TRACE-level payload logging prior to produce
+    if logger.isEnabledFor(TRACE_LEVEL):
+        try:
+            logger.trace(  # type: ignore[attr-defined]
+                "Kafka payload topic=%s payload=%s", topic_name, json.dumps(message, separators=(",", ":"))
+            )
+        except Exception:  # pragma: no cover - defensive
+            logger.trace("Kafka payload topic=%s <unserializable>", topic_name)  # type: ignore[attr-defined]
 
     errors: list[Any] = []
     try:
