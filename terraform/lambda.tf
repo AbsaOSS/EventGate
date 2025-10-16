@@ -11,7 +11,6 @@ resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
   ip_protocol = "-2"
 }
 
-
 data "aws_s3_object" "event_gate_lambda_zip" {
   count  = var.lambda_package_type == "Zip" ? 1 : 0
   bucket = var.lambda_src_s3_bucket
@@ -23,7 +22,7 @@ resource "aws_lambda_function" "event_gate_lambda" {
   role = var.lambda_role_arn
   architectures = ["x86_64"]
   timeout = 60
-  runtime = "python3.13"
+  runtime = "python3.11"
   package_type = var.lambda_package_type
   
   s3_bucket = var.lambda_package_type == "Zip" ? var.lambda_src_s3_bucket : null

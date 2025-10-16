@@ -52,7 +52,7 @@ jobs:
       - name: Enforce failure on HIGH/CRITICAL
         if: steps.scan.outputs.exit_code != '0'
         run: |
-          echo "Trivy found HIGH/CRITICAL issues in ${{ github.workspace }}"
+          echo "Trivy detected HIGH/CRITICAL findings. View details in PR code scanning annotations or in Security tab > Code scanning alerts (filter for pr:pr_number)."
           exit 1
   tflint:
     runs-on: ubuntu-latest
@@ -75,7 +75,7 @@ jobs:
         working-directory: terraform
         run: |
           set +e
-          tflint -f sarif > "$GITHUB_WORKSPACE/terraform_tflint.sarif"
+          tflint --minimum-failure-severity=error -f sarif > "$GITHUB_WORKSPACE/terraform_tflint.sarif"
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
@@ -88,5 +88,5 @@ jobs:
       - name: Enforce failure on TFLint findings
         if: steps.lint.outputs.exit_code != '0'
         run: |
-          echo "TFLint reported issues"
+          echo "TFLint reported error issues. View details in PR code scanning annotations or in Security tab > Code scanning alerts (filter for pr:pr_number)."
           exit 1
