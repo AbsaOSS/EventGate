@@ -1,4 +1,4 @@
-name:  Static Terraform Check
+name: Static Terraform Check
 
 on:
   pull_request:
