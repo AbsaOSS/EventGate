@@ -138,7 +138,7 @@ It is an open‑source security scanner maintained by Aqua Security (AquaSec).
 For running Trivy tool locally run the following command from the root file:
 ```shell
 trivy config terraform/ # Default table output (all severities)
-trivy config --severity MEDIUM,HIGH,CRITICAL terraform/ # Show only MEDIUM, HIGH and CRITICAL severities
+trivy config --severity CRITICAL, HIGH, MEDIUM terraform/ # Show only CRITICAL, HIGH and MEDIUM severities
 ```
 
 ## Running Unit Test
