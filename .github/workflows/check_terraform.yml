@@ -76,7 +76,7 @@ jobs:
       - name: Enforce failure on HIGH/CRITICAL
         if: steps.scan.outputs.exit_code != '0'
         run: |
-          echo "Trivy detected HIGH/CRITICAL findings. View details in PR code scanning annotations or in Security tab > Code scanning alerts (filter for pr:pr_number)."
+          echo "Trivy detected MEDIUM/HIGH/CRITICAL findings. View details in PR code scanning annotations or in Security tab > Code scanning alerts (filter for pr:pr_number)."
           exit 1
 
   tflint:
