@@ -62,7 +62,7 @@ jobs:
           trivy config . \
             --format sarif \
             --output $GITHUB_WORKSPACE/terraform_trivy.sarif \
-            --severity HIGH,CRITICAL \
+            --severity MEDIUM,HIGH,CRITICAL \
             --exit-code 1
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
