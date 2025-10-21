@@ -25,6 +25,7 @@ Resolution order:
 import os
 
 
+
 def resolve_conf_dir(env_var: str = "CONF_DIR"):
     """Resolve the configuration directory path.
 

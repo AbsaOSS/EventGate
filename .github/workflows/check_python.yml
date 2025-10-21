@@ -1,4 +1,4 @@
-name: Static Python Check
+name: Python Check
 
 on:
   pull_request:
@@ -153,7 +153,7 @@ jobs:
         run: mypy .
 
   trivy-python:
-    name: Trivy Security Scan for Python
+    name: Trivy Security Scan
     needs: detect
     if: needs.detect.outputs.python_changed == 'true'
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-name: Static Docker Check
+name: Docker Check
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   detect:
-    name: Docker changes detection
+    name: Docker Changes Detection
     runs-on: ubuntu-latest
     outputs:
       docker_changed: ${{ steps.changes.outputs.docker_changed }}
@@ -44,7 +44,7 @@ jobs:
           fi
 
   trivy-docker:
-    name: Trivy Security Scan for Docker
+    name: Trivy Security Scan
     needs: detect
     if: needs.detect.outputs.docker_changed == 'true'
     runs-on: ubuntu-latest

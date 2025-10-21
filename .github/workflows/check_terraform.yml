@@ -1,4 +1,4 @@
-name: Static Terraform Check
+name: Terraform Check
 
 on:
   pull_request:
@@ -74,7 +74,7 @@ jobs:
           sarif_file: ${{ github.workspace }}/tflint_terraform.sarif
 
   trivy-terraform:
-    name: Trivy Security Scan for Terraform
+    name: Trivy Security Scan
     needs: detect
     if: needs.detect.outputs.terraform_changed == 'true'
     runs-on: ubuntu-latest
