@@ -58,9 +58,6 @@ jobs:
       - name: Setup Trivy
         uses: aquasecurity/setup-trivy@v0.2.4
 
-      - name: Build image
-        run: docker build -t local-docker-scan .
-
       - name: Trivy security scan
         run: |
           trivy config Dockerfile \
