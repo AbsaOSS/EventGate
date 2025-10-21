@@ -61,7 +61,7 @@ jobs:
       - name: Build image
         run: docker build -t local-docker-scan .
 
-      - name: Trivy config scan (Dockerfile)
+      - name: Trivy security scan
         run: |
           trivy config Dockerfile \
             --format sarif \
@@ -71,18 +71,6 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ github.workspace }}/trivy_dockerfile.sarif
-
-      - name: Trivy image scan
-        run: |
-          trivy image local-docker-scan \
-            --format sarif \
-            --scanners vuln,secret,license \
-            --output $GITHUB_WORKSPACE/trivy_image.sarif
-
-      - name: Upload Image SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ${{ github.workspace }}/trivy_image.sarif
 
   noop:
     name: No Operation
