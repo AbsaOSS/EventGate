@@ -128,18 +128,20 @@ cd ..
 
 ## Run Trivy Tool Locally
 
-This project uses the [Trivy](https://trivy.dev/latest/) tool to scan Infrastructure as Code (terraform files) for security issues and misconfigurations.
+This project uses the [Trivy](https://trivy.dev/latest/) tool to scan changes for security issues and misconfigurations.
 It is an open‑source security scanner maintained by Aqua Security (AquaSec).
 
 > For installation instructions, please refer to the [following link.](https://trivy.dev/latest/getting-started/installation/)
 
 ### Run Trivy
 
-For running Trivy tool locally run the following command from the root file:
+For running Trivy tool locally run you can run one of following commands from the root file:
 ```shell
-trivy config terraform/ # Default table output (all severities)
-trivy config --severity MEDIUM,HIGH,CRITICAL terraform/ # Show only CRITICAL, HIGH and MEDIUM severities
+trivy fs . > trivy_scan.txt # Default table output (all severities for the whole project)
+trivy fs --severity MEDIUM,HIGH,CRITICAL terraform/ > trivy_scan.txt # Show only selected severities for terraform files
 ```
+
+You can see the scan results in the `trivy_scan.txt` file located in the root directory.
 
 ## Running Unit Test
 
