@@ -25,7 +25,6 @@ ARG SASL_SSL_ARTIFACTS=./sasl_ssl_artifacts
 # Trusted certs
 COPY $TRUSTED_SSL_CERTS /opt/certs/
 
-
 RUN \
   echo "######################################################" && \
   echo "### Import trusted certs before doing anything else ###" && \

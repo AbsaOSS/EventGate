@@ -1,4 +1,4 @@
-name: Check PR Release Notes in Description
+name: Check PR Release Notes
 
 on:
   pull_request:
@@ -7,6 +7,7 @@ on:
 
 jobs:
   check-release-notes:
+    name: Check PR Release Notes
     runs-on: ubuntu-latest
 
     steps:

@@ -135,7 +135,7 @@ It is an open‑source security scanner maintained by Aqua Security (AquaSec).
 
 ### Run Trivy
 
-For running Trivy tool locally run you can run one of following commands from the root file:
+For running Trivy tool locally you can execute one of following commands from the root file:
 ```shell
 trivy fs . > trivy_scan.txt # Default table output (all severities for the whole project)
 trivy fs --severity MEDIUM,HIGH,CRITICAL terraform/ > trivy_scan.txt # Show only selected severities for terraform files

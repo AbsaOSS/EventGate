@@ -37,7 +37,7 @@ jobs:
           else
             RANGE="${{ github.sha }}~1...${{ github.sha }}"
           fi
-          if git diff --name-only "$RANGE" | grep -qE '^src/'; then
+          if git diff --name-only "$RANGE" -- '*.py' | grep -q .; then
             echo "python_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "python_changed=false" >> "$GITHUB_OUTPUT"
@@ -152,37 +152,10 @@ jobs:
         id: check-types
         run: mypy .
 
-  trivy-python:
-    name: Trivy Security Scan
-    needs: detect
-    if: needs.detect.outputs.python_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0.2.4
-
-      - name: Trivy security scan
-        run: |
-          trivy fs src \
-            --format sarif \
-            --scanners vuln,secret,misconfig,license \
-            --output $GITHUB_WORKSPACE/trivy_python.sarif
-
-      - name: Upload Trivy SARIF file
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ${{ github.workspace }}/trivy_python.sarif
-
   noop:
     name: No Operation
     needs: detect
     if: needs.detect.outputs.python_changed != 'true'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "No changes under src/ — passing."
+      - run: echo "No changes in the *.py files — passing."
