@@ -137,8 +137,9 @@ It is an open‑source security scanner maintained by Aqua Security (AquaSec).
 
 For running Trivy tool locally you can execute one of following commands from the root file:
 ```shell
-trivy fs . > trivy_scan.txt # Default table output (all severities for the whole project)
+trivy fs . --scanners vuln,secret,misconfig,license > trivy_scan.txt # Scan the whole project with all available scans (all severities for the whole project)
 trivy fs --severity MEDIUM,HIGH,CRITICAL terraform/ > trivy_scan.txt # Show only selected severities for terraform files
+trivy config Dockerfile > trivy_scan.txt # Scan only Dockerfile
 ```
 
 You can see the scan results in the `trivy_scan.txt` file located in the root directory.
