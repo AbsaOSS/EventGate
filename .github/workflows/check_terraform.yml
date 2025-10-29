@@ -73,6 +73,33 @@ jobs:
         with:
           sarif_file: ${{ github.workspace }}/tflint_terraform.sarif
 
+# TODO: Trivy scan for changed Terraform files will be enabled in the following implementation phases
+#  trivy-terraform:
+#    name: Trivy Security Scan
+#    needs: detect
+#    if: needs.detect.outputs.terraform_changed == 'true'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v5
+#        with:
+#          persist-credentials: false
+#          fetch-depth: 0
+#
+#      - name: Setup Trivy
+#        uses: aquasecurity/setup-trivy@v0.2.4
+#
+#      - name: Trivy security scan
+#        run: |
+#          trivy fs terraform/ \
+#            --format sarif \
+#            --output $GITHUB_WORKSPACE/trivy_terraform.sarif
+#
+#      - name: Upload Terraform SARIF
+#        uses: github/codeql-action/upload-sarif@v4
+#        with:
+#          sarif_file: ${{ github.workspace }}/trivy_terraform.sarif
+
   noop:
     name: No Operation
     needs: detect

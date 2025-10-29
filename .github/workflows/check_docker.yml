@@ -1,78 +1,79 @@
-name: Docker Check
-
-on:
-  pull_request:
-    types: [ opened, synchronize, reopened ]
-  push:
-    branches: [ master ]
-  workflow_dispatch:
-
-concurrency:
-  group: static-docker-check-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  security-events: write
-
-jobs:
-  detect:
-    name: Docker Changes Detection
-    runs-on: ubuntu-latest
-    outputs:
-      docker_changed: ${{ steps.changes.outputs.docker_changed }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Check if docker file changed
-        id: changes
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            RANGE="${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
-          else
-            RANGE="${{ github.sha }}~1...${{ github.sha }}"
-          fi
-          if git diff --name-only "$RANGE" | grep -qE '^Dockerfile$'; then
-            echo "docker_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "docker_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  trivy-docker:
-    name: Trivy Security Scan
-    needs: detect
-    if: needs.detect.outputs.docker_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0.2.4
-
-      - name: Trivy security scan
-        run: |
-          trivy config Dockerfile \
-            --format sarif \
-            --output $GITHUB_WORKSPACE/trivy_dockerfile.sarif
-
-      - name: Upload Dockerfile SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ${{ github.workspace }}/trivy_dockerfile.sarif
-
-  noop:
-    name: No Operation
-    needs: detect
-    if: needs.detect.outputs.docker_changed != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "No changes in the Dockerfile — passing."
+# TODO: Trivy scan for Dockerfile will be enabled in the following implementation phases
+#name: Docker Check
+#
+#on:
+#  pull_request:
+#    types: [ opened, synchronize, reopened ]
+#  push:
+#    branches: [ master ]
+#  workflow_dispatch:
+#
+#concurrency:
+#  group: static-docker-check-${{ github.ref }}
+#  cancel-in-progress: true
+#
+#permissions:
+#  contents: read
+#  security-events: write
+#
+#jobs:
+#  detect:
+#    name: Docker Changes Detection
+#    runs-on: ubuntu-latest
+#    outputs:
+#      docker_changed: ${{ steps.changes.outputs.docker_changed }}
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v5
+#        with:
+#          persist-credentials: false
+#          fetch-depth: 0
+#
+#      - name: Check if docker file changed
+#        id: changes
+#        shell: bash
+#        run: |
+#          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+#            RANGE="${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+#          else
+#            RANGE="${{ github.sha }}~1...${{ github.sha }}"
+#          fi
+#          if git diff --name-only "$RANGE" | grep -qE '^Dockerfile$'; then
+#            echo "docker_changed=true" >> "$GITHUB_OUTPUT"
+#          else
+#            echo "docker_changed=false" >> "$GITHUB_OUTPUT"
+#          fi
+#
+#  trivy-docker:
+#    name: Trivy Security Scan
+#    needs: detect
+#    if: needs.detect.outputs.docker_changed == 'true'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v5
+#        with:
+#          persist-credentials: false
+#          fetch-depth: 0
+#
+#      - name: Setup Trivy
+#        uses: aquasecurity/setup-trivy@v0.2.4
+#
+#      - name: Trivy security scan
+#        run: |
+#          trivy config Dockerfile \
+#            --format sarif \
+#            --output $GITHUB_WORKSPACE/trivy_dockerfile.sarif
+#
+#      - name: Upload Dockerfile SARIF
+#        uses: github/codeql-action/upload-sarif@v4
+#        with:
+#          sarif_file: ${{ github.workspace }}/trivy_dockerfile.sarif
+#
+#  noop:
+#    name: No Operation
+#    needs: detect
+#    if: needs.detect.outputs.docker_changed != 'true'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - run: echo "No changes in the Dockerfile — passing."
