@@ -88,7 +88,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const link = `https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning?query=pr%3A${context.issue.number}+is%3Aopen`;
-            const sentence = "Trivy has completed a full security repository scan ✅. You can find the analysis results for this PR branch on [this overview](${link}). Below is the summary of the findings:";
+            const sentence = `Trivy has completed a full security repository scan ✅\n You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
             const summaryTable = `${{ steps.scan_summary_table.outputs.table }}`;
             const body = `${sentence}\n\n${summaryTable}`;
             github.rest.issues.createComment({
