@@ -28,7 +28,9 @@ jobs:
       - name: Run Trivy filesystem scan
         run: |
           trivy fs . \
-            --scanners vuln,secret,misconfig,license
+            --format sarif \
+            --scanners vuln,secret,misconfig,license \
+            --output trivy_repository_report.sarif
 
       - name: Upload SARIF to GitHub Security Hub
         uses: github/codeql-action/upload-sarif@v4
