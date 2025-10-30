@@ -46,7 +46,7 @@ jobs:
           import sys
           from collections import defaultdict, Counter
       
-          SARIF_PATH = "scan.txt"
+          SARIF_PATH = "trivy_repository_report.sarif"
           SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
           CATEGORIES = ["vulnerability", "secret", "misconfiguration", "license"]
       
