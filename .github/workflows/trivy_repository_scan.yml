@@ -72,9 +72,9 @@ jobs:
               sys.exit(1)
       
           # Count results by category and severity
-          for res in results:
+          for result in results:
               try:
-                  rule_idx = res.get("ruleIndex")
+                  rule_idx = result.get("ruleIndex")
                   if rule_idx is None or rule_idx >= len(rules):
                       continue
                   rule = rules[rule_idx]
@@ -89,7 +89,7 @@ jobs:
                   continue
       
           # Build Markdown summary table
-          headers = ["TRIVY"] + SEVERITIES + ["Total"]
+          headers = ["TRIVY"] + SEVERITIES + ["TOTAL"]
           summary_table = "| " + " | ".join(headers) + " |\n"
           summary_table += "|---|---|---|---|---|---|\n"
       
@@ -104,11 +104,11 @@ jobs:
                   row.append(str(count))
                   total_severity[severity] += count
                   category_total += count
-              row.append(str(category_total))
+              row.append(f"**{category_total}**")
               total_all += category_total
               summary_table += "| " + " | ".join(row) + " |\n"
       
-          total_row = ["**➡️ Total**"] + [f"**{str(total_severity[sev])}**" for sev in SEVERITIES] + [f"**{str(total_all)}**"]
+          total_row = ["**➡️ Total**"] + [f"**{total_severity[sev]}**" for sev in SEVERITIES] + [f"**{total_all}**"]
           summary_table += "| " + " | ".join(total_row) + " |"
           
           # Set summary table output
@@ -120,7 +120,6 @@ jobs:
                   f.write("EOF\n")
               else:
                   print("Warning: GITHUB_OUTPUT not set", file=sys.stderr)
-          
           except IOError as e:
               print(f"Error writing output: {e}", file=sys.stderr)
               sys.exit(1)
