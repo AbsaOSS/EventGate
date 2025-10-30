@@ -41,61 +41,77 @@ jobs:
         id: scan_summary_table
         run: |
           python <<'PY'
-          import os
-          import json
-          import sys
-          from collections import Counter
+              import os
+              import json
+              import sys
+              from collections import defaultdict, Counter
           
-          SARIF_PATH = "trivy_repository_report.sarif"
-          SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+              SARIF_PATH = "scan.txt"
+              SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+              CATEGORIES = ["vulnerability", "secret", "misconfiguration", "license"]
           
-          try:
-              # Parse results from SARIF
-              with open(SARIF_PATH, "r", encoding="utf-8") as f:
-                  sarif = json.load(f)
-              
-              # Validate SARIF structure
-              if "runs" not in sarif or not sarif["runs"]:
-                  raise ValueError("SARIF file contains no runs")
-              
-              run = sarif["runs"][0]
-              if "tool" not in run or "driver" not in run["tool"]:
-                  raise ValueError("SARIF structure missing expected tool/driver keys")
-              
-              rules = run["tool"]["driver"].get("rules", [])
-              results = run.get("results", [])
-              counts = Counter()
-            
-          except (IOError, json.JSONDecodeError, KeyError, ValueError) as e:
-              print(f"Error processing SARIF file: {e}", file=sys.stderr)
-              sys.exit(1)
-          
-          # Count results by severity
-          for res in results:
               try:
-                  rule_idx = res.get("ruleIndex")
-                  if rule_idx is None or rule_idx >= len(rules):
+                  # Parse results from SARIF
+                  with open(SARIF_PATH, "r", encoding="utf-8") as f:
+                      sarif = json.load(f)
+          
+                  # Validate SARIF structure
+                  if "runs" not in sarif or not sarif["runs"]:
+                      raise ValueError("SARIF file contains no runs")
+          
+                  run = sarif["runs"][0]
+                  if "tool" not in run or "driver" not in run["tool"]:
+                      raise ValueError("SARIF structure missing expected tool/driver keys")
+          
+                  rules = run["tool"]["driver"].get("rules", [])
+                  results = run.get("results", [])
+                  category_severity_counts = defaultdict(Counter)
+          
+              except (IOError, json.JSONDecodeError, KeyError, ValueError) as e:
+                  print(f"Error processing SARIF file: {e}", file=sys.stderr)
+                  sys.exit(1)
+          
+              # Count results by category and severity
+              for res in results:
+                  try:
+                      rule_idx = res.get("ruleIndex")
+                      if rule_idx is None or rule_idx >= len(rules):
+                          continue
+                      rule = rules[rule_idx]
+                      tags = rule.get("properties", {}).get("tags", [])
+                      # Find category and severity
+                      category = next((c for c in CATEGORIES if c in tags), None)
+                      severity = next((s for s in SEVERITIES if s in tags), None)
+                      if category and severity:
+                          category_severity_counts[category][severity] += 1
+                  except (KeyError, IndexError, TypeError) as e:
+                      print(f"Warning: Error processing result: {e}", file=sys.stderr)
                       continue
-                  rule = rules[rule_idx]
-                  tags = rule.get("properties", {}).get("tags", [])
-                  sev = next((s for s in SEVERITIES if s in tags), None)
-                  if sev:
-                      counts[sev] += 1
-              except (KeyError, IndexError, TypeError) as e:
-                  print(f"Warning: Error processing result: {e}", file=sys.stderr)
-                  continue
           
-          headers = SEVERITIES + ["TOTAL"]
-          values = [str(counts.get(s, 0)) for s in SEVERITIES]
-          total = sum(counts.get(s, 0) for s in SEVERITIES)
-          values.append(str(total))
-      
-          # Build Markdown summary table
-          summary_table = "| " + " | ".join(headers) + " |\n"
-          summary_table += "|" + "|".join(["---"] * len(headers)) + "|\n"
-          summary_table += "| " + " | ".join(values) + " |"
+              # Build Markdown summary table
+              headers = ["TRIVY"] + SEVERITIES + ["Total"]
+              summary_table = "| " + " | ".join(headers) + " |\n"
+              summary_table += "|---|---|---|---|---|---|\n"
           
-          # Set output
+              # Rows with counts for each category
+              total_severity = Counter()
+              total_all = 0
+              for category in CATEGORIES:
+                  row = [category]
+                  category_total = 0
+                  for severity in SEVERITIES:
+                      count = category_severity_counts[category][severity]
+                      row.append(str(count))
+                      total_severity[severity] += count
+                      category_total += count
+                  row.append(str(category_total))
+                  total_all += category_total
+                  summary_table += "| " + " | ".join(row) + " |\n"
+          
+              total_row = ["**➡️ Total**"] + [f"**{str(total_severity[sev])}**" for sev in SEVERITIES] + [f"**{str(total_all)}**"]
+              summary_table += "| " + " | ".join(total_row) + " |"
+          
+          # Set summary table output
           try:
               if "GITHUB_OUTPUT" in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
