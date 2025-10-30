@@ -43,26 +43,47 @@ jobs:
           python <<'PY'
           import os
           import json
+          import sys
           from collections import Counter
           
           SARIF_PATH = "trivy_repository_report.sarif"
           SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
           
-          # Parse results from SARIF
-          with open(SARIF_PATH, "r", encoding="utf-8") as f:
-              sarif = json.load(f)
-          run = sarif["runs"][0]
-          rules = run["tool"]["driver"]["rules"]
-          results = run["results"]
-          counts = Counter()
+          try:
+              # Parse results from SARIF
+              with open(SARIF_PATH, "r", encoding="utf-8") as f:
+                  sarif = json.load(f)
+              
+              # Validate SARIF structure
+              if "runs" not in sarif or not sarif["runs"]:
+                  raise ValueError("SARIF file contains no runs")
+              
+              run = sarif["runs"][0]
+              if "tool" not in run or "driver" not in run["tool"]:
+                  raise ValueError("SARIF structure missing expected tool/driver keys")
+              
+              rules = run["tool"]["driver"].get("rules", [])
+              results = run.get("results", [])
+              counts = Counter()
+            
+          except (IOError, json.JSONDecodeError, KeyError, ValueError) as e:
+              print(f"Error processing SARIF file: {e}", file=sys.stderr)
+              sys.exit(1)
           
           # Count results by severity
           for res in results:
-              rule = rules[res["ruleIndex"]]
-              tags = rule["properties"]["tags"]
-              sev = next((s for s in SEVERITIES if s in tags), None)
-              if sev:
-                  counts[sev] += 1
+              try:
+                  rule_idx = res.get("ruleIndex")
+                  if rule_idx is None or rule_idx >= len(rules):
+                      continue
+                  rule = rules[rule_idx]
+                  tags = rule.get("properties", {}).get("tags", [])
+                  sev = next((s for s in SEVERITIES if s in tags), None)
+                  if sev:
+                      counts[sev] += 1
+              except (KeyError, IndexError, TypeError) as e:
+                  print(f"Warning: Error processing result: {e}", file=sys.stderr)
+                  continue
           
           headers = SEVERITIES + ["TOTAL"]
           values = [str(counts.get(s, 0)) for s in SEVERITIES]
@@ -75,20 +96,28 @@ jobs:
           summary_table += "| " + " | ".join(values) + " |"
           
           # Set output
-          if "GITHUB_OUTPUT" in os.environ:
-            with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
-              f.write("table<<EOF\n")
-              f.write(summary_table + "\n")
-              f.write("EOF\n")
+          try:
+              if "GITHUB_OUTPUT" in os.environ:
+                with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                  f.write("table<<EOF\n")
+                  f.write(summary_table + "\n")
+                  f.write("EOF\n")
+              else:
+                  print("Warning: GITHUB_OUTPUT not set", file=sys.stderr)
+          
+          except IOError as e:
+              print(f"Error writing output: {e}", file=sys.stderr)
+              sys.exit(1)
           PY
 
       - name: GitHub scan summary comment
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const link = `https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning?query=pr%3A${context.issue.number}+is%3Aopen`;
-            const sentence = `Trivy has completed a full security repository scan ✅\n You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
+            const sentence = `Trivy has completed a full security repository scan ✅ You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
             const summaryTable = `${{ steps.scan_summary_table.outputs.table }}`;
             const body = `${sentence}\n\n${summaryTable}`;
             github.rest.issues.createComment({
