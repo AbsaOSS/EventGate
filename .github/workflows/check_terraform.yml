@@ -1,18 +1,14 @@
-name: Static Terraform Check
+name: Terraform Check
 
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
-    paths:
-      - terraform/**
   push:
     branches: [ master ]
-    paths:
-      - terraform/**
   workflow_dispatch:
 
 concurrency:
-  group: terraform-static-check-${{ github.ref }}
+  group: static-terraform-check-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -20,45 +16,43 @@ permissions:
   security-events: write
 
 jobs:
-  trivy:
+  detect:
+    name: Terraform Changes Detection
     runs-on: ubuntu-latest
+    outputs:
+      terraform_changed: ${{ steps.changes.outputs.terraform_changed }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0.2.4
-
-      - name: Trivy config scan
-        id: scan
-        working-directory: terraform
+      - name: Check if terraform/ changed
+        id: changes
+        shell: bash
         run: |
-          set +e
-          trivy config . \
-            --format sarif \
-            --output $GITHUB_WORKSPACE/terraform_trivy.sarif \
-            --severity HIGH,CRITICAL \
-            --exit-code 1
-          code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            RANGE="${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+          else
+            RANGE="${{ github.sha }}~1...${{ github.sha }}"
+          fi
+          if git diff --name-only "$RANGE" | grep -qE '^terraform/'; then
+            echo "terraform_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "terraform_changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload Trivy SARIF file
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ github.workspace }}/terraform_trivy.sarif
-
-      - name: Enforce failure on HIGH/CRITICAL
-        if: steps.scan.outputs.exit_code != '0'
-        run: |
-          echo "Trivy detected HIGH/CRITICAL findings. View details in PR code scanning annotations or in Security tab > Code scanning alerts (filter for pr:pr_number)."
-          exit 1
   tflint:
+    name: TFLint Static Code Analysis
+    needs: detect
+    if: needs.detect.outputs.terraform_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup TFLint
@@ -71,22 +65,45 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
-        id: lint
         working-directory: terraform
-        run: |
-          set +e
-          tflint --minimum-failure-severity=error -f sarif > "$GITHUB_WORKSPACE/terraform_tflint.sarif"
-          code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+        run: tflint --minimum-failure-severity=error -f sarif > "$GITHUB_WORKSPACE/tflint_terraform.sarif"
 
       - name: Upload TFLint SARIF file
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: ${{ github.workspace }}/terraform_tflint.sarif
+          sarif_file: ${{ github.workspace }}/tflint_terraform.sarif
 
-      - name: Enforce failure on TFLint findings
-        if: steps.lint.outputs.exit_code != '0'
-        run: |
-          echo "TFLint reported error issues. View details in PR code scanning annotations or in Security tab > Code scanning alerts (filter for pr:pr_number)."
-          exit 1
+# TODO: Trivy scan for changed Terraform files will be enabled in the upcoming issue: https://github.com/AbsaOSS/EventGate/issues/74
+#  trivy-terraform:
+#    name: Trivy Security Scan
+#    needs: detect
+#    if: needs.detect.outputs.terraform_changed == 'true'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v5
+#        with:
+#          persist-credentials: false
+#          fetch-depth: 0
+#
+#      - name: Setup Trivy
+#        uses: aquasecurity/setup-trivy@v0.2.4
+#
+#      - name: Trivy security scan
+#        run: |
+#          trivy fs terraform/ \
+#            --format sarif \
+#            --output $GITHUB_WORKSPACE/trivy_terraform.sarif
+#
+#      - name: Upload Terraform SARIF
+#        uses: github/codeql-action/upload-sarif@v4
+#        with:
+#          sarif_file: ${{ github.workspace }}/trivy_terraform.sarif
+
+  noop:
+    name: No Operation
+    needs: detect
+    if: needs.detect.outputs.terraform_changed != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No changes under terraform/ — passing."

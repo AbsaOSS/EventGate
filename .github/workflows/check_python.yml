@@ -1,0 +1,161 @@
+name: Python Check
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+concurrency:
+  group: static-python-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  detect:
+    name: Python Changes Detection
+    runs-on: ubuntu-latest
+    outputs:
+      python_changed: ${{ steps.changes.outputs.python_changed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check if Python files changed
+        id: changes
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            RANGE="${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+          else
+            RANGE="${{ github.sha }}~1...${{ github.sha }}"
+          fi
+          if git diff --name-only "$RANGE" -- '*.py' | grep -q .; then
+            echo "python_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  pylint-analysis:
+    name: Pylint Static Code Analysis
+    needs: detect
+    if: needs.detect.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Analyze code with Pylint
+        id: analyze-code
+        run: |
+          pylint_score=$(pylint $(git ls-files '*.py')| grep 'rated at' | awk '{print $7}' | cut -d'/' -f1)
+          echo "PYLINT_SCORE=$pylint_score" >> $GITHUB_ENV
+
+      - name: Check Pylint score
+        run: |
+          if (( $(echo "$PYLINT_SCORE < 9.5" | bc -l) )); then
+            echo "Failure: Pylint score is below 9.5 (project score: $PYLINT_SCORE)."
+            exit 1
+          else
+            echo "Success: Pylint score is above 9.5 (project score: $PYLINT_SCORE)."
+          fi
+
+  black-check:
+    name: Black Format Check
+    needs: detect
+    if: needs.detect.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check code format with Black
+        id: check-format
+        run: black --check $(git ls-files '*.py')
+
+  pytest-test:
+    name: Pytest Unit Tests with Coverage
+    needs: detect
+    if: needs.detect.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check code coverage with Pytest
+        run: pytest --cov=. -v tests/ --cov-fail-under=80
+
+  mypy-check:
+    name: Mypy Type Check
+    needs: detect
+    if: needs.detect.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check types with Mypy
+        id: check-types
+        run: mypy .
+
+  noop:
+    name: No Operation
+    needs: detect
+    if: needs.detect.outputs.python_changed != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No changes in the *.py files — passing."
