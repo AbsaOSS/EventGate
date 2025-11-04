@@ -28,7 +28,7 @@ def test_trace_kafka(caplog):
             if cb:
                 cb(None, object())
 
-        def flush(self, *a, **kw):  # noqa: D401
+        def flush(self, *a, **kw):
             return 0
 
     logger = logging.getLogger("trace.kafka")

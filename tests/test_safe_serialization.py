@@ -137,7 +137,6 @@ class TestSafeSerializeForLog:
             message = {"password": "secret", "data": "x" * 20000}
             result = safe_serialize_for_log(message)
             # Default should redact 'password' (in default list)
-            parsed_or_truncated = result
             if result.endswith("..."):
                 # Truncated at default 10000 bytes
                 assert len(result.encode("utf-8")) <= 10003
