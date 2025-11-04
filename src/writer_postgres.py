@@ -31,8 +31,7 @@ try:
 except ImportError:  # pragma: no cover - environment without psycopg2
     psycopg2 = None  # type: ignore
 
-# Ensure TRACE level is registered
-from .logging_levels import TRACE_LEVEL  # type: ignore
+from .trace_logging import log_payload_at_trace
 
 # Define a unified psycopg2 error base for safe exception handling even if psycopg2 missing
 if psycopg2 is not None:  # type: ignore
@@ -274,14 +273,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
             _logger.debug("psycopg2 not available - skipping actual Postgres write")
             return True, None
 
-        # TRACE-level payload logging (only when we intend to write)
-        if _logger.isEnabledFor(TRACE_LEVEL):
-            try:
-                _logger.trace(  # type: ignore[attr-defined]
-                    "Postgres payload topic=%s payload=%s", topic_name, json.dumps(message, separators=(",", ":"))
-                )
-            except Exception:  # pragma: no cover - defensive
-                _logger.trace("Postgres payload topic=%s <unserializable>", topic_name)  # type: ignore[attr-defined]
+        log_payload_at_trace(_logger, "Postgres", topic_name, message)
 
         with psycopg2.connect(  # type: ignore[attr-defined]
             database=POSTGRES["database"],
