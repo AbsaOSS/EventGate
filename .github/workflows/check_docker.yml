@@ -1,4 +1,4 @@
-# TODO: Trivy scan for Dockerfile will be enabled in the following implementation phases
+# TODO: Trivy scan for Dockerfile will be enabled in the upcoming issue: https://github.com/AbsaOSS/EventGate/issues/74
 #name: Docker Check
 #
 #on:

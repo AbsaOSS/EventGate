@@ -73,7 +73,7 @@ jobs:
         with:
           sarif_file: ${{ github.workspace }}/tflint_terraform.sarif
 
-# TODO: Trivy scan for changed Terraform files will be enabled in the following implementation phases
+# TODO: Trivy scan for changed Terraform files will be enabled in the upcoming issue: https://github.com/AbsaOSS/EventGate/issues/74
 #  trivy-terraform:
 #    name: Trivy Security Scan
 #    needs: detect
