@@ -133,14 +133,15 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
         return False, err_text
 
 
-def flush_with_timeout(producer, timeout: float) -> int:
+def flush_with_timeout(producer, timeout: float) -> Optional[int]:
     """Flush the Kafka producer with a timeout, handling TypeError for stubs.
 
     Args:
         producer: Kafka Producer instance.
         timeout: Timeout in seconds.
     Returns:
-        Number of messages still pending after flush.
+        Number of messages still pending after the flush call (0 all messages delivered).
+        None is returned only if the underlying (stub/mock) producer.flush() does not provide a count.
     """
     try:
         return producer.flush(timeout)
