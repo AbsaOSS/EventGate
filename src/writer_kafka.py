@@ -22,8 +22,8 @@ Initializes a Confluent Kafka Producer and publishes messages for a topic.
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, Optional, Tuple
-
 from confluent_kafka import Producer
 
 try:  # KafkaException may not exist in stubbed test module
@@ -35,8 +35,10 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - fallback for te
 
 
 STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "producer": None}
-# Configurable flush timeout (seconds) to avoid hanging indefinitely
-_KAFKA_FLUSH_TIMEOUT_SEC = float(os.environ.get("KAFKA_FLUSH_TIMEOUT", "5"))
+# Configurable flush timeouts and retries via env variables to avoid hanging indefinitely
+_KAFKA_FLUSH_TIMEOUT_SEC = float(os.environ.get("KAFKA_FLUSH_TIMEOUT", "7"))
+_MAX_RETRIES = int(os.environ.get("KAFKA_FLUSH_RETRIES", "3"))
+_RETRY_BACKOFF_SEC = float(os.environ.get("KAFKA_RETRY_BACKOFF", "0.5"))
 
 
 def init(logger: logging.Logger, config: Dict[str, Any]) -> None:
@@ -86,12 +88,14 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     """
     logger = STATE["logger"]
     producer: Optional[Producer] = STATE.get("producer")  # type: ignore[assignment]
-
     if producer is None:
         logger.debug("Kafka producer not initialized - skipping")
         return True, None
 
-    errors: list[Any] = []
+    errors: list[str] = []
+    has_exception = False
+
+    # Produce step
     try:
         logger.debug("Sending to kafka %s", topic_name)
         producer.produce(
@@ -100,23 +104,51 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
             value=json.dumps(message).encode("utf-8"),
             callback=lambda err, msg: (errors.append(str(err)) if err is not None else None),
         )
+    except KafkaException as e:
+        errors.append(f"Produce exception: {e}")
+        has_exception = True
+
+    # Flush step (always attempted)
+    remaining: Optional[int] = None
+    for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            remaining = producer.flush(_KAFKA_FLUSH_TIMEOUT_SEC)  # type: ignore[arg-type]
-        except TypeError:  # Fallback for stub producers without timeout parameter
-            remaining = producer.flush()  # type: ignore[call-arg]
-        # remaining can be number of undelivered messages (confluent_kafka returns int)
-        if not errors and isinstance(remaining, int) and remaining > 0:
-            timeout_msg = f"Kafka flush timeout after {_KAFKA_FLUSH_TIMEOUT_SEC}s: {remaining} message(s) still pending"
-            logger.error(timeout_msg)
-            return False, timeout_msg
-    except KafkaException as e:  # narrow exception capture
-        err_msg = f"The Kafka writer failed with unknown error: {str(e)}"
-        logger.exception(err_msg)
-        return False, err_msg
+            remaining = flush_with_timeout(producer, _KAFKA_FLUSH_TIMEOUT_SEC)
+        except KafkaException as e:
+            errors.append(f"Flush exception: {e}")
+            has_exception = True
+
+        # Treat None (flush returns None in some stubs) as success equivalent to 0 pending
+        if (remaining is None or remaining == 0) and not errors:
+            break
+        if attempt < _MAX_RETRIES:
+            logger.warning("Kafka flush pending (%s message(s) remain) attempt %d/%d", remaining, attempt, _MAX_RETRIES)
+            time.sleep(_RETRY_BACKOFF_SEC)
+
+    # Warn if messages still pending after retries
+    if isinstance(remaining, int) and remaining > 0:
+        logger.warning(
+            "Kafka flush timeout after %ss: %d message(s) still pending", _KAFKA_FLUSH_TIMEOUT_SEC, remaining
+        )
 
     if errors:
-        msg = "; ".join(errors)
-        logger.error(msg)
-        return False, msg
+        failure_text = "Kafka writer failed: " + "; ".join(errors)
+        (logger.exception if has_exception else logger.error)(failure_text)
+        return False, failure_text
 
     return True, None
+
+
+def flush_with_timeout(producer, timeout: float) -> Optional[int]:
+    """Flush the Kafka producer with a timeout, handling TypeError for stubs.
+
+    Args:
+        producer: Kafka Producer instance.
+        timeout: Timeout in seconds.
+    Returns:
+        Number of messages still pending after the flush call (0 all messages delivered).
+        None is returned only if the underlying (stub/mock) producer.flush() does not provide a count.
+    """
+    try:
+        return producer.flush(timeout)
+    except TypeError:  # Fallback for stub producers without timeout parameter
+        return producer.flush()
