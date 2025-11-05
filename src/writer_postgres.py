@@ -31,6 +31,8 @@ try:
 except ImportError:  # pragma: no cover - environment without psycopg2
     psycopg2 = None  # type: ignore
 
+from .trace_logging import log_payload_at_trace
+
 # Define a unified psycopg2 error base for safe exception handling even if psycopg2 missing
 if psycopg2 is not None:  # type: ignore
     try:  # pragma: no cover - attribute presence depends on installed psycopg2 variant
@@ -47,20 +49,20 @@ else:  # fallback shim when psycopg2 absent
 
 
 # Module level globals for typing
-_logger: logging.Logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 POSTGRES: Dict[str, Any] = {"database": ""}
 
 
-def init(logger: logging.Logger) -> None:
+def init(logger_instance: logging.Logger) -> None:
     """Initialize Postgres credentials either from AWS Secrets Manager or fallback empty config.
 
     Args:
-        logger: Shared application logger.
+        logger_instance: Shared application logger.
     """
-    global _logger  # pylint: disable=global-statement
+    global logger  # pylint: disable=global-statement
     global POSTGRES  # pylint: disable=global-statement
 
-    _logger = logger
+    logger = logger_instance
 
     secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
     secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
@@ -72,7 +74,7 @@ def init(logger: logging.Logger) -> None:
     else:
         POSTGRES = {"database": ""}
 
-    _logger.debug("Initialized POSTGRES writer")
+    logger.debug("Initialized POSTGRES writer")
 
 
 def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
@@ -83,7 +85,7 @@ def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
         table: Target table name.
         message: Event payload.
     """
-    _logger.debug("Sending to Postgres - %s", table)
+    logger.debug("Sending to Postgres - %s", table)
     cursor.execute(
         f"""
         INSERT INTO {table} 
@@ -142,7 +144,7 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
         table_jobs: Jobs table name.
         message: Event payload (includes jobs array).
     """
-    _logger.debug("Sending to Postgres - %s and %s", table_runs, table_jobs)
+    logger.debug("Sending to Postgres - %s and %s", table_runs, table_jobs)
     cursor.execute(
         f"""
         INSERT INTO {table_runs} 
@@ -222,7 +224,7 @@ def postgres_test_write(cursor, table: str, message: Dict[str, Any]) -> None:
         table: Target table name.
         message: Event payload.
     """
-    _logger.debug("Sending to Postgres - %s", table)
+    logger.debug("Sending to Postgres - %s", table)
     cursor.execute(
         f"""
         INSERT INTO {table} 
@@ -265,11 +267,13 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     """
     try:
         if not POSTGRES.get("database"):
-            _logger.debug("No Postgres - skipping")
+            logger.debug("No Postgres - skipping")
             return True, None
         if psycopg2 is None:  # type: ignore
-            _logger.debug("psycopg2 not available - skipping actual Postgres write")
+            logger.debug("psycopg2 not available - skipping actual Postgres write")
             return True, None
+
+        log_payload_at_trace(logger, "Postgres", topic_name, message)
 
         with psycopg2.connect(  # type: ignore[attr-defined]
             database=POSTGRES["database"],
@@ -287,13 +291,13 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
                     postgres_test_write(cursor, "public_cps_za_test", message)
                 else:
                     msg = f"unknown topic for postgres {topic_name}"
-                    _logger.error(msg)
+                    logger.error(msg)
                     return False, msg
 
             connection.commit()  # type: ignore
     except (RuntimeError, PsycopgError) as e:  # narrowed exception set
         err_msg = f"The Postgres writer with failed unknown error: {str(e)}"
-        _logger.error(err_msg)
+        logger.exception(err_msg)
         return False, err_msg
 
     return True, None

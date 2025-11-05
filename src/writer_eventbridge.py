@@ -26,6 +26,8 @@ from typing import Any, Dict, Optional, Tuple, List
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from .trace_logging import log_payload_at_trace
+
 STATE: Dict[str, Any] = {"logger": logging.getLogger(__name__), "event_bus_arn": "", "client": None}
 
 
@@ -67,6 +69,8 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     if client is None:  # defensive
         logger.debug("EventBridge client not initialized - skipping")
         return True, None
+
+    log_payload_at_trace(logger, "EventBridge", topic_name, message)
 
     try:
         logger.debug("Sending to eventBridge %s", topic_name)

@@ -26,6 +26,8 @@ import time
 from typing import Any, Dict, Optional, Tuple
 from confluent_kafka import Producer
 
+from .trace_logging import log_payload_at_trace
+
 try:  # KafkaException may not exist in stubbed test module
     from confluent_kafka import KafkaException  # type: ignore
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - fallback for test stub
@@ -91,6 +93,8 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
     if producer is None:
         logger.debug("Kafka producer not initialized - skipping")
         return True, None
+
+    log_payload_at_trace(logger, "Kafka", topic_name, message)
 
     errors: list[str] = []
     has_exception = False

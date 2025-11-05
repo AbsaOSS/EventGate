@@ -22,26 +22,24 @@ import os
 import sys
 from typing import Any, Dict
 
-import urllib3
-
 import boto3
 import jwt
 import requests
+import urllib3
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-# Added explicit import for serialization-related exceptions
-try:  # pragma: no cover - import guard
-    from cryptography.exceptions import UnsupportedAlgorithm  # type: ignore
-except Exception:  # pragma: no cover - very defensive
-    UnsupportedAlgorithm = Exception  # type: ignore
-
 # Import writer modules with explicit ImportError fallback
 try:
-    from . import writer_eventbridge, writer_kafka, writer_postgres
+    from . import writer_eventbridge
+    from . import writer_kafka
+    from . import writer_postgres
 except ImportError:  # fallback when executed outside package context
-    import writer_eventbridge, writer_kafka, writer_postgres  # type: ignore[no-redef]
+    import writer_eventbridge  # type: ignore[no-redef]
+    import writer_kafka  # type: ignore[no-redef]
+    import writer_postgres  # type: ignore[no-redef]
 
 # Import configuration directory symbols with explicit ImportError fallback
 try:
