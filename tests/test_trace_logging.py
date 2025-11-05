@@ -69,7 +69,7 @@ def test_trace_postgres(caplog, monkeypatch):
             return False
 
     class DummyPsycopg2:
-        def connect(self, **kwargs):  # noqa: D401
+        def connect(self, **kwargs):
             return DummyConnection()
 
     monkeypatch.setattr(wp, "psycopg2", DummyPsycopg2())

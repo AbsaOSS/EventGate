@@ -297,7 +297,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
             connection.commit()  # type: ignore
     except (RuntimeError, PsycopgError) as e:  # narrowed exception set
         err_msg = f"The Postgres writer with failed unknown error: {str(e)}"
-        logger.error(err_msg)
+        logger.exception(err_msg)
         return False, err_msg
 
     return True, None
