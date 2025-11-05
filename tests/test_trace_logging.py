@@ -76,7 +76,7 @@ def test_trace_postgres(caplog, monkeypatch):
 
     logger = logging.getLogger("trace.postgres")
     logger.setLevel(TRACE_LEVEL)
-    wp._logger = logger  # type: ignore
+    wp.logger = logger
     wp.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
 
     caplog.set_level(TRACE_LEVEL)

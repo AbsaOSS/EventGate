@@ -95,7 +95,7 @@ def write(topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]
         return True, None
 
     log_payload_at_trace(logger, "Kafka", topic_name, message)
-    
+
     errors: list[str] = []
     has_exception = False
 
