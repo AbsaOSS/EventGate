@@ -33,19 +33,17 @@ from jsonschema.exceptions import ValidationError
 
 # Import writer modules with explicit ImportError fallback
 try:
-    from . import writer_eventbridge
-    from . import writer_kafka
-    from . import writer_postgres
+    from .writers import writer_eventbridge, writer_kafka, writer_postgres
 except ImportError:  # fallback when executed outside package context
-    import writer_eventbridge  # type: ignore[no-redef]
-    import writer_kafka  # type: ignore[no-redef]
-    import writer_postgres  # type: ignore[no-redef]
+    import src.writers.writer_eventbridge  # type: ignore[no-redef]
+    import src.writers.writer_kafka  # type: ignore[no-redef]
+    import src.writers.writer_postgres  # type: ignore[no-redef]
 
 # Import configuration directory symbols with explicit ImportError fallback
 try:
-    from .conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
+    from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
 except ImportError:  # fallback when executed outside package context
-    from conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
+    from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV  # type: ignore[no-redef]
 
 # Internal aliases used by rest of module
 _CONF_DIR = CONF_DIR

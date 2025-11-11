@@ -18,9 +18,8 @@ import logging
 import os
 import types
 import pytest
-from unittest.mock import patch
 
-from src import writer_postgres
+from src.writers import writer_postgres
 
 
 @pytest.fixture(scope="module", autouse=True)

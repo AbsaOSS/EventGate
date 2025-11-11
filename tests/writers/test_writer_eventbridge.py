@@ -1,7 +1,7 @@
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import src.writer_eventbridge as we
+import src.writers.writer_eventbridge as we
 
 
 def test_write_skips_when_no_event_bus():

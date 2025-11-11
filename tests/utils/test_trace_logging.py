@@ -1,10 +1,10 @@
 import logging
 from unittest.mock import MagicMock
 
-from src.logging_levels import TRACE_LEVEL
-import src.writer_eventbridge as we
-import src.writer_kafka as wk
-import src.writer_postgres as wp
+from src.utils.logging_levels import TRACE_LEVEL
+import src.writers.writer_eventbridge as we
+import src.writers.writer_kafka as wk
+import src.writers.writer_postgres as wp
 
 
 def test_trace_eventbridge(caplog):

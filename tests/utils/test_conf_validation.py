@@ -19,7 +19,7 @@ import json
 from glob import glob
 import pytest
 
-CONF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "conf")
+CONF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "conf")
 
 REQUIRED_CONFIG_KEYS = {
     "access_config",

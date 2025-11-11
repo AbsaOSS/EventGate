@@ -4,9 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
-
-import src.conf_path as conf_path_module
+import src.utils.conf_path as conf_path_module
 
 
 def test_env_var_valid_directory(monkeypatch):
@@ -23,8 +21,9 @@ def test_env_var_invalid_directory_falls_back_parent(monkeypatch):
     missing_path = "/nonexistent/path/xyz_does_not_exist"
     monkeypatch.setenv("CONF_DIR", missing_path)
     conf_dir, invalid = conf_path_module.resolve_conf_dir()
-    # Should fall back to repository conf directory
-    assert conf_dir.endswith(os.path.join("EventGate", "conf"))
+    # Should fall back to repository conf directory /conf
+    expected_root_conf = (Path(conf_path_module.__file__).resolve().parent.parent.parent / "conf").resolve()
+    assert Path(conf_dir).resolve() == expected_root_conf
     assert invalid == os.path.abspath(missing_path)
 
 
@@ -34,7 +33,6 @@ def _load_isolated_conf_path(structure_builder):
     structure_builder receives base temp directory and returns path to module directory containing conf_path.py
     and the code to write (copied from original).
     """
-    import inspect
 
     code = Path(conf_path_module.__file__).read_text(encoding="utf-8")
     tmp = tempfile.TemporaryDirectory()
@@ -82,8 +80,8 @@ def test_fallback_parent_conf_even_if_missing():
     try:
         conf_dir, invalid = mod.resolve_conf_dir()
         # Parent conf path returned even though it does not exist
-        expected_parent_conf = (Path(mod.__file__).parent.parent / "conf").resolve()
-        assert Path(conf_dir).resolve() == expected_parent_conf
+        expected_root_conf = (Path(mod.__file__).resolve().parent.parent.parent / "conf").resolve()
+        assert Path(conf_dir).resolve() == expected_root_conf
         assert invalid is None
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
@@ -124,8 +122,8 @@ def test_invalid_env_all_missing_fallback_parent(monkeypatch):
         bad_path = "/also/not/there/xyz987"
         monkeypatch.setenv("CONF_DIR", bad_path)
         conf_dir, invalid = mod.resolve_conf_dir()
-        expected_parent_conf = (Path(mod.__file__).parent.parent / "conf").resolve()
-        assert Path(conf_dir).resolve() == expected_parent_conf
+        expected_root_conf = (Path(mod.__file__).resolve().parent.parent.parent / "conf").resolve()
+        assert Path(conf_dir).resolve() == expected_root_conf
         assert invalid == os.path.abspath(bad_path)
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
@@ -155,5 +153,6 @@ def test_module_level_constants_env_invalid(monkeypatch):
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)  # type: ignore[attr-defined]
     # Module constant should fall back to repository conf directory
-    assert mod.CONF_DIR.endswith(os.path.join("EventGate", "conf"))  # type: ignore[attr-defined]
+    expected_root_conf = (Path(mod.__file__).resolve().parent.parent.parent / "conf").resolve()
+    assert Path(mod.CONF_DIR).resolve() == expected_root_conf  # type: ignore[attr-defined]
     assert mod.INVALID_CONF_ENV == os.path.abspath(bad_path)  # type: ignore[attr-defined]

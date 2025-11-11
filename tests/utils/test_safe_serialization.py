@@ -20,8 +20,6 @@ import json
 import os
 from unittest.mock import patch
 
-import pytest
-
 from src.safe_serialization import safe_serialize_for_log
 
 
