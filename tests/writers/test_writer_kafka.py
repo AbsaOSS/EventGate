@@ -1,6 +1,6 @@
 import logging
 from types import SimpleNamespace
-import src.writer_kafka as wk
+import src.writers.writer_kafka as wk
 
 
 class FakeProducerSuccess:

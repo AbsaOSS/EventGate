@@ -20,9 +20,7 @@ import json
 import os
 from unittest.mock import patch
 
-import pytest
-
-from src.safe_serialization import safe_serialize_for_log
+from src.utils.safe_serialization import safe_serialize_for_log
 
 
 class TestSafeSerializeForLog:
@@ -153,7 +151,7 @@ class TestSafeSerializeForLog:
 
         # Mock json.dumps to raise an exception
         message = {"obj": "normal"}
-        with patch("src.safe_serialization.json.dumps", side_effect=TypeError("Cannot serialize")):
+        with patch("src.utils.safe_serialization.json.dumps", side_effect=TypeError("Cannot serialize")):
             result = safe_serialize_for_log(message, redact_keys=[], max_bytes=10000)
             assert result == ""
 
