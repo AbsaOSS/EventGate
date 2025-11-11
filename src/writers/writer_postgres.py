@@ -88,34 +88,34 @@ def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
     logger.debug("Sending to Postgres - %s", table)
     cursor.execute(
         f"""
-        INSERT INTO {table} 
+        INSERT INTO {table}
         (
-            event_id, 
-            tenant_id, 
-            source_app, 
-            source_app_version, 
-            environment, 
-            timestamp_event, 
-            catalog_id, 
-            operation, 
-            "location", 
-            "format", 
-            format_options, 
+            event_id,
+            tenant_id,
+            source_app,
+            source_app_version,
+            environment,
+            timestamp_event,
+            catalog_id,
+            operation,
+            "location",
+            "format",
+            format_options,
             additional_info
-        ) 
+        )
         VALUES
         (
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
             %s,
-            %s, 
-            %s, 
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
             %s
         )""",
         (
@@ -147,7 +147,7 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
     logger.debug("Sending to Postgres - %s and %s", table_runs, table_jobs)
     cursor.execute(
         f"""
-        INSERT INTO {table_runs} 
+        INSERT INTO {table_runs}
         (
                 event_id,
                 job_ref,
@@ -157,16 +157,16 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
                 environment,
                 timestamp_start,
                 timestamp_end
-        ) 
+        )
         VALUES
         (
-            %s, 
-            %s, 
-            %s, 
-            %s, 
             %s,
-            %s, 
-            %s, 
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
             %s
         )""",
         (
@@ -184,7 +184,7 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
     for job in message["jobs"]:
         cursor.execute(
             f"""
-        INSERT INTO {table_jobs} 
+        INSERT INTO {table_jobs}
         (
                 event_id,
                 catalog_id,
@@ -193,15 +193,15 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
                 timestamp_end,
                 message,
                 additional_info
-        ) 
+        )
         VALUES
         (
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
-            %s, 
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
             %s
         )""",
             (
@@ -227,22 +227,22 @@ def postgres_test_write(cursor, table: str, message: Dict[str, Any]) -> None:
     logger.debug("Sending to Postgres - %s", table)
     cursor.execute(
         f"""
-        INSERT INTO {table} 
+        INSERT INTO {table}
         (
             event_id,
             tenant_id,
-            source_app, 
-            environment, 
-            timestamp_event, 
+            source_app,
+            environment,
+            timestamp_event,
             additional_info
-        ) 
+        )
         VALUES
         (
             %s,
             %s,
-            %s, 
-            %s, 
-            %s, 
+            %s,
+            %s,
+            %s,
             %s
         )""",
         (

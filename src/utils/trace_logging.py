@@ -23,7 +23,7 @@ import logging
 from typing import Any, Dict
 
 from src.utils.logging_levels import TRACE_LEVEL
-from src.safe_serialization import safe_serialize_for_log
+from src.utils.safe_serialization import safe_serialize_for_log
 
 
 def log_payload_at_trace(logger: logging.Logger, writer_name: str, topic_name: str, message: Dict[str, Any]) -> None:
