@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 import boto3
 import jwt
@@ -100,7 +100,7 @@ try:
         raise KeyError(f"No public keys found in {TOKEN_PUBLIC_KEYS_URL} endpoint response")
 
     TOKEN_PUBLIC_KEYS: list[RSAPublicKey] = [
-        serialization.load_der_public_key(base64.b64decode(raw_key)) for raw_key in raw_keys
+        cast(RSAPublicKey, serialization.load_der_public_key(base64.b64decode(raw_key))) for raw_key in raw_keys
     ]
     logger.debug("Loaded %d TOKEN_PUBLIC_KEYS", len(TOKEN_PUBLIC_KEYS))
 except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
