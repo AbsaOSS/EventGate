@@ -80,7 +80,7 @@ Example (sanitized):
 {
   "access_config": "s3://<bucket>/access.json",
   "token_provider_url": "https://<token-ui.example>",
-  "token_public_key_url": "https://<token-api.example>/public-key",
+  "token_public_keys_url": "https://<token-api.example>/token/public-keys",
   "kafka_bootstrap_server": "broker1:9092,broker2:9092",
   "event_bus_arn": "arn:aws:events:region:acct:event-bus/your-bus"
 }
@@ -137,7 +137,7 @@ Use when Kafka access needs Kerberos / SASL_SSL or custom `librdkafka` build.
 | Code coverage                 | [Code Coverage](./DEVELOPER.md#code-coverage)                         |
 
 ## Security & Authorization
-- JWT tokens must be RS256 signed; the public key is fetched at cold start from `token_public_key_url` (DER base64 inside JSON `{ "key": "..." }`).
+- JWT tokens must be RS256 signed; current and previous public keys are fetched at cold start from `token_public_keys_url` as DER base64 values (list `keys[*].key`, with single-key fallback `{ "key": "..." }`).
 - Subject claim (`sub`) is matched against `ACCESS[topicName]`.
 - Authorization header forms accepted:
   - `Authorization: Bearer <token>` (preferred)

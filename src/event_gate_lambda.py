@@ -28,6 +28,7 @@ import requests
 import urllib3
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
@@ -80,17 +81,33 @@ else:
         ACCESS = json.load(file)
 logger.debug("Loaded ACCESS definitions")
 
-TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
-# Add timeout to avoid hanging requests; wrap in robust error handling so failures are explicit
+# Initialize token public keys
+TOKEN_PROVIDER_URL = CONFIG.get("token_provider_url")
+TOKEN_PUBLIC_KEYS_URL = CONFIG.get("token_public_keys_url") or CONFIG.get("token_public_key_url")
+
 try:
-    response_json = requests.get(CONFIG["token_public_key_url"], verify=False, timeout=5).json()  # nosec external
-    token_public_key_encoded = response_json["key"]
-    TOKEN_PUBLIC_KEY: Any = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
-    logger.debug("Loaded TOKEN_PUBLIC_KEY")
+    response_json = requests.get(TOKEN_PUBLIC_KEYS_URL, verify=False, timeout=5).json()
+    raw_keys: list[str] = []
+    if isinstance(response_json, dict):
+        if "keys" in response_json and isinstance(response_json["keys"], list):
+            for item in response_json["keys"]:
+                if "key" in item:
+                    raw_keys.append(item["key"].strip())
+        elif "key" in response_json:
+            raw_keys.append(response_json["key"].strip())
+
+    if not raw_keys:
+        raise KeyError(f"No public keys found in {TOKEN_PUBLIC_KEYS_URL} endpoint response")
+
+    TOKEN_PUBLIC_KEYS: list[RSAPublicKey] = [
+        serialization.load_der_public_key(base64.b64decode(raw_key)) for raw_key in raw_keys
+    ]
+    logger.debug("Loaded %d TOKEN_PUBLIC_KEYS", len(TOKEN_PUBLIC_KEYS))
 except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
-    logger.exception("Failed to fetch or deserialize token public key from %s", CONFIG.get("token_public_key_url"))
+    logger.exception("Failed to fetch or deserialize token public key from %s", TOKEN_PUBLIC_KEYS_URL)
     raise RuntimeError("Token public key initialization failed") from exc
 
+# Initialize EventGate writers
 writer_eventbridge.init(logger, CONFIG)
 writer_kafka.init(logger, CONFIG)
 writer_postgres.init(logger)
@@ -163,7 +180,7 @@ def post_topic_message(topic_name: str, topic_message: Dict[str, Any], token_enc
     """
     logger.debug("Handling POST %s", topic_name)
     try:
-        token = jwt.decode(token_encoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])  # type: ignore[arg-type]
+        token = decode_jwt_all(token_encoded)
     except jwt.PyJWTError:  # type: ignore[attr-defined]
         return _error_response(401, "auth", "Invalid or missing token")
 
@@ -203,6 +220,20 @@ def post_topic_message(topic_name: str, topic_message: Dict[str, Any], token_enc
         "headers": {"Content-Type": "application/json"},
         "body": json.dumps({"success": True, "statusCode": 202}),
     }
+
+
+def decode_jwt_all(token_encoded: str) -> Dict[str, Any]:
+    """Decode JWT using any of the loaded public keys.
+
+    Args:
+        token_encoded: Encoded bearer JWT token string.
+    """
+    for public_key in TOKEN_PUBLIC_KEYS:
+        try:
+            return jwt.decode(token_encoded, public_key, algorithms=["RS256"])
+        except jwt.PyJWTError:
+            continue
+    raise jwt.PyJWTError("Verification failed for all public keys")
 
 
 def extract_token(event_headers: Dict[str, str]) -> str:
