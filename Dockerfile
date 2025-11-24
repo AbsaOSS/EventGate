@@ -71,7 +71,7 @@ RUN \
   
 # Lambda and SASL_SSL_Artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
-COPY src/ $LAMBDA_TASK_ROOT/
+COPY src $LAMBDA_TASK_ROOT/src
 COPY conf $LAMBDA_TASK_ROOT/conf
 
 # Mark librdkafka to LD_LIBRARY_PATH  
@@ -81,4 +81,4 @@ ENV \
   KRB5CCNAME=FILE:/tmp/krb5cc
 
 # Set lambda entry point as CMD
-CMD ["event_gate_lambda.lambda_handler"]
+CMD ["src.event_gate_lambda.lambda_handler"]
