@@ -54,5 +54,5 @@ def test_local_access_config_branch():
         # Force reload so import-level logic re-executes with patched open
         egl_reloaded = importlib.reload(egl)
 
-    assert not egl_reloaded.CONFIG["access_config"].startswith("s3://")  # type: ignore[attr-defined]
+    assert not egl_reloaded.config["access_config"].startswith("s3://")  # type: ignore[attr-defined]
     assert egl_reloaded.ACCESS["public.cps.za.test"] == ["User"]  # type: ignore[attr-defined]
