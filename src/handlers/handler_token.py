@@ -21,6 +21,7 @@ This module provides the HandlerToken class for managing the token related opera
 import base64
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, cast
 
 import jwt
@@ -41,10 +42,31 @@ class HandlerToken:
     HandlerToken manages token provider URL and public keys for JWT verification.
     """
 
+    _REFRESH_INTERVAL = timedelta(minutes=28)
+
     def __init__(self, config):
         self.provider_url: str = config.get(TOKEN_PROVIDER_URL, "")
         self.public_keys_url: str = config.get(TOKEN_PUBLIC_KEYS_URL) or config.get(TOKEN_PUBLIC_KEY_URL)
         self.public_keys: list[RSAPublicKey] = []
+        self._last_loaded_at: datetime | None = None
+
+    def _refresh_keys_if_needed(self) -> None:
+        """
+        Refresh the public keys if the refresh interval has passed.
+        """
+        logger.debug("Checking if the token public keys need refresh")
+
+        if self._last_loaded_at is None:
+            return
+        now = datetime.now(timezone.utc)
+        if now - self._last_loaded_at < self._REFRESH_INTERVAL:
+            logger.debug("Token public keys are up to date, no refresh needed")
+            return
+        try:
+            logger.debug("Token public keys are stale, refreshing now")
+            self.load_public_keys()
+        except RuntimeError:
+            logger.warning("Token public key refresh failed, using existing keys")
 
     def load_public_keys(self) -> "HandlerToken":
         """
@@ -75,6 +97,7 @@ class HandlerToken:
                 cast(RSAPublicKey, serialization.load_der_public_key(base64.b64decode(raw_key))) for raw_key in raw_keys
             ]
             logger.debug("Loaded %d token public keys", len(self.public_keys))
+            self._last_loaded_at = datetime.now(timezone.utc)
 
             return self
         except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
@@ -91,6 +114,8 @@ class HandlerToken:
         Raises:
             jwt.PyJWTError: If verification fails for all public keys.
         """
+        self._refresh_keys_if_needed()
+
         logger.debug("Decoding JWT")
         for public_key in self.public_keys:
             try:
