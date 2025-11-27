@@ -42,7 +42,7 @@ class HandlerToken:
     HandlerToken manages token provider URL and public keys for JWT verification.
     """
 
-    _REFRESH_INTERVAL = timedelta(minutes=30)
+    _REFRESH_INTERVAL = timedelta(minutes=28)
 
     def __init__(self, config):
         self.provider_url: str = config.get(TOKEN_PROVIDER_URL, "")

@@ -113,7 +113,7 @@ def test_refresh_keys_not_needed_when_keys_fresh(token_handler):
 
 def test_refresh_keys_triggered_when_keys_stale(token_handler):
     """Keys loaded more than 30 minutes ago should trigger refresh."""
-    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=29)
     token_handler.public_keys = [Mock(spec=RSAPublicKey)]
 
     with patch.object(token_handler, "load_public_keys") as mock_load:
@@ -125,7 +125,7 @@ def test_refresh_keys_handles_load_failure_gracefully(token_handler):
     """If key refresh fails, should log warning and continue with existing keys."""
     old_key = Mock(spec=RSAPublicKey)
     token_handler.public_keys = [old_key]
-    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=29)
 
     with patch.object(token_handler, "load_public_keys", side_effect=RuntimeError("Network error")):
         token_handler._refresh_keys_if_needed()
