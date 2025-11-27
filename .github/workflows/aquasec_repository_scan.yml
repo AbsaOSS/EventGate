@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -28,9 +28,9 @@ jobs:
           AQUA_SECRET: ${{ secrets.AQUA_SECRET }}
         run: |
           echo "=== Authenticating with AquaSec ==="
-  
+          
           TIMESTAMP=$(date -u +%s)
-          AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/"
+          AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/v2/tokens"
           METHOD="POST"
           POST_BODY='{"validity":240,"allowed_endpoints":["GET","POST"]}'
           STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
