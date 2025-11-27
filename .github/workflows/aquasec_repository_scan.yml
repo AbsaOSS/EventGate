@@ -30,7 +30,7 @@ jobs:
           echo "=== Authenticating with AquaSec ==="
           
           TIMESTAMP=$(date -u +%s)
-          AUTH_ENDPOINT="https://api.cloudsploit.com/v2/tokens"
+          AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com"
           METHOD="POST"
           POST_BODY='{"validity":240,"allowed_endpoints":["GET","POST"]}'
           STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
