@@ -30,7 +30,11 @@ jobs:
           trivy fs . \
             --format sarif \
             --scanners vuln,secret,misconfig,license \
+            --sast \
             --output trivy_repository_report.sarif
+        env:
+          AQUA_KEY: ${{ secrets.AQUA_KEY }}
+          AQUA_SECRET: ${{ secrets.AQUA_SECRET }}
 
       - name: Upload SARIF to GitHub Security Hub
         uses: github/codeql-action/upload-sarif@v4
