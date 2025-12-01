@@ -199,7 +199,7 @@ def lambda_handler(event: Dict[str, Any], context: Any):  # pylint: disable=unus
         if resource == "/api":
             return get_api()
         if resource == "/token":
-            return handler_token.get_token()
+            return handler_token.get_token_provider_info()
         if resource == "/topics":
             return get_topics()
         if resource == "/topics/{topic_name}":

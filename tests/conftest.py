@@ -109,8 +109,8 @@ def event_gate_module():
     mock_events_client.put_events.return_value = {"FailedEntryCount": 0}
     mock_boto_client.return_value = mock_events_client
 
-    # Allow kafka producer patching (already stubbed) but still patch to inspect if needed
-    start_patch("confluent_kafka.Producer")
+    mock_kafka_producer = start_patch("confluent_kafka.Producer")
+    mock_kafka_producer.return_value = MagicMock()
 
     module = importlib.import_module("src.event_gate_lambda")
 

@@ -30,7 +30,7 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
-from src.utils.constants import TOKEN_PROVIDER_URL, TOKEN_PUBLIC_KEYS_URL, TOKEN_PUBLIC_KEY_URL
+from src.utils.constants import TOKEN_PROVIDER_URL_KEY, TOKEN_PUBLIC_KEYS_URL_KEY, TOKEN_PUBLIC_KEY_URL_KEY
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -45,8 +45,8 @@ class HandlerToken:
     _REFRESH_INTERVAL = timedelta(minutes=28)
 
     def __init__(self, config):
-        self.provider_url: str = config.get(TOKEN_PROVIDER_URL, "")
-        self.public_keys_url: str = config.get(TOKEN_PUBLIC_KEYS_URL) or config.get(TOKEN_PUBLIC_KEY_URL)
+        self.provider_url: str = config.get(TOKEN_PROVIDER_URL_KEY, "")
+        self.public_keys_url: str = config.get(TOKEN_PUBLIC_KEYS_URL_KEY) or config.get(TOKEN_PUBLIC_KEY_URL_KEY)
         self.public_keys: list[RSAPublicKey] = []
         self._last_loaded_at: datetime | None = None
 
@@ -124,7 +124,7 @@ class HandlerToken:
                 continue
         raise jwt.PyJWTError("Verification failed for all public keys")
 
-    def get_token(self) -> Dict[str, Any]:
+    def get_token_provider_info(self) -> Dict[str, Any]:
         """
         Returns: A 303 redirect response to the token provider URL.
         """

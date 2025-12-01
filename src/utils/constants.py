@@ -18,7 +18,7 @@
 This module contains all constants and enums used across the project.
 """
 
-# Token related constants
-TOKEN_PROVIDER_URL = "token_provider_url"
-TOKEN_PUBLIC_KEY_URL = "token_public_key_url"
-TOKEN_PUBLIC_KEYS_URL = "token_public_keys_url"
+# Token related configuration keys
+TOKEN_PROVIDER_URL_KEY = "token_provider_url"
+TOKEN_PUBLIC_KEY_URL_KEY = "token_public_key_url"
+TOKEN_PUBLIC_KEYS_URL_KEY = "token_public_keys_url"

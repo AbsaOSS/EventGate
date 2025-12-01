@@ -102,7 +102,7 @@ def test_extract_token_direct_bearer_header():
 
 ## Checking the freshness of public keys
 def test_refresh_keys_not_needed_when_keys_fresh(token_handler):
-    """Keys loaded less than 30 minutes ago should not trigger refresh."""
+    """Keys loaded less than 28 minutes ago should not trigger refresh."""
     token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
     token_handler.public_keys = [Mock(spec=RSAPublicKey)]
 
@@ -112,7 +112,7 @@ def test_refresh_keys_not_needed_when_keys_fresh(token_handler):
 
 
 def test_refresh_keys_triggered_when_keys_stale(token_handler):
-    """Keys loaded more than 30 minutes ago should trigger refresh."""
+    """Keys loaded more than 28 minutes ago should trigger refresh."""
     token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=29)
     token_handler.public_keys = [Mock(spec=RSAPublicKey)]
 

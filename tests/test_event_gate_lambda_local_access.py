@@ -36,11 +36,12 @@ def test_local_access_config_branch():
         patch("cryptography.hazmat.primitives.serialization.load_der_public_key") as mock_load_key,
         patch("boto3.Session") as mock_session,
         patch("boto3.client") as mock_boto_client,
-        patch("confluent_kafka.Producer"),
+        patch("confluent_kafka.Producer") as mock_kafka_producer,
         patch("builtins.open", side_effect=open_side_effect),
     ):
         mock_get.return_value.json.return_value = {"key": "ZHVtbXk="}  # base64 for 'dummy'
         mock_load_key.return_value = object()
+        mock_kafka_producer.return_value = MagicMock()
 
         class MockS3:
             def Bucket(self, name):  # noqa: D401
