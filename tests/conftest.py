@@ -15,7 +15,7 @@
 #
 import os, sys
 import base64
-import importlib
+import importlib.util
 import json
 import types
 from contextlib import ExitStack
