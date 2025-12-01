@@ -15,7 +15,6 @@
 #
 
 """Event Gate Lambda function implementation."""
-import base64
 import json
 import logging
 import os
@@ -24,13 +23,11 @@ from typing import Any, Dict
 
 import boto3
 import jwt
-import requests
 import urllib3
-from cryptography.exceptions import UnsupportedAlgorithm
-from cryptography.hazmat.primitives import serialization
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
+from src.handlers.handler_token import HandlerToken
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 
@@ -64,35 +61,28 @@ with open(os.path.join(_CONF_DIR, "topic_test.json"), "r", encoding="utf-8") as 
 logger.debug("Loaded TOPICS")
 
 with open(os.path.join(_CONF_DIR, "config.json"), "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
+    config = json.load(file)
 logger.debug("Loaded main CONFIG")
 
 aws_s3 = boto3.Session().resource("s3", verify=False)  # nosec Boto verify disabled intentionally
 logger.debug("Initialized AWS S3 Client")
 
-if CONFIG["access_config"].startswith("s3://"):
-    name_parts = CONFIG["access_config"].split("/")
+if config["access_config"].startswith("s3://"):
+    name_parts = config["access_config"].split("/")
     BUCKET_NAME = name_parts[2]
     BUCKET_OBJECT_KEY = "/".join(name_parts[3:])
     ACCESS = json.loads(aws_s3.Bucket(BUCKET_NAME).Object(BUCKET_OBJECT_KEY).get()["Body"].read().decode("utf-8"))
 else:
-    with open(CONFIG["access_config"], "r", encoding="utf-8") as file:
+    with open(config["access_config"], "r", encoding="utf-8") as file:
         ACCESS = json.load(file)
 logger.debug("Loaded ACCESS definitions")
 
-TOKEN_PROVIDER_URL = CONFIG["token_provider_url"]
-# Add timeout to avoid hanging requests; wrap in robust error handling so failures are explicit
-try:
-    response_json = requests.get(CONFIG["token_public_key_url"], verify=False, timeout=5).json()  # nosec external
-    token_public_key_encoded = response_json["key"]
-    TOKEN_PUBLIC_KEY: Any = serialization.load_der_public_key(base64.b64decode(token_public_key_encoded))
-    logger.debug("Loaded TOKEN_PUBLIC_KEY")
-except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
-    logger.exception("Failed to fetch or deserialize token public key from %s", CONFIG.get("token_public_key_url"))
-    raise RuntimeError("Token public key initialization failed") from exc
+# Initialize token handler and load token public keys
+handler_token = HandlerToken(config).load_public_keys()
 
-writer_eventbridge.init(logger, CONFIG)
-writer_kafka.init(logger, CONFIG)
+# Initialize EventGate writers
+writer_eventbridge.init(logger, config)
+writer_kafka.init(logger, config)
 writer_postgres.init(logger)
 
 
@@ -122,12 +112,6 @@ def _error_response(status: int, err_type: str, message: str) -> Dict[str, Any]:
 def get_api() -> Dict[str, Any]:
     """Return the OpenAPI specification text."""
     return {"statusCode": 200, "body": API}
-
-
-def get_token() -> Dict[str, Any]:
-    """Return 303 redirect to token provider endpoint."""
-    logger.debug("Handling GET Token")
-    return {"statusCode": 303, "headers": {"Location": TOKEN_PROVIDER_URL}}
 
 
 def get_topics() -> Dict[str, Any]:
@@ -163,7 +147,7 @@ def post_topic_message(topic_name: str, topic_message: Dict[str, Any], token_enc
     """
     logger.debug("Handling POST %s", topic_name)
     try:
-        token = jwt.decode(token_encoded, TOKEN_PUBLIC_KEY, algorithms=["RS256"])  # type: ignore[arg-type]
+        token: Dict[str, Any] = handler_token.decode_jwt(token_encoded)
     except jwt.PyJWTError:  # type: ignore[attr-defined]
         return _error_response(401, "auth", "Invalid or missing token")
 
@@ -205,41 +189,6 @@ def post_topic_message(topic_name: str, topic_message: Dict[str, Any], token_enc
     }
 
 
-def extract_token(event_headers: Dict[str, str]) -> str:
-    """Extract bearer token from headers (case-insensitive).
-
-    Supports:
-      - Custom 'bearer' header (any casing) whose value is the raw token
-      - Standard 'Authorization: Bearer <token>' header (case-insensitive scheme & key)
-    Returns empty string if token not found or malformed.
-    """
-    if not event_headers:
-        return ""
-
-    # Normalize keys to lowercase for case-insensitive lookup
-    lowered = {str(k).lower(): v for k, v in event_headers.items()}
-
-    # Direct bearer header (raw token)
-    if "bearer" in lowered and isinstance(lowered["bearer"], str):
-        token_candidate = lowered["bearer"].strip()
-        if token_candidate:
-            return token_candidate
-
-    # Authorization header with Bearer scheme
-    auth_val = lowered.get("authorization", "")
-    if not isinstance(auth_val, str):  # defensive
-        return ""
-    auth_val = auth_val.strip()
-    if not auth_val:
-        return ""
-
-    # Case-insensitive match for 'Bearer ' prefix
-    if not auth_val.lower().startswith("bearer "):
-        return ""
-    token_part = auth_val[7:].strip()  # len('Bearer ')==7
-    return token_part
-
-
 def lambda_handler(event: Dict[str, Any], context: Any):  # pylint: disable=unused-argument,too-many-return-statements
     """AWS Lambda entry point.
 
@@ -250,7 +199,7 @@ def lambda_handler(event: Dict[str, Any], context: Any):  # pylint: disable=unus
         if resource == "/api":
             return get_api()
         if resource == "/token":
-            return get_token()
+            return handler_token.get_token_provider_info()
         if resource == "/topics":
             return get_topics()
         if resource == "/topics/{topic_name}":
@@ -261,7 +210,7 @@ def lambda_handler(event: Dict[str, Any], context: Any):  # pylint: disable=unus
                 return post_topic_message(
                     event["pathParameters"]["topic_name"].lower(),
                     json.loads(event["body"]),
-                    extract_token(event.get("headers", {})),
+                    handler_token.extract_token(event.get("headers", {})),
                 )
         if resource == "/terminate":
             sys.exit("TERMINATING")  # pragma: no cover - deliberate termination path

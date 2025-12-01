@@ -19,12 +19,12 @@ import json
 from glob import glob
 import pytest
 
-CONF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "conf")
+CONF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "conf")
 
 REQUIRED_CONFIG_KEYS = {
     "access_config",
     "token_provider_url",
-    "token_public_key_url",
+    "token_public_keys_url",
     "kafka_bootstrap_server",
     "event_bus_arn",
 }
