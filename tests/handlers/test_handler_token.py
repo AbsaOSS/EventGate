@@ -67,7 +67,7 @@ def test_decode_jwt_all_second_key_succeeds(event_gate_module):
     second_key = object()
     event_gate_module.handler_token.public_keys = [first_key, second_key]
 
-    def decode_side_effect(token, key, algorithms):  # noqa: D401 - test stub
+    def decode_side_effect(token, key, algorithms):
         if key is first_key:
             raise event_gate_module.jwt.PyJWTError("signature mismatch")
         return {"sub": "TestUser"}
@@ -82,7 +82,7 @@ def test_decode_jwt_all_all_keys_fail(event_gate_module):
     bad_keys = [object(), object()]
     event_gate_module.handler_token.public_keys = bad_keys
 
-    def always_fail(token, key, algorithms):  # noqa: D401 - test stub
+    def always_fail(token, key, algorithms):
         raise event_gate_module.jwt.PyJWTError("bad signature")
 
     with patch.object(event_gate_module.jwt, "decode", side_effect=always_fail, create=True):

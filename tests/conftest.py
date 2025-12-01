@@ -46,10 +46,10 @@ def event_gate_module():
         return p.start()
 
     # Local, temporary dummy modules only if truly missing
-    if importlib.util.find_spec("confluent_kafka") is None:  # pragma: no cover - environment dependent
+    if importlib.util.find_spec("confluent_kafka") is None:
         dummy_ck = types.ModuleType("confluent_kafka")
 
-        class DummyProducer:  # minimal interface
+        class DummyProducer:
             def __init__(self, *_, **__):
                 pass
 
@@ -58,18 +58,18 @@ def event_gate_module():
                 if cb:
                     cb(None, None)
 
-            def flush(self):  # noqa: D401 - simple stub
+            def flush(self):
                 return None
 
-        dummy_ck.Producer = DummyProducer  # type: ignore[attr-defined]
+        dummy_ck.Producer = DummyProducer
 
         class DummyKafkaException(Exception):
             pass
 
-        dummy_ck.KafkaException = DummyKafkaException  # type: ignore[attr-defined]
+        dummy_ck.KafkaException = DummyKafkaException
         exit_stack.enter_context(patch.dict(sys.modules, {"confluent_kafka": dummy_ck}))
 
-    if importlib.util.find_spec("psycopg2") is None:  # pragma: no cover - environment dependent
+    if importlib.util.find_spec("psycopg2") is None:
         dummy_pg = types.ModuleType("psycopg2")
         exit_stack.enter_context(patch.dict(sys.modules, {"psycopg2": dummy_pg}))
 
@@ -94,11 +94,11 @@ def event_gate_module():
             return {"Body": MockS3ObjectBody()}
 
     class MockS3Bucket:
-        def Object(self, _key):  # noqa: D401 - simple proxy
+        def Object(self, _key):
             return MockS3Object()
 
     class MockS3Resource:
-        def Bucket(self, _name):  # noqa: D401 - simple proxy
+        def Bucket(self, _name):
             return MockS3Bucket()
 
     mock_session = start_patch("boto3.Session")
