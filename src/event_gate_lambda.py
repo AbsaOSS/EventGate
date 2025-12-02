@@ -23,11 +23,12 @@ from typing import Any, Dict
 
 import boto3
 import jwt
-import urllib3
+from botocore.exceptions import BotoCoreError, NoCredentialsError
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
 from src.handlers.handler_token import HandlerToken
+from src.utils.constants import SSL_CA_BUNDLE_KEY
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 
@@ -35,7 +36,6 @@ from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 _CONF_DIR = CONF_DIR
 _INVALID_CONF_ENV = INVALID_CONF_ENV
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -64,8 +64,14 @@ with open(os.path.join(_CONF_DIR, "config.json"), "r", encoding="utf-8") as file
     config = json.load(file)
 logger.debug("Loaded main CONFIG")
 
-aws_s3 = boto3.Session().resource("s3", verify=False)  # nosec Boto verify disabled intentionally
-logger.debug("Initialized AWS S3 Client")
+# Initialize S3 client with SSL verification
+try:
+    ssl_verify = config.get(SSL_CA_BUNDLE_KEY, True)
+    aws_s3 = boto3.Session().resource("s3", verify=ssl_verify)
+    logger.debug("Initialized AWS S3 Client")
+except (BotoCoreError, NoCredentialsError) as exc:
+    logger.exception("Failed to initialize AWS S3 client")
+    raise RuntimeError("AWS S3 client initialization failed") from exc
 
 if config["access_config"].startswith("s3://"):
     name_parts = config["access_config"].split("/")

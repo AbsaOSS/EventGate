@@ -30,7 +30,12 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
-from src.utils.constants import TOKEN_PROVIDER_URL_KEY, TOKEN_PUBLIC_KEYS_URL_KEY, TOKEN_PUBLIC_KEY_URL_KEY
+from src.utils.constants import (
+    TOKEN_PROVIDER_URL_KEY,
+    TOKEN_PUBLIC_KEYS_URL_KEY,
+    TOKEN_PUBLIC_KEY_URL_KEY,
+    SSL_CA_BUNDLE_KEY,
+)
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -49,6 +54,7 @@ class HandlerToken:
         self.public_keys_url: str = config.get(TOKEN_PUBLIC_KEYS_URL_KEY) or config.get(TOKEN_PUBLIC_KEY_URL_KEY)
         self.public_keys: list[RSAPublicKey] = []
         self._last_loaded_at: datetime | None = None
+        self.ssl_ca_bundle: str | bool = config.get(SSL_CA_BUNDLE_KEY, True)
 
     def _refresh_keys_if_needed(self) -> None:
         """
@@ -79,7 +85,7 @@ class HandlerToken:
         logger.debug("Loading token public keys from %s", self.public_keys_url)
 
         try:
-            response_json = requests.get(self.public_keys_url, verify=False, timeout=5).json()
+            response_json = requests.get(self.public_keys_url, verify=self.ssl_ca_bundle, timeout=5).json()
             raw_keys: list[str] = []
 
             if isinstance(response_json, dict):

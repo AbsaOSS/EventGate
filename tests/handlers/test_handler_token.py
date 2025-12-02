@@ -142,3 +142,17 @@ def test_decode_jwt_triggers_refresh_check(token_handler):
         with patch("jwt.decode", return_value={"sub": "TestUser"}):
             token_handler.decode_jwt("dummy-token")
             mock_refresh.assert_called_once()
+
+
+def test_handler_token_default_ssl_ca_bundle():
+    """HandlerToken should default to True for ssl_ca_bundle when not specified."""
+    config = {"token_public_keys_url": "https://example.com/keys"}
+    handler = HandlerToken(config)
+    assert handler.ssl_ca_bundle is True
+
+
+def test_handler_token_custom_ssl_ca_bundle_path():
+    """HandlerToken should accept custom CA bundle path."""
+    config = {"token_public_keys_url": "https://example.com/keys", "ssl_ca_bundle": "/path/to/custom/ca-bundle.pem"}
+    handler = HandlerToken(config)
+    assert handler.ssl_ca_bundle == "/path/to/custom/ca-bundle.pem"
