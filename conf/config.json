@@ -3,5 +3,6 @@
     "token_provider_url": "https://<redacted>",
     "token_public_keys_url": "https://<redacted>",
     "kafka_bootstrap_server": "localhost:9092",
-    "event_bus_arn": "arn:aws:events:<redacted>"
+    "event_bus_arn": "arn:aws:events:<redacted>",
+    "ssl_ca_bundle": "/path/to/ca-bundle.pem"
 }

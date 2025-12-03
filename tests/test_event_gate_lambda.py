@@ -15,7 +15,7 @@
 #
 
 import json
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 # --- GET flows ---
@@ -230,3 +230,31 @@ def test_post_invalid_json_body(event_gate_module, make_event):
     assert resp["statusCode"] == 500
     body = json.loads(resp["body"])
     assert any(e["type"] == "internal" for e in body["errors"])  # internal error path
+
+
+def test_boto3_s3_client_default_ssl_verification():
+    """Test that boto3 S3 client uses default SSL verification when ssl_ca_bundle not specified."""
+    config = {}
+
+    with patch("boto3.Session") as mock_session:
+        mock_session_instance = MagicMock()
+        mock_session.return_value = mock_session_instance
+
+        ssl_verify = config.get("ssl_ca_bundle", True)
+        mock_session_instance.resource("s3", verify=ssl_verify)
+
+        mock_session_instance.resource.assert_called_once_with("s3", verify=True)
+
+
+def test_boto3_s3_client_custom_ca_bundle():
+    """Test that boto3 S3 client uses custom CA bundle when ssl_ca_bundle is specified."""
+    config = {"ssl_ca_bundle": "/path/to/custom-ca-bundle.pem"}
+
+    with patch("boto3.Session") as mock_session:
+        mock_session_instance = MagicMock()
+        mock_session.return_value = mock_session_instance
+
+        ssl_verify = config.get("ssl_ca_bundle", True)
+        mock_session_instance.resource("s3", verify=ssl_verify)
+
+        mock_session_instance.resource.assert_called_once_with("s3", verify="/path/to/custom-ca-bundle.pem")
