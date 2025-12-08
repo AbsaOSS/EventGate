@@ -34,11 +34,11 @@ def test_load_topic_schemas_success():
         "topic_test.json": {"type": "object", "properties": {"event_id": {"type": "string"}}},
     }
 
-    def mock_open_side_effect(file_path, *args, **kwargs):
+    def mock_open_side_effect(file_path, *_args, **_kwargs):
         for filename, schema in mock_schemas.items():
             if filename in file_path:
                 return mock_open(read_data=json.dumps(schema)).return_value
-        raise FileNotFoundError(f"File not found: {file_path}")
+        raise FileNotFoundError(file_path)
 
     with patch("builtins.open", side_effect=mock_open_side_effect):
         result = handler.load_topic_schemas()

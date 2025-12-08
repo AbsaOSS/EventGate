@@ -91,12 +91,12 @@ def get_api() -> Dict[str, Any]:
     return {"statusCode": 200, "body": API}
 
 
-def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
+def lambda_handler(event: Dict[str, Any], _context: Any = None) -> Dict[str, Any]:
     """
     AWS Lambda entry point. Dispatches based on API Gateway proxy 'resource' and 'httpMethod'.
     Args:
         event: The event data from API Gateway.
-        context: The mandatory context argument for AWS Lambda invocation.
+        _context: The mandatory context argument for AWS Lambda invocation (unused).
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     Raises:
@@ -124,5 +124,5 @@ def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]
             sys.exit("TERMINATING")
         return build_error_response(404, "route", "Resource not found")
     except (KeyError, json.JSONDecodeError, ValueError, AttributeError, TypeError, RuntimeError) as request_exc:
-        logger.error("Request processing error: %s", request_exc)
+        logger.exception("Request processing error: %s", request_exc)
         return build_error_response(500, "internal", "Unexpected server error")
