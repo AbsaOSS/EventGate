@@ -18,6 +18,7 @@ import json
 
 from src.utils.utils import build_error_response
 
+
 ## build_error_response()
 def test_build_error_response_structure():
     """Test that build_error_response returns correct response structure."""
