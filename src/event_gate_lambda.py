@@ -91,11 +91,12 @@ def get_api() -> Dict[str, Any]:
     return {"statusCode": 200, "body": API}
 
 
-def lambda_handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def lambda_handler(event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
     """
     AWS Lambda entry point. Dispatches based on API Gateway proxy 'resource' and 'httpMethod'.
     Args:
         event: The event data from API Gateway.
+        context: The mandatory context argument for AWS Lambda invocation.
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     Raises:

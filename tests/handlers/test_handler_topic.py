@@ -24,7 +24,6 @@ from src.handlers.handler_topic import HandlerTopic
 
 ## load_topic_schemas()
 def test_load_topic_schemas_success():
-    """Test successful loading of all topic schemas."""
     mock_handler_token = MagicMock()
     access_config = {"public.cps.za.test": ["TestUser"]}
     handler = HandlerTopic("conf", access_config, mock_handler_token)
@@ -138,9 +137,9 @@ def test_post_invalid_token_decode(event_gate_module, make_event, valid_payload)
 def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
     with (
         patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.event_gate_lambda.writer_kafka.write", return_value=(True, None)),
-        patch("src.event_gate_lambda.writer_eventbridge.write", return_value=(True, None)),
-        patch("src.event_gate_lambda.writer_postgres.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
     ):
         event = make_event(
             "/topics/{topic_name}",
@@ -159,9 +158,9 @@ def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
 def test_post_single_writer_failure(event_gate_module, make_event, valid_payload):
     with (
         patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.event_gate_lambda.writer_kafka.write", return_value=(False, "Kafka boom")),
-        patch("src.event_gate_lambda.writer_eventbridge.write", return_value=(True, None)),
-        patch("src.event_gate_lambda.writer_postgres.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(False, "Kafka boom")),
+        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
     ):
         event = make_event(
             "/topics/{topic_name}",
@@ -181,9 +180,9 @@ def test_post_single_writer_failure(event_gate_module, make_event, valid_payload
 def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payload):
     with (
         patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.event_gate_lambda.writer_kafka.write", return_value=(False, "Kafka A")),
-        patch("src.event_gate_lambda.writer_eventbridge.write", return_value=(False, "EB B")),
-        patch("src.event_gate_lambda.writer_postgres.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(False, "Kafka A")),
+        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(False, "EB B")),
+        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
     ):
         event = make_event(
             "/topics/{topic_name}",
@@ -201,16 +200,16 @@ def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payl
 def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event, valid_payload):
     with (
         patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.event_gate_lambda.writer_kafka.write", return_value=(True, None)),
-        patch("src.event_gate_lambda.writer_eventbridge.write", return_value=(True, None)),
-        patch("src.event_gate_lambda.writer_postgres.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(True, None)),
+        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
     ):
         event = make_event(
             "/topics/{topic_name}",
             method="POST",
             topic="public.cps.za.test",
             body=valid_payload,
-            headers={"bearer": "token"},
+            headers={"authorization": "bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
         assert resp["statusCode"] == 202
