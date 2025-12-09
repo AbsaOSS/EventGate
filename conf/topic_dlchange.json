@@ -25,6 +25,10 @@
             "type": "number",
             "description": "Timestamp of the event in epoch milliseconds"
         },
+        "country": {
+            "type": "string",
+            "description": "The country the data is related to."
+        },
         "catalog_id": {
             "type": "string",
             "description": "Identifier for the data definition (Glue/Hive) database and table name for example "
