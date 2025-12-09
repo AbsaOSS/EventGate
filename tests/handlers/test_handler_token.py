@@ -18,6 +18,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, Mock
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
@@ -33,7 +34,7 @@ def token_handler():
 
 def test_get_token_endpoint(event_gate_module, make_event):
     event = make_event("/token")
-    resp = event_gate_module.lambda_handler(event, None)
+    resp = event_gate_module.lambda_handler(event)
     assert resp["statusCode"] == 303
     assert "Location" in resp["headers"]
 
@@ -42,10 +43,9 @@ def test_post_expired_token(event_gate_module, make_event, valid_payload):
     """Expired JWT should yield 401 auth error."""
 
     with patch.object(
-        event_gate_module.jwt,
-        "decode",
-        side_effect=event_gate_module.jwt.ExpiredSignatureError("expired"),
-        create=True,
+        event_gate_module.handler_token,
+        "decode_jwt",
+        side_effect=jwt.ExpiredSignatureError("expired"),
     ):
         event = make_event(
             "/topics/{topic_name}",
@@ -54,7 +54,7 @@ def test_post_expired_token(event_gate_module, make_event, valid_payload):
             body=valid_payload,
             headers={"Authorization": "Bearer expiredtoken"},
         )
-        resp = event_gate_module.lambda_handler(event, None)
+        resp = event_gate_module.lambda_handler(event)
         assert resp["statusCode"] == 401
         body = json.loads(resp["body"])
         assert any(e["type"] == "auth" for e in body["errors"])
@@ -67,12 +67,12 @@ def test_decode_jwt_all_second_key_succeeds(event_gate_module):
     second_key = object()
     event_gate_module.handler_token.public_keys = [first_key, second_key]
 
-    def decode_side_effect(token, key, algorithms):
+    def decode_side_effect(_token, key, **_kwargs):
         if key is first_key:
-            raise event_gate_module.jwt.PyJWTError("signature mismatch")
+            raise jwt.PyJWTError("signature mismatch")
         return {"sub": "TestUser"}
 
-    with patch.object(event_gate_module.jwt, "decode", side_effect=decode_side_effect, create=True):
+    with patch("jwt.decode", side_effect=decode_side_effect):
         claims = event_gate_module.handler_token.decode_jwt("dummy-token")
         assert claims["sub"] == "TestUser"
 
@@ -82,11 +82,11 @@ def test_decode_jwt_all_all_keys_fail(event_gate_module):
     bad_keys = [object(), object()]
     event_gate_module.handler_token.public_keys = bad_keys
 
-    def always_fail(token, key, algorithms):
-        raise event_gate_module.jwt.PyJWTError("bad signature")
+    def always_fail(_token, _key, **_kwargs):
+        raise jwt.PyJWTError("bad signature")
 
-    with patch.object(event_gate_module.jwt, "decode", side_effect=always_fail, create=True):
-        with pytest.raises(event_gate_module.jwt.PyJWTError) as exc:
+    with patch("jwt.decode", side_effect=always_fail):
+        with pytest.raises(jwt.PyJWTError) as exc:
             event_gate_module.handler_token.decode_jwt("dummy-token")
         assert "Verification failed for all public keys" in str(exc.value)
 
