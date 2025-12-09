@@ -26,6 +26,7 @@ from botocore.exceptions import BotoCoreError, NoCredentialsError
 
 from src.handlers.handler_token import HandlerToken
 from src.handlers.handler_topic import HandlerTopic
+from src.handlers.handler_health import HandlerHealth
 from src.utils.constants import SSL_CA_BUNDLE_KEY
 from src.utils.utils import build_error_response
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
@@ -85,6 +86,9 @@ writer_postgres.init(logger)
 # Initialize topic handler and load topic schemas
 handler_topic = HandlerTopic(CONF_DIR, ACCESS, handler_token).load_topic_schemas()
 
+# Initialize health handler
+handler_health = HandlerHealth(logger, config)
+
 
 def get_api() -> Dict[str, Any]:
     """Return the OpenAPI specification text."""
@@ -108,6 +112,8 @@ def lambda_handler(event: Dict[str, Any], _context: Any = None) -> Dict[str, Any
             return get_api()
         if resource == "/token":
             return handler_token.get_token_provider_info()
+        if resource == "/health":
+            return handler_health.get_health()
         if resource == "/topics":
             return handler_topic.get_topics_list()
         if resource == "/topics/{topic_name}":
