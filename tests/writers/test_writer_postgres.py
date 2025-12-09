@@ -57,12 +57,13 @@ def test_postgres_edla_write_with_optional_fields():
     writer_postgres.postgres_edla_write(cur, "table_a", message)
     assert len(cur.executions) == 1
     _sql, params = cur.executions[0]
-    assert len(params) == 12
+    assert len(params) == 13
     assert params[0] == "e1"
-    assert params[8] == "s3://bucket/path"
-    assert params[9] == "parquet"
-    assert json.loads(params[10]) == {"compression": "snappy"}
-    assert json.loads(params[11]) == {"foo": "bar"}
+    assert params[6] == ""  # country (default empty string)
+    assert params[9] == "s3://bucket/path"
+    assert params[10] == "parquet"
+    assert json.loads(params[11]) == {"compression": "snappy"}
+    assert json.loads(params[12]) == {"foo": "bar"}
 
 
 def test_postgres_edla_write_missing_optional():
@@ -80,10 +81,11 @@ def test_postgres_edla_write_missing_optional():
     }
     writer_postgres.postgres_edla_write(cur, "table_a", message)
     _sql, params = cur.executions[0]
-    assert params[8] is None
-    assert params[9] == "delta"
-    assert params[10] is None
-    assert params[11] is None
+    assert params[6] == ""  # country (default empty string)
+    assert params[9] is None  # location
+    assert params[10] == "delta"
+    assert params[11] is None  # format_options
+    assert params[12] is None  # additional_info
 
 
 def test_postgres_run_write():
@@ -115,8 +117,9 @@ def test_postgres_run_write():
     assert "source_app_version" in run_sql
     assert run_params[3] == "runapp"
     _job2_sql, job2_params = cur.executions[2]
-    assert job2_params[5] == "err"
-    assert json.loads(job2_params[6]) == {"k": "v"}
+    assert job2_params[2] == ""  # country (default empty string)
+    assert job2_params[6] == "err"
+    assert json.loads(job2_params[7]) == {"k": "v"}
 
 
 def test_postgres_test_write():

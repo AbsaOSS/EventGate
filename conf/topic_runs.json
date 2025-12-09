@@ -43,6 +43,10 @@
                         "type": "string",
                         "description": "Identifier for the data definition (Glue/Hive) database and table name for  example"
                     },
+                    "country": {
+                        "type": "string",
+                        "description": "The country the data is related to."
+                    },
                     "status": {
                         "type": "string",
                         "enum": ["succeeded", "failed", "killed", "skipped"],
