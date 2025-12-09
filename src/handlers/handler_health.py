@@ -19,15 +19,10 @@ This module provides the HandlerHealth class for service health monitoring.
 """
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Dict, Any
 
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
-
-logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 
 class HandlerHealth:
@@ -59,7 +54,7 @@ class HandlerHealth:
                 - 200: All dependencies healthy
                 - 503: One or more dependencies not initialized
         """
-        logger.debug("Handling GET Health")
+        self.logger.debug("Handling GET Health")
 
         details: Dict[str, str] = {}
         all_healthy = True
@@ -69,14 +64,14 @@ class HandlerHealth:
         if not all(key in kafka_state for key in ["logger", "producer"]):
             details["kafka"] = "not_initialized"
             all_healthy = False
-            logger.debug("Kafka writer not properly initialized")
+            self.logger.debug("Kafka writer not properly initialized")
 
         # Check EventBridge writer STATE
         eventbridge_state = writer_eventbridge.STATE
         if not all(key in eventbridge_state for key in ["logger", "client", "event_bus_arn"]):
             details["eventbridge"] = "not_initialized"
             all_healthy = False
-            logger.debug("EventBridge writer not properly initialized")
+            self.logger.debug("EventBridge writer not properly initialized")
 
         # Check PostgreSQL writer - it uses global logger variable and POSTGRES dict
         # Just verify the module is accessible (init is always called in event_gate_lambda)
@@ -85,20 +80,20 @@ class HandlerHealth:
         except AttributeError:
             details["postgres"] = "not_initialized"
             all_healthy = False
-            logger.debug("PostgreSQL writer not accessible")
+            self.logger.debug("PostgreSQL writer not accessible")
 
         # Calculate uptime
         uptime_seconds = int((datetime.now(timezone.utc) - self.start_time).total_seconds())
 
         if all_healthy:
-            logger.debug("Health check passed - all dependencies healthy")
+            self.logger.debug("Health check passed - all dependencies healthy")
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"status": "ok", "uptime_seconds": uptime_seconds}),
             }
 
-        logger.debug("Health check degraded - some dependencies not initialized: %s", details)
+        self.logger.debug("Health check degraded - some dependencies not initialized: %s", details)
         return {
             "statusCode": 503,
             "headers": {"Content-Type": "application/json"},
