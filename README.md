@@ -80,11 +80,24 @@ Example (sanitized):
 {
   "access_config": "s3://<bucket>/access.json",
   "token_provider_url": "https://<token-ui.example>",
-  "token_public_key_url": "https://<token-api.example>/public-key",
+  "token_public_keys_url": "https://<token-api.example>/token/public-keys",
   "kafka_bootstrap_server": "broker1:9092,broker2:9092",
-  "event_bus_arn": "arn:aws:events:region:acct:event-bus/your-bus"
+  "event_bus_arn": "arn:aws:events:region:acct:event-bus/your-bus",
+  "ssl_ca_bundle": "/path/to/ca-bundle.pem"
 }
 ```
+
+Configuration keys:
+- `access_config` – local file path or S3 URI for access control map.
+- `token_provider_url` – external URL for obtaining JWT tokens.
+- `token_public_keys_url` – endpoint serving JWT verification public keys (RS256).
+- `kafka_bootstrap_server` – comma-separated Kafka broker addresses.
+- `event_bus_arn` – AWS EventBridge event bus ARN for EventBridge writer.
+- `ssl_ca_bundle` (optional) – SSL certificate verification for S3 access and token public key requests.
+  - `true` - default, uses system CA bundle
+  - `false` - disables verification, not recommended for production
+  - `"/path/to/ca-bundle.pem"` - custom CA bundle
+
 Supporting configs:
 - `access.json` – map: topicName -> array of authorized subjects (JWT `sub`). May reside locally or at S3 path referenced by `access_config`.
 - `topic_*.json` – each file contains a JSON Schema for a topic. In the current code these are explicitly loaded inside `event_gate_lambda.py`. (Future enhancement: auto-discover or index file.)
@@ -137,7 +150,7 @@ Use when Kafka access needs Kerberos / SASL_SSL or custom `librdkafka` build.
 | Code coverage                 | [Code Coverage](./DEVELOPER.md#code-coverage)                         |
 
 ## Security & Authorization
-- JWT tokens must be RS256 signed; the public key is fetched at cold start from `token_public_key_url` (DER base64 inside JSON `{ "key": "..." }`).
+- JWT tokens must be RS256 signed; current and previous public keys are fetched at cold start from `token_public_keys_url` as DER base64 values (list `keys[*].key`, with single-key fallback `{ "key": "..." }`).
 - Subject claim (`sub`) is matched against `ACCESS[topicName]`.
 - Authorization header forms accepted:
   - `Authorization: Bearer <token>` (preferred)
