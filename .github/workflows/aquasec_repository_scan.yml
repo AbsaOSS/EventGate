@@ -35,8 +35,7 @@ jobs:
           AUTH_ENDPOINT="https://api.cloudsploit.com/v2/tokens"
           TIMESTAMP=$(date -u +%s)
           POST_BODY='{
-            # 1155 for CAO
-            "group_id": 1228,
+            "group_id": 1155,
             "allowed_endpoints": ["GET", "POST"],
             "validity": 240,
             "csp_roles": ["developer", "devops"]
