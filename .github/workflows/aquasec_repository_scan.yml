@@ -32,7 +32,7 @@ jobs:
           echo "=== Authenticating with AquaSec ==="
           
           METHOD="POST"
-          AUTH_ENDPOINT="https://api.cloudsploit.com/v2/tokens"
+          AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/v2/tokens"
           TIMESTAMP=$(date -u +%s)
           POST_BODY='{
             "group_id": 1155,
