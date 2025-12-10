@@ -35,15 +35,13 @@ jobs:
           AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/v2/tokens"
           TIMESTAMP=$(date -u +%s)
           POST_BODY='{
-            "group_id": 1155,
-            "allowed_endpoints": ["GET", "POST"],
-            "validity": 240,
-            "csp_roles": ["developer", "devops"]
+            "group_id": 1228,
+            "allowed_endpoints": ["GET"],
+            "validity": 240
           }'
           STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
           SIGNATURE=$(echo -n "$STRING_TO_SIGN" | openssl dgst -sha256 -hmac "$AQUA_SECRET" -hex | sed 's/.*= //g')
 
-          
           AUTH_RESPONSE=$(curl -s -X "$METHOD" "$AUTH_ENDPOINT" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: $AQUA_KEY" \
