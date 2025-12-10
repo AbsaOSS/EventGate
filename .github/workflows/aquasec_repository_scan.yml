@@ -27,20 +27,29 @@ jobs:
           AQUA_KEY: ${{ secrets.AQUA_KEY }}
           AQUA_SECRET: ${{ secrets.AQUA_SECRET }}
         run: |
+          set -euo pipefail
+          
           echo "=== Authenticating with AquaSec ==="
           
-          TIMESTAMP=$(date -u +%s)
-          AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com"
           METHOD="POST"
-          POST_BODY='{"validity":240,"allowed_endpoints":["GET","POST"]}'
+          AUTH_ENDPOINT="https://api.cloudsploit.com/v2/tokens"
+          TIMESTAMP=$(date -u +%s)
+          POST_BODY='{
+            # 1155 for CAO
+            "group_id": 1228,
+            "allowed_endpoints": ["GET", "POST"],
+            "validity": 240,
+            "csp_roles": ["developer", "devops"]
+          }'
           STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
           SIGNATURE=$(echo -n "$STRING_TO_SIGN" | openssl dgst -sha256 -hmac "$AQUA_SECRET" -hex | sed 's/.*= //g')
+
           
           AUTH_RESPONSE=$(curl -s -X "$METHOD" "$AUTH_ENDPOINT" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: $AQUA_KEY" \
-            -H "X-Timestamp: $TIMESTAMP" \
             -H "X-Signature: $SIGNATURE" \
+            -H "X-Timestamp: $TIMESTAMP" \
             -d "$POST_BODY")
           
           RESPONSE_STATUS=$(echo "$AUTH_RESPONSE" | jq -r '.status')
@@ -54,20 +63,11 @@ jobs:
             exit 1
           fi
           
-          echo "=== Getting Repository ID from GitHub ==="
-          
-          REPO_ID=$(curl -s "https://api.github.com/repos/${{ github.repository }}" | jq -r '.id')
-          
-          if [ -z "$REPO_ID" ] || [ "$REPO_ID" = "null" ]; then
-            echo "Failed to get repository ID from GitHub"
-            exit 1
-          fi
-          
           echo "=== Receiving AquaSec Scan Results ==="
           
           SCAN_RESULTS_ENDPOINT="https://eu-central-1.edge.cloud.aquasec.com/codesec/api/v1/scans/results"
           SCAN_RESULTS=$(curl -s -X GET \
-            "$SCAN_RESULTS_ENDPOINT?repositoryIds=$REPO_ID" \
+            "$SCAN_RESULTS_ENDPOINT?repositoryIds=${{ github.repository_id }} \
             -H "Authorization: Bearer $BEARER_TOKEN" \
             -H "Accept: application/json")
           
