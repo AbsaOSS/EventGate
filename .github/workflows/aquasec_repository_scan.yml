@@ -30,15 +30,12 @@ jobs:
           set -euo pipefail
           
           echo "=== Authenticating with AquaSec ==="
+          echo "${{ github.repository_id }}"
           
           METHOD="POST"
           AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/v2/tokens"
           TIMESTAMP=$(date -u +%s)
-          POST_BODY='{
-            "group_id": 1228,
-            "allowed_endpoints": ["GET"],
-            "validity": 240
-          }'
+          POST_BODY='{"group_id":1228,"allowed_endpoints":["GET"],"validity":240}'
           STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
           SIGNATURE=$(echo -n "$STRING_TO_SIGN" | openssl dgst -sha256 -hmac "$AQUA_SECRET" -hex | sed 's/.*= //g')
 
@@ -54,9 +51,8 @@ jobs:
           if [ "$RESPONSE_STATUS" = "200" ]; then
             echo "Login successful."
             BEARER_TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.data')
-            echo "::add-mask::$BEARER_TOKEN"
           else
-            echo "Login failed"
+            echo "Login failed with error message: $(echo "$AUTH_RESPONSE" | jq -r '.errors')"
             exit 1
           fi
           
