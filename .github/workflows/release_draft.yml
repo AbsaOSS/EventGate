@@ -1,4 +1,20 @@
-name: Release - create draft release
+#
+# Copyright 2025 ABSA Group Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Draft Release
 on:
   workflow_dispatch:
     inputs:
@@ -13,28 +29,28 @@ jobs:
   release-draft:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@v5.1.1
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.13'
 
-      - name: Check format of received tag
+      - name: Check Format of Received Tag
         id: check-version-tag
-        uses: AbsaOSS/version-tag-check@v0.3.0
+        uses: AbsaOSS/version-tag-check@36496be76eab24e1f14d45d3b8292311a2aebaaa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-            github-repository: ${{ github.repository }}
-            version-tag: ${{ github.event.inputs.tag-name }}
+          github-repository: ${{ github.repository }}
+          version-tag: ${{ github.event.inputs.tag-name }}
 
-      - name: Check format of received from tag
+      - name: Check Format of Received From Tag
         if: ${{ github.event.inputs.from-tag-name }}
         id: check-version-from-tag
-        uses: AbsaOSS/version-tag-check@v0.3.0
+        uses: AbsaOSS/version-tag-check@36496be76eab24e1f14d45d3b8292311a2aebaaa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -44,28 +60,41 @@ jobs:
 
       - name: Generate Release Notes
         id: generate_release_notes
-        uses: AbsaOSS/generate-release-notes@v0.6.0
+        uses: AbsaOSS/generate-release-notes@B90223510d1704301a36a36f0d86a72a0e72f0cf
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag-name: ${{ github.event.inputs.tag-name }}
           from-tag-name: ${{ github.event.inputs.from-tag-name }}
           chapters: |
-            - { title: No entry 🚫, label: duplicate }
-            - { title: Breaking Changes 💥, label: breaking-change }
-            - { title: New Features 🎉, label: enhancement }
-            - { title: New Features 🎉, label: feature }
-            - { title: Bugfixes 🛠, label: bug }
-            - { title: Infrastructure ⚙️, label: infrastructure }
-            - { title: Silent-live 🤫, label: silent-live }
-            - { title: Documentation 📜, label: documentation }
+            - {"title": "Entries to skip 🚫", "label": "duplicate"}
+            - {"title": "Entries to skip 🚫", "label": "invalid"}
+            - {"title": "Entries to skip 🚫", "label": "wontfix"}
+            - {"title": "Entries to skip 🚫", "label": "no RN"}
+            - {"title": "Breaking Changes 💥", "label": "breaking change"}
+            - {"title": "Security updates 👮", "label": "security"}
+            - {"title": "New Features 🎉", "label": "enhancement"}
+            - {"title": "Bugfixes 🛠", "label": "bug"}
+            - {"title": "Epics 📖", "label": "epic"}
+            - {"title": "Infrastructure ⚙️", "label": "infrastructure"}
+            - {"title": "Silent-live 🤫", "label": "silent live"}
+            - {"title": "Documentation 📜", "label": "documentation"}
+          duplicity-scope: 'none'
           warnings: true
+          skip-release-notes-labels: "no RN,duplicate,invalid,wontfix"
+          print-empty-chapters: false
+          row-format-issue: '_{title}_ {developers} in {number}'
+          row-format-pr: '_{title}_ {developers} in {number}'
+          row-format-link-pr: true
+          hierarchy: true
 
       - name: Create and Push Tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag-name }}
         with:
           script: |
-            const tag = core.getInput('tag-name')
+            const tag = process.env.TAG_NAME
             const ref = `refs/tags/${tag}`;
             const sha = context.sha; // The SHA of the commit to tag
 
@@ -78,10 +107,9 @@ jobs:
 
             console.log(`Tag created: ${tag}`);
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          tag-name: ${{ github.event.inputs.tag-name }}
 
       - name: Create Draft Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
