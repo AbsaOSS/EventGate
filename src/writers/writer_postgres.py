@@ -96,6 +96,7 @@ def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
             source_app_version,
             environment,
             timestamp_event,
+            country,
             catalog_id,
             operation,
             "location",
@@ -116,6 +117,7 @@ def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
             %s,
             %s,
             %s,
+            %s,
             %s
         )""",
         (
@@ -125,6 +127,7 @@ def postgres_edla_write(cursor, table: str, message: Dict[str, Any]) -> None:
             message["source_app_version"],
             message["environment"],
             message["timestamp_event"],
+            message.get("country", ""),
             message["catalog_id"],
             message["operation"],
             message.get("location"),
@@ -187,6 +190,7 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
         INSERT INTO {table_jobs}
         (
                 event_id,
+                country,
                 catalog_id,
                 status,
                 timestamp_start,
@@ -202,10 +206,12 @@ def postgres_run_write(cursor, table_runs: str, table_jobs: str, message: Dict[s
             %s,
             %s,
             %s,
+            %s,
             %s
         )""",
             (
                 message["event_id"],
+                job.get("country", ""),
                 job["catalog_id"],
                 job["status"],
                 job["timestamp_start"],

@@ -39,6 +39,10 @@
             "items": {
                 "type": "object",
                 "properties": {
+                    "country": {
+                      "type": "string",
+                      "description": "The country the data is related to."
+                    },
                     "catalog_id": {
                         "type": "string",
                         "description": "Identifier for the data definition (Glue/Hive) database and table name for  example"
