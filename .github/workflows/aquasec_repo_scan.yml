@@ -12,7 +12,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ${{ github.ref }}
+  group: aquasec-scan-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -331,13 +331,34 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const marker = '<!-- aquasec-scan-comment -->';
             const link = `https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning?query=pr%3A${context.issue.number}+is%3Aopen`;
             const sentence = `AquaSec has completed a full security repository scan ✅ You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
             const summaryTable = process.env.SUMMARY_TABLE;
-            const body = sentence + "\n\n" + summaryTable;
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            const body = marker + "\n" + sentence + "\n\n" + summaryTable;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body
+              issue_number: context.issue.number
             });
+            
+            const existingComment = comments.find(c => c.body.includes(marker));
+            
+            // Create a new comment or update existing one
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body
+              });
+            }
