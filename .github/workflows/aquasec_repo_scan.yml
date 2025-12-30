@@ -34,7 +34,15 @@ jobs:
         run: |
           set -euo pipefail
           
+          echo "=== Validating secret variables ==="
+          
+          if ! [[ "$REPOSITORY_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo "Error: AQUA_REPOSITORY_ID is not a valid UUID format"
+            exit 1
+          fi
+          
           echo "=== Authenticating with AquaSec ==="
+          
           METHOD="POST"
           AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/v2/tokens"
           TIMESTAMP=$(date -u +%s)
@@ -248,6 +256,7 @@ jobs:
           CATEGORIES = ["sast", "vulnerabilities", "iacMisconfigurations", "secrets", "pipelineMisconfigurations", "license"]
 
           print("=== Generating Scan Summary Table ===")
+          
           try:
               with open(SARIF_PATH, "r", encoding="utf-8") as f:
                   sarif = json.load(f)
