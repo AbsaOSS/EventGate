@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  aquasec:
+  aquasec-scanning:
     name: AquaSec Full Repository Scan
     runs-on: ubuntu-latest
     steps:
@@ -62,7 +62,7 @@ jobs:
           echo "=== Receiving AquaSec Scan Results ==="
           
           SCAN_RESULTS_ENDPOINT="https://eu-1.codesec.aquasec.com/api/v1/scans/results"
-          ALL_DATA="[]"
+          FINDINGS_JSON="[]"
           PAGE_NUM=1
           PAGE_SIZE=100
           TOTAL_EXPECTED=0
@@ -90,11 +90,11 @@ jobs:
             PAGE_COUNT=$(echo "$PAGE_DATA" | jq 'length')
             echo "Retrieved $PAGE_COUNT findings on page $PAGE_NUM"
           
-            ALL_DATA=$(echo "$ALL_DATA" "$PAGE_DATA" | jq -s 'add')
+            FINDINGS_JSON=$(echo "FINDINGS_JSON" "$PAGE_DATA" | jq -s 'add')
           
-            TOTAL_RETRIEVED=$(echo "$ALL_DATA" | jq 'length')
+            FINDINGS_COUNT=$(echo "FINDINGS_JSON" | jq 'length')
           
-            if [ "$TOTAL_RETRIEVED" -ge "$TOTAL_EXPECTED" ] || [ "$PAGE_COUNT" -eq 0 ]; then
+            if [ "FINDINGS_COUNT" -ge "$TOTAL_EXPECTED" ] || [ "$PAGE_COUNT" -eq 0 ]; then
               break
             fi
           
@@ -102,10 +102,10 @@ jobs:
             sleep 2
           done
           
-          TOTAL_RETRIEVED=$(echo "$ALL_DATA" | jq 'length')
-          echo "Total findings retrieved: $TOTAL_RETRIEVED"
+          FINDINGS_COUNT=$(echo "FINDINGS_JSON" | jq 'length')
+          echo "Total findings retrieved: FINDINGS_COUNT"
           
-          jq -n --argjson total "$TOTAL_RETRIEVED" --argjson data "$ALL_DATA" \
+          jq -n --argjson total "FINDINGS_COUNT" --argjson data "FINDINGS_JSON" \
             '{"total": $total, "size": $total, "page": 1, "data": $data}' > aquasec_scan_results.json
           
           echo "Full repository scan retrieved successfully"
@@ -224,7 +224,7 @@ jobs:
           }
           
           with open("aquasec_scan.sarif", "w") as f:
-              json.dump(sarif_output, f)
+              json.dump(sarif_output, f, indent=2)
           
           print(f"Converted {len(sarif_findings)} findings to SARIF 2.1.0 format")
 
@@ -233,3 +233,100 @@ jobs:
         with:
           sarif_file: aquasec_scan.sarif
           category: aquasec
+
+      - name: Create Scan Summary Table
+        id: scan_summary_table
+        shell: python
+        run: |
+          import os
+          import json
+          import sys
+          from collections import Counter
+
+          SARIF_PATH = "aquasec_scan.sarif"
+          SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+          CATEGORIES = ["sast", "vulnerabilities", "iacMisconfigurations", "secrets", "pipelineMisconfigurations", "license"]
+
+          print("=== Generating Scan Summary Table ===")
+          try:
+              with open(SARIF_PATH, "r", encoding="utf-8") as f:
+                  sarif = json.load(f)
+
+              if "runs" not in sarif or not sarif["runs"]:
+                  raise ValueError("SARIF file contains no runs")
+
+              run = sarif["runs"][0]
+              rules = run.get("tool", {}).get("driver", {}).get("rules", [])
+              results = run.get("results", [])
+
+          except (IOError, json.JSONDecodeError, ValueError) as e:
+              print(f"Error processing SARIF file: {e}", file=sys.stderr)
+              sys.exit(1)
+
+          # Initialize counters for each category
+          category_severity_counts = {cat: Counter() for cat in CATEGORIES}
+
+          # Count results by category and severity
+          for result in results:
+              rule_idx = result.get("ruleIndex")
+              if rule_idx is None or rule_idx >= len(rules):
+                  continue
+              
+              rule = rules[rule_idx]
+              category = rule.get("name", "")
+              tags = rule.get("properties", {}).get("tags", [])
+              severity = next((s for s in SEVERITIES if s in tags), None)
+              
+              if category in CATEGORIES and severity:
+                  category_severity_counts[category][severity] += 1
+
+          # Build Markdown summary table
+          headers = ["AQUASEC"] + SEVERITIES + ["TOTAL"]
+          summary_table = "| " + " | ".join(headers) + " |\n"
+          summary_table += "|---|---|---|---|---|---|\n"
+
+          total_severity = Counter()
+          total_all = 0
+          for category in CATEGORIES:
+              row = [category]
+              category_total = 0
+              for severity in SEVERITIES:
+                  count = category_severity_counts[category][severity]
+                  row.append(str(count))
+                  total_severity[severity] += count
+                  category_total += count
+              row.append(f"**{category_total}**")
+              total_all += category_total
+              summary_table += "| " + " | ".join(row) + " |\n"
+
+          total_row = ["**➡️ Total**"] + [f"**{total_severity[sev]}**" for sev in SEVERITIES] + [f"**{total_all}**"]
+          summary_table += "| " + " | ".join(total_row) + " |"
+
+          try:
+              if "GITHUB_OUTPUT" in os.environ:
+                  with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                      f.write("table<<EOF\n")
+                      f.write(summary_table + "\n")
+                      f.write("EOF\n")
+              else:
+                  print("Warning: GITHUB_OUTPUT not set", file=sys.stderr)
+          except IOError as e:
+              print(f"Error writing output: {e}", file=sys.stderr)
+              sys.exit(1)
+
+      - name: GitHub scan summary comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const link = `https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning?query=pr%3A${context.issue.number}+is%3Aopen`;
+            const sentence = `AquaSec has completed a full security repository scan ✅ You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
+            const summaryTable = `${{ steps.scan_summary_table.outputs.table }}`;
+            const body = `${sentence}\n\n${summaryTable}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
