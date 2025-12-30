@@ -90,11 +90,11 @@ jobs:
             PAGE_COUNT=$(echo "$PAGE_DATA" | jq 'length')
             echo "Retrieved $PAGE_COUNT findings on page $PAGE_NUM"
           
-            FINDINGS_JSON=$(echo "FINDINGS_JSON" "$PAGE_DATA" | jq -s 'add')
+            FINDINGS_JSON=$(echo "$FINDINGS_JSON" "$PAGE_DATA" | jq -s 'add')
           
-            FINDINGS_COUNT=$(echo "FINDINGS_JSON" | jq 'length')
+            FINDINGS_COUNT=$(echo "$FINDINGS_JSON" | jq 'length')
           
-            if [ "FINDINGS_COUNT" -ge "$TOTAL_EXPECTED" ] || [ "$PAGE_COUNT" -eq 0 ]; then
+            if [ "$FINDINGS_COUNT" -ge "$TOTAL_EXPECTED" ] || [ "$PAGE_COUNT" -eq 0 ]; then
               break
             fi
           
@@ -102,10 +102,10 @@ jobs:
             sleep 2
           done
           
-          FINDINGS_COUNT=$(echo "FINDINGS_JSON" | jq 'length')
-          echo "Total findings retrieved: FINDINGS_COUNT"
+          FINDINGS_COUNT=$(echo "$FINDINGS_JSON" | jq 'length')
+          echo "Total findings retrieved: $FINDINGS_COUNT"
           
-          jq -n --argjson total "FINDINGS_COUNT" --argjson data "FINDINGS_JSON" \
+          jq -n --argjson total "$FINDINGS_COUNT" --argjson data "$FINDINGS_JSON" \
             '{"total": $total, "size": $total, "page": 1, "data": $data}' > aquasec_scan_results.json
           
           echo "Full repository scan retrieved successfully"
