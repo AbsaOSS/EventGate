@@ -207,11 +207,6 @@ jobs:
                   }]
               }
               
-              # Add finding unique hash for cross-scan deduplication
-              finding_hash = finding.get("result_hash")
-              if finding_hash:
-                  sarif_finding["partialFingerprints"] = {"primaryLocationLineHash": finding_hash[:64]}
-              
               sarif_findings.append(sarif_finding)
           
           sarif_output = {
