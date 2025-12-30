@@ -50,7 +50,7 @@ jobs:
           STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
           SIGNATURE=$(echo -n "$STRING_TO_SIGN" | openssl dgst -sha256 -hmac "${AQUA_SECRET}" -hex | sed 's/.*= //g')
 
-          AUTH_RESPONSE=$(curl -s -X $METHOD "$AUTH_ENDPOINT" \
+          AUTH_RESPONSE=$(curl -s --max-time 30 -X $METHOD "$AUTH_ENDPOINT" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: $AQUA_KEY" \
             -H "X-Timestamp: $TIMESTAMP" \
@@ -80,7 +80,7 @@ jobs:
           
             REQUEST_URL="${SCAN_RESULTS_ENDPOINT}?repositoryIds=${REPOSITORY_ID}&size=${PAGE_SIZE}&page=${PAGE_NUM}"
           
-            PAGE_RESPONSE=$(curl -s -X GET "$REQUEST_URL" \
+            PAGE_RESPONSE=$(curl -s --max-time 30 -X GET "$REQUEST_URL" \
               -H "Authorization: Bearer $BEARER_TOKEN" \
               -H "Accept: application/json")
           
@@ -326,14 +326,16 @@ jobs:
       - name: GitHub scan summary comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
+        env:
+          SUMMARY_TABLE: ${{ steps.scan_summary_table.outputs.table }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const link = `https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning?query=pr%3A${context.issue.number}+is%3Aopen`;
             const sentence = `AquaSec has completed a full security repository scan ✅ You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
-            const summaryTable = `${{ steps.scan_summary_table.outputs.table }}`;
-            const body = `${sentence}\n\n${summaryTable}`;
-            github.rest.issues.createComment({
+            const summaryTable = process.env.SUMMARY_TABLE;
+            const body = sentence + "\n\n" + summaryTable;
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
