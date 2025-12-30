@@ -81,19 +81,8 @@ jobs:
               exit 1
             fi
           
-            # Check if response is valid JSON
-            if ! echo "$PAGE_RESPONSE" | jq empty 2>/dev/null; then
-              echo "Invalid JSON response from API:"
-              echo "$PAGE_RESPONSE"
-              exit 1
-            fi
-          
             if [ $PAGE_NUM -eq 1 ]; then
               TOTAL_EXPECTED=$(echo "$PAGE_RESPONSE" | jq -r '.total // 0')
-              if ! [[ "$TOTAL_EXPECTED" =~ ^[0-9]+$ ]]; then
-                echo "Error: Invalid total value from API: $TOTAL_EXPECTED"
-                exit 1
-              fi
               echo "Total findings expected: $TOTAL_EXPECTED"
             fi
           
