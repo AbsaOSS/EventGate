@@ -87,7 +87,7 @@ writer_postgres.init(logger)
 handler_topic = HandlerTopic(CONF_DIR, ACCESS, handler_token).load_topic_schemas()
 
 # Initialize health handler
-handler_health = HandlerHealth(logger, config)
+handler_health = HandlerHealth()
 
 
 def get_api() -> Dict[str, Any]:

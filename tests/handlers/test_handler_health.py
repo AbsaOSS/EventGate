@@ -16,30 +16,20 @@
 
 import json
 from unittest.mock import MagicMock, patch
-import logging
 
 from src.handlers.handler_health import HandlerHealth
 
+### get_health()
 
-## get_health() - healthy state
-def test_get_health_all_dependencies_healthy():
-    """Health check returns 200 when all writer STATEs are properly initialized."""
-    logger = logging.getLogger("test")
-    config = {}
-    handler = HandlerHealth(logger, config)
+## Minimal healthy state (just kafka)
+def test_get_health_minimal_kafka_healthy():
+    """Health check returns 200 when Kafka is initialized and optional writers are disabled."""
+    handler = HandlerHealth()
 
-    # Mock all writers as healthy
     with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"logger": logger, "producer": MagicMock()}),
-        patch(
-            "src.handlers.handler_health.writer_eventbridge.STATE",
-            {
-                "logger": logger,
-                "client": MagicMock(),
-                "event_bus_arn": "arn:aws:events:us-east-1:123456789012:event-bus/my-bus",
-            },
-        ),
-        patch("src.handlers.handler_health.writer_postgres.logger", logger),
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
+        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": None, "event_bus_arn": ""}),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", {"database": ""}),
     ):
         response = handler.get_health()
 
@@ -47,95 +37,110 @@ def test_get_health_all_dependencies_healthy():
     body = json.loads(response["body"])
     assert body["status"] == "ok"
     assert "uptime_seconds" in body
-    assert isinstance(body["uptime_seconds"], int)
-    assert body["uptime_seconds"] >= 0
 
 
-## get_health() - degraded state - kafka
+## Healthy state with all writers enabled
+def test_get_health_all_writers_enabled_and_healthy():
+    """Health check returns 200 when all writers are enabled and properly configured."""
+    handler = HandlerHealth()
+    postgres_config = {"database": "db", "host": "localhost", "user": "user", "password": "pass", "port": "5432"}
+
+    with (
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
+        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
+    ):
+        response = handler.get_health()
+
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"] == "ok"
+    assert "uptime_seconds" in body
+
+
+## Degraded state with all writers enabled
 def test_get_health_kafka_not_initialized():
     """Health check returns 503 when Kafka writer is not initialized."""
-    logger = logging.getLogger("test")
-    config = {}
-    handler = HandlerHealth(logger, config)
+    handler = HandlerHealth()
+    postgres_config = {"database": "db", "host": "", "user": "", "password": "", "port": ""}
 
-    # Mock Kafka as not initialized (missing producer key)
     with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"logger": logger}),
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": None}),
         patch(
             "src.handlers.handler_health.writer_eventbridge.STATE",
-            {"logger": logger, "client": MagicMock(), "event_bus_arn": "arn"},
+            {"client": None, "event_bus_arn": "arn:aws:events:us-east-1:123:event-bus/bus"}
         ),
-        patch("src.handlers.handler_health.writer_postgres.logger", logger),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
     ):
         response = handler.get_health()
 
     assert response["statusCode"] == 503
     body = json.loads(response["body"])
     assert body["status"] == "degraded"
-    assert "details" in body
-    assert "kafka" in body["details"]
-    assert body["details"]["kafka"] == "not_initialized"
+    assert "kafka" in body["failures"]
+    assert "eventbridge" in body["failures"]
+    assert "postgres" in body["failures"]
 
 
-## get_health() - degraded state - eventbridge
-def test_get_health_eventbridge_not_initialized():
-    """Health check returns 503 when EventBridge writer is not initialized."""
-    logger = logging.getLogger("test")
-    config = {}
-    handler = HandlerHealth(logger, config)
+## Healthy when eventbridge is disabled
+def test_get_health_eventbridge_disabled():
+    """Health check returns 200 when EventBridge is disabled (empty event_bus_arn)."""
+    handler = HandlerHealth()
+    postgres_config = {"database": "db", "host": "localhost", "user": "user", "password": "pass", "port": "5432"}
 
-    # Mock EventBridge as not initialized (missing client key)
     with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"logger": logger, "producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"logger": logger}),
-        patch("src.handlers.handler_health.writer_postgres.logger", logger),
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
+        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": None, "event_bus_arn": ""}),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
     ):
         response = handler.get_health()
 
-    assert response["statusCode"] == 503
-    body = json.loads(response["body"])
-    assert body["status"] == "degraded"
-    assert "eventbridge" in body["details"]
-    assert body["details"]["eventbridge"] == "not_initialized"
+    assert response["statusCode"] == 200
 
 
-## get_health() - degraded state - multiple failures
-def test_get_health_multiple_dependencies_not_initialized():
-    """Health check returns 503 when multiple writers are not initialized."""
-    logger = logging.getLogger("test")
-    config = {}
-    handler = HandlerHealth(logger, config)
+## Healthy when postgres is disabled
+def test_get_health_postgres_disabled():
+    """Health check returns 200 when PostgreSQL is disabled (empty database)."""
+    handler = HandlerHealth()
 
-    # Mock multiple writers as not initialized
     with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {}),
-        patch("src.handlers.handler_health.writer_postgres", spec=[]),  # spec=[] makes logger not exist
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
+        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", {"database": ""}),
+    ):
+        response = handler.get_health()
+
+    assert response["statusCode"] == 200
+
+
+## Degraded state - postgres host not configured
+def test_get_health_postgres_host_not_configured():
+    """Health check returns 503 when PostgreSQL host is not configured."""
+    handler = HandlerHealth()
+    postgres_config = {"database": "db", "host": "", "user": "user", "password": "pass", "port": "5432"}
+
+    with (
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
+        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
     ):
         response = handler.get_health()
 
     assert response["statusCode"] == 503
     body = json.loads(response["body"])
-    assert body["status"] == "degraded"
-    assert len(body["details"]) >= 2  # At least kafka and eventbridge
-    assert "kafka" in body["details"]
-    assert "eventbridge" in body["details"]
+    assert body["failures"]["postgres"] == "host not configured"
 
 
-## get_health() - uptime calculation
+## Uptime calculation
 def test_get_health_uptime_is_positive():
     """Verify uptime_seconds is calculated and is a positive integer."""
-    logger = logging.getLogger("test")
-    config = {}
-    handler = HandlerHealth(logger, config)
+    handler = HandlerHealth()
+    postgres_config = {"database": "db", "host": "localhost", "user": "user", "password": "pass", "port": "5432"}
 
     with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"logger": logger, "producer": MagicMock()}),
-        patch(
-            "src.handlers.handler_health.writer_eventbridge.STATE",
-            {"logger": logger, "client": MagicMock(), "event_bus_arn": "arn"},
-        ),
-        patch("src.handlers.handler_health.writer_postgres.logger", logger),
+        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
+        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
+        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
     ):
         response = handler.get_health()
 

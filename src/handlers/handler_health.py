@@ -19,10 +19,15 @@ This module provides the HandlerHealth class for service health monitoring.
 """
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any
 
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
+
+logger = logging.getLogger(__name__)
+log_level = os.environ.get("LOG_LEVEL", "INFO")
+logger.setLevel(log_level)
 
 
 class HandlerHealth:
@@ -30,72 +35,58 @@ class HandlerHealth:
     HandlerHealth manages service health checks and dependency status monitoring.
     """
 
-    def __init__(self, logger_instance: logging.Logger, config: Dict[str, Any]):
-        """
-        Initialize the health handler.
-
-        Args:
-            logger_instance: Shared application logger.
-            config: Configuration dictionary.
-        """
-        self.logger = logger_instance
-        self.config = config
-        self.start_time = datetime.now(timezone.utc)
+    def __init__(self):
+        self.start_time: datetime = datetime.now(timezone.utc)
 
     def get_health(self) -> Dict[str, Any]:
         """
         Check service health and return status.
-
-        Performs lightweight dependency checks by verifying that writer STATE
-        dictionaries are properly initialized with required keys.
 
         Returns:
             Dict[str, Any]: API Gateway response with health status.
                 - 200: All dependencies healthy
                 - 503: One or more dependencies not initialized
         """
-        self.logger.debug("Handling GET Health")
+        logger.debug("Handling GET Health")
 
-        details: Dict[str, str] = {}
-        all_healthy = True
+        failures: Dict[str, str] = {}
 
-        # Check Kafka writer STATE
-        kafka_state = writer_kafka.STATE
-        if not all(key in kafka_state for key in ["logger", "producer"]):
-            details["kafka"] = "not_initialized"
-            all_healthy = False
-            self.logger.debug("Kafka writer not properly initialized")
+        # Check Kafka writer
+        if writer_kafka.STATE.get("producer") is None:
+            failures["kafka"] = "producer not initialized"
 
-        # Check EventBridge writer STATE
-        eventbridge_state = writer_eventbridge.STATE
-        if not all(key in eventbridge_state for key in ["logger", "client", "event_bus_arn"]):
-            details["eventbridge"] = "not_initialized"
-            all_healthy = False
-            self.logger.debug("EventBridge writer not properly initialized")
+        # Check EventBridge writer
+        eventbus_arn = writer_eventbridge.STATE.get("event_bus_arn")
+        eventbridge_client = writer_eventbridge.STATE.get("client")
+        if eventbus_arn:
+            if eventbridge_client is None:
+                failures["eventbridge"] = "client not initialized"
 
-        # Check PostgreSQL writer - it uses global logger variable and POSTGRES dict
-        # Just verify the module is accessible (init is always called in event_gate_lambda)
-        try:
-            _ = writer_postgres.logger
-        except AttributeError:
-            details["postgres"] = "not_initialized"
-            all_healthy = False
-            self.logger.debug("PostgreSQL writer not accessible")
+        # Check PostgreSQL writer
+        postgres_config = writer_postgres.POSTGRES
+        if postgres_config.get("database"):
+            if not postgres_config.get("host"):
+                failures["postgres"] = "host not configured"
+            elif not postgres_config.get("user"):
+                failures["postgres"] = "user not configured"
+            elif not postgres_config.get("password"):
+                failures["postgres"] = "password not configured"
+            elif not postgres_config.get("port"):
+                failures["postgres"] = "port not configured"
 
-        # Calculate uptime
         uptime_seconds = int((datetime.now(timezone.utc) - self.start_time).total_seconds())
 
-        if all_healthy:
-            self.logger.debug("Health check passed - all dependencies healthy")
+        if not failures:
+            logger.debug("Health check passed")
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"status": "ok", "uptime_seconds": uptime_seconds}),
             }
 
-        self.logger.debug("Health check degraded - some dependencies not initialized: %s", details)
+        logger.debug("Health check degraded: %s", failures)
         return {
             "statusCode": 503,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"status": "degraded", "details": details}),
+            "body": json.dumps({"status": "degraded", "failures": failures}),
         }

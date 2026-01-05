@@ -66,12 +66,14 @@ paths:
                   status:
                     type: string
                     example: degraded
-                  details:
+                  failures:
                     type: object
                     additionalProperties:
                       type: string
                     example:
-                      kafka: not_initialized
+                      eventbridge: client not initialized
+                      kafka: producer not initialized
+                      postgres: host not configured
 
   /topics:
     get:
