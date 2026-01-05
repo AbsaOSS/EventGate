@@ -21,6 +21,7 @@ from src.handlers.handler_health import HandlerHealth
 
 ### get_health()
 
+
 ## Minimal healthy state (just kafka)
 def test_get_health_minimal_kafka_healthy():
     """Health check returns 200 when Kafka is initialized and optional writers are disabled."""
@@ -68,7 +69,7 @@ def test_get_health_kafka_not_initialized():
         patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": None}),
         patch(
             "src.handlers.handler_health.writer_eventbridge.STATE",
-            {"client": None, "event_bus_arn": "arn:aws:events:us-east-1:123:event-bus/bus"}
+            {"client": None, "event_bus_arn": "arn:aws:events:us-east-1:123:event-bus/bus"},
         ),
         patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
     ):
