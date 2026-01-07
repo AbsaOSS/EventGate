@@ -12,6 +12,3 @@ __pycache__
 
 # Terraform Plan output files
 *.sarif
-
-# Development script
-run.sh
