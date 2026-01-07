@@ -38,6 +38,43 @@ paths:
         '303':
           description: Redirect to actual address of Loing service which performs auth up to its capabilities
 
+  /health:
+    get:
+      summary: Service health check
+      description: Service health and dependency status check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  uptime_seconds:
+                    type: integer
+                    example: 12345
+        '503':
+          description: Service is degraded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: degraded
+                  failures:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      eventbridge: client not initialized
+                      kafka: producer not initialized
+                      postgres: host not configured
+
   /topics:
     get:
       summary: Get a list of topics
