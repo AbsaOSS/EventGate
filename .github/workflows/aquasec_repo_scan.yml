@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -232,7 +232,7 @@ jobs:
           print(f"Converted {len(sarif_findings)} findings to SARIF 2.1.0 format")
 
       - name: Upload Scan Results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb
         with:
           sarif_file: aquasec_scan.sarif
           category: aquasec
@@ -320,7 +320,7 @@ jobs:
 
       - name: GitHub scan summary comment
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         env:
           SUMMARY_TABLE: ${{ steps.scan_summary_table.outputs.table }}
         with:

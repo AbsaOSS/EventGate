@@ -23,7 +23,7 @@ jobs:
       terraform_changed: ${{ steps.changes.outputs.terraform_changed }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -50,13 +50,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v6
+        uses: terraform-linters/setup-tflint@4cb9feea73331a35b422df102992a03a44a3bb33
         with:
           tflint_version: latest
 
@@ -69,7 +69,7 @@ jobs:
         run: tflint --minimum-failure-severity=error -f sarif > "$GITHUB_WORKSPACE/tflint_terraform.sarif"
 
       - name: Upload TFLint SARIF file
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb
         with:
           sarif_file: ${{ github.workspace }}/tflint_terraform.sarif
 
