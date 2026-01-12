@@ -13,7 +13,7 @@ resource "aws_api_gateway_rest_api" "event_gate_api" {
         Effect = "Allow",
         Action = "execute-api:Invoke",
         Resource = "*",
-        Principal = "*"
+        Principal = "*",
 		Condition = {
           StringEquals = {
             "aws:sourceVpce" = var.vpc_endpoint
