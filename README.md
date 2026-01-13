@@ -19,7 +19,6 @@ Python AWS Lambda that exposes a simple HTTP API (via API Gateway) for validatin
   - [Kafka Writer](#kafka-writer)
   - [EventBridge Writer](#eventbridge-writer)
   - [Postgres Writer](#postgres-writer)
-- [Scripts](#scripts)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 <!-- tocstop -->
@@ -34,7 +33,7 @@ EventGate receives JSON payloads for registered topics, authorizes the caller vi
 - Runtime-configurable access rules (local or S3)
 - API-discoverable schema catalogue
 - Pluggable writer initialization via `config.json`
-- Terraform IaC examples for AWS deployment (API Gateway + Lambda)
+- Terraform IaC examples for AWS deployment (API Gateway + Lambda) in `terraform_examples/`
 - Supports both Zip-based and Container Image Lambda packaging (Container path enables custom `librdkafka` / SASL_SSL / Kerberos builds)
 
 ## Architecture
@@ -47,8 +46,9 @@ High-level flow:
 
 Key files:
 - `src/event_gate_lambda.py` – main Lambda handler and routing
-- `conf/*.json` – configuration and topic schemas
-- `conf/api.yaml` – OpenAPI 3 definition served at `/api`
+- `conf/*.json` – configuration files
+- `conf/topic_schemas/` – JSON topic schemas
+- `api.yaml` – OpenAPI 3 definition served at `/api`
 - `writer_*.py` – individual sink implementations
 
 ## API
@@ -58,18 +58,21 @@ All responses are JSON unless otherwise noted. The POST endpoint requires a vali
 |--------|----------|------|-------------|
 | GET | `/api` | none | Returns OpenAPI 3 definition (raw YAML) |
 | GET | `/token` | none | 303 redirect to external token provider |
+| GET | `/health` | none | Returns service health and dependency status |
 | GET | `/topics` | none | Lists available topic names |
 | GET | `/topics/{topicName}` | none | Returns JSON Schema for the topic |
 | POST | `/topics/{topicName}` | JWT | Validates + forwards message to configured sinks |
 | POST | `/terminate` | (internal) | Forces Lambda process exit (used to trigger cold start & config reload) |
 
 Status codes:
+- 200 – Health check pass
 - 202 – Accepted (all writers succeeded)
 - 400 – Schema validation failure
 - 401 – Token missing/invalid
 - 403 – Subject unauthorized for topic
 - 404 – Unknown topic or route
 - 500 – One or more writers failed / internal error
+- 503 – Service degraded (dependency not initialized)
 
 ## Configuration
 All core runtime configuration is driven by JSON files located in `conf/` unless S3 paths are specified.
@@ -100,14 +103,13 @@ Configuration keys:
 
 Supporting configs:
 - `access.json` – map: topicName -> array of authorized subjects (JWT `sub`). May reside locally or at S3 path referenced by `access_config`.
-- `topic_*.json` – each file contains a JSON Schema for a topic. In the current code these are explicitly loaded inside `event_gate_lambda.py`. (Future enhancement: auto-discover or index file.)
-- `api.yaml` – OpenAPI spec served verbatim at runtime.
+- `topic_schemas/*.json` – each file contains a JSON Schema for a topic. In the current code these are explicitly loaded inside `event_gate_lambda.py`. (Future enhancement: auto-discover or index file.)
 
 Environment variables:
 - `LOG_LEVEL` (optional) – defaults to `INFO`.
 
 ## Deployment
-Infrastructure-as-Code examples live in the `terraform/` directory. Variables are supplied via a `*.tfvars` file or CLI.
+Infrastructure-as-Code examples are provided in `terraform_examples/`. These are reference implementations that you can adapt to your environment. Variables are supplied via a `*.tfvars` file or CLI.
 
 ### Zip Lambda Package
 Use when no custom native libraries are needed.
@@ -169,11 +171,6 @@ Publishes events to the configured `event_bus_arn` using put events API.
 ### Postgres Writer
 Example writer (currently a placeholder if no DSN present) demonstrating extensibility pattern.
 
-## Scripts
-- `scripts/prepare.deplyoment.sh` – build Zip artifact for Lambda (typo in name retained for now; may rename later)
-- `scripts/notebook.ipynb` – exploratory invocation cells per endpoint
-- `scripts/get_token.http` – sample HTTP request for tooling (e.g., VSCode REST client)
-
 ## Troubleshooting
 | Symptom | Possible Cause | Action |
 |---------|----------------|--------|
@@ -181,6 +178,7 @@ Example writer (currently a placeholder if no DSN present) demonstrating extensi
 | 403 Forbidden | Subject not listed in access map | Update `access.json` and redeploy / reload |
 | 404 Topic not found | Wrong casing or not loaded in code | Verify loaded topics & file names |
 | 500 Writer failure | Downstream (Kafka / EventBridge / DB) unreachable | Check network / VPC endpoints / security groups |
+| 503 Service degraded | Dependency not initialized | Check `/health` response for specific failure |
 | Lambda keeps old config | Warm container | Call `/terminate` (internal) to force cold start |
 
 ## License

@@ -5,10 +5,5 @@ __pycache__
 /dependencies
 /lambda_function.zip
 
-# Terraform files
-/terraform/*.tfvars
-/terraform/*.tfstate*
-/terraform/.terraform*
-
 # Terraform Plan output files
 *.sarif

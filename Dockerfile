@@ -73,6 +73,7 @@ RUN \
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
 COPY src $LAMBDA_TASK_ROOT/src
 COPY conf $LAMBDA_TASK_ROOT/conf
+COPY api.yaml $LAMBDA_TASK_ROOT/api.yaml
 
 # Mark librdkafka to LD_LIBRARY_PATH  
 # Kerberos default CCACHE override due to KEYRING issues
