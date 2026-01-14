@@ -295,3 +295,24 @@ class WriterPostgres(Writer):
             return False, err_msg
 
         return True, None
+
+    def check_health(self) -> Tuple[bool, str]:
+        """
+        Check PostgreSQL writer health.
+
+        Returns:
+            Tuple of (is_healthy: bool, message: str).
+        """
+        if not self._db_config.get("database"):
+            return True, "not configured"
+
+        if not self._db_config.get("host"):
+            return False, "host not configured"
+        if not self._db_config.get("user"):
+            return False, "user not configured"
+        if not self._db_config.get("password"):
+            return False, "password not configured"
+        if not self._db_config.get("port"):
+            return False, "port not configured"
+
+        return True, "ok"

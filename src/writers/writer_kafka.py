@@ -165,3 +165,24 @@ class WriterKafka(Writer):
             return False, failure_text
 
         return True, None
+
+    def check_health(self) -> Tuple[bool, str]:
+        """
+        Check Kafka writer health.
+
+        Returns:
+            Tuple of (is_healthy: bool, message: str).
+        """
+        if not self.config.get("kafka_bootstrap_server"):
+            return True, "not configured"
+
+        try:
+            if self._producer is None:
+                self._producer = self._create_producer()
+                logger.debug("Kafka producer initialized during health check")
+            if self._producer is None:
+                return False, "producer initialization failed"
+            return True, "ok"
+        except KafkaException as err:
+            return False, str(err)
+

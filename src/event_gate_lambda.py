@@ -29,7 +29,9 @@ from src.handlers.handler_topic import HandlerTopic
 from src.handlers.handler_health import HandlerHealth
 from src.utils.constants import SSL_CA_BUNDLE_KEY
 from src.utils.utils import build_error_response
-from src.writers import writer_eventbridge, writer_kafka, writer_postgres
+from src.writers.writer_eventbridge import WriterEventBridge
+from src.writers.writer_kafka import WriterKafka
+from src.writers.writer_postgres import WriterPostgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 
 
@@ -79,15 +81,17 @@ logger.debug("Loaded access configuration")
 handler_token = HandlerToken(config).load_public_keys()
 
 # Initialize EventGate writers
-writer_eventbridge.init(logger, config)
-writer_kafka.init(logger, config)
-writer_postgres.init(logger)
+writer_eventbridge = WriterEventBridge(config)
+writer_kafka = WriterKafka(config)
+writer_postgres = WriterPostgres(config)
 
 # Initialize topic handler and load topic schemas
-handler_topic = HandlerTopic(CONF_DIR, ACCESS, handler_token).load_topic_schemas()
+handler_topic = HandlerTopic(
+    CONF_DIR, ACCESS, handler_token, writer_eventbridge, writer_kafka, writer_postgres
+).load_topic_schemas()
 
 # Initialize health handler
-handler_health = HandlerHealth()
+handler_health = HandlerHealth(writer_eventbridge, writer_kafka, writer_postgres)
 
 
 def get_api() -> Dict[str, Any]:

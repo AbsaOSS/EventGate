@@ -45,3 +45,16 @@ class Writer(ABC):
             - (True, None) on success or when writer is disabled/skipped.
             - (False, "error description") on failure.
         """
+
+    @abstractmethod
+    def check_health(self) -> Tuple[bool, str]:
+        """
+        Check writer health and connectivity.
+
+        Returns:
+            Tuple of (is_healthy: bool, message: str).
+            - (True, "ok") - configured and working.
+            - (True, "not configured") - not configured, skipped.
+            - (False, "error message") - configured but failing.
+        """
+

@@ -102,3 +102,21 @@ class WriterEventBridge(Writer):
             return False, str(err)
 
         return True, None
+
+    def check_health(self) -> Tuple[bool, str]:
+        """
+        Check EventBridge writer health.
+
+        Returns:
+            Tuple of (is_healthy: bool, message: str).
+        """
+        if not self.event_bus_arn:
+            return True, "not configured"
+
+        try:
+            if self._client is None:
+                self._client = boto3.client("events")
+                logger.debug("EventBridge client initialized during health check")
+            return True, "ok"
+        except (BotoCoreError, ClientError) as err:
+            return False, str(err)
