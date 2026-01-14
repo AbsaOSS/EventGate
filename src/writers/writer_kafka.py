@@ -185,4 +185,3 @@ class WriterKafka(Writer):
             return True, "ok"
         except KafkaException as err:
             return False, str(err)
-

@@ -35,16 +35,9 @@ class HandlerHealth:
     HandlerHealth manages service health checks and dependency status monitoring.
     """
 
-    def __init__(
-        self,
-        writer_eventbridge: Writer,
-        writer_kafka: Writer,
-        writer_postgres: Writer,
-    ):
+    def __init__(self, writers: Dict[str, Writer]):
         self.start_time: datetime = datetime.now(timezone.utc)
-        self.writer_eventbridge = writer_eventbridge
-        self.writer_kafka = writer_kafka
-        self.writer_postgres = writer_postgres
+        self.writers = writers
 
     def get_health(self) -> Dict[str, Any]:
         """
@@ -59,11 +52,7 @@ class HandlerHealth:
 
         failures: Dict[str, str] = {}
 
-        for name, writer in [
-            ("kafka", self.writer_kafka),
-            ("eventbridge", self.writer_eventbridge),
-            ("postgres", self.writer_postgres),
-        ]:
+        for name, writer in self.writers.items():
             healthy, msg = writer.check_health()
             if not healthy:
                 failures[name] = msg

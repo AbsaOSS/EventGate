@@ -57,4 +57,3 @@ class Writer(ABC):
             - (True, "not configured") - not configured, skipped.
             - (False, "error message") - configured but failing.
         """
-

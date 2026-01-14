@@ -45,16 +45,12 @@ class HandlerTopic:
         conf_dir: str,
         access_config: Dict[str, list[str]],
         handler_token: HandlerToken,
-        writer_eventbridge: Writer,
-        writer_kafka: Writer,
-        writer_postgres: Writer,
+        writers: Dict[str, Writer],
     ):
         self.conf_dir = conf_dir
         self.access_config = access_config
         self.handler_token = handler_token
-        self.writer_eventbridge = writer_eventbridge
-        self.writer_kafka = writer_kafka
-        self.writer_postgres = writer_postgres
+        self.writers = writers
         self.topics: Dict[str, Dict[str, Any]] = {}
 
     def load_topic_schemas(self) -> "HandlerTopic":
@@ -139,17 +135,11 @@ class HandlerTopic:
         except ValidationError as exc:
             return build_error_response(400, "validation", exc.message)
 
-        kafka_ok, kafka_err = self.writer_kafka.write(topic_name, topic_message)
-        eventbridge_ok, eventbridge_err = self.writer_eventbridge.write(topic_name, topic_message)
-        postgres_ok, postgres_err = self.writer_postgres.write(topic_name, topic_message)
-
         errors = []
-        if not kafka_ok:
-            errors.append({"type": "kafka", "message": kafka_err})
-        if not eventbridge_ok:
-            errors.append({"type": "eventbridge", "message": eventbridge_err})
-        if not postgres_ok:
-            errors.append({"type": "postgres", "message": postgres_err})
+        for writer_name, writer in self.writers.items():
+            ok, err = writer.write(topic_name, topic_message)
+            if not ok:
+                errors.append({"type": writer_name, "message": err})
 
         if errors:
             return {
