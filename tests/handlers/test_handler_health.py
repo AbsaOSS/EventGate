@@ -15,9 +15,17 @@
 #
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.handlers.handler_health import HandlerHealth
+
+
+def _create_mock_writer(check_health_return):
+    """Create a mock writer with check_health returning the specified value."""
+    mock = MagicMock()
+    mock.check_health.return_value = check_health_return
+    return mock
+
 
 ### get_health()
 
@@ -25,14 +33,14 @@ from src.handlers.handler_health import HandlerHealth
 ## Minimal healthy state (just kafka)
 def test_get_health_minimal_kafka_healthy():
     """Health check returns 200 when Kafka is initialized and optional writers are disabled."""
-    handler = HandlerHealth()
+    writers = {
+        "kafka": _create_mock_writer((True, "ok")),
+        "eventbridge": _create_mock_writer((True, "not configured")),
+        "postgres": _create_mock_writer((True, "not configured")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": None, "event_bus_arn": ""}),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", {"database": ""}),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
@@ -43,15 +51,14 @@ def test_get_health_minimal_kafka_healthy():
 ## Healthy state with all writers enabled
 def test_get_health_all_writers_enabled_and_healthy():
     """Health check returns 200 when all writers are enabled and properly configured."""
-    handler = HandlerHealth()
-    postgres_config = {"database": "db", "host": "localhost", "user": "user", "password": "pass", "port": "5432"}
+    writers = {
+        "kafka": _create_mock_writer((True, "ok")),
+        "eventbridge": _create_mock_writer((True, "ok")),
+        "postgres": _create_mock_writer((True, "ok")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
@@ -59,21 +66,17 @@ def test_get_health_all_writers_enabled_and_healthy():
     assert "uptime_seconds" in body
 
 
-## Degraded state with all writers enabled
+## Degraded state with all writers failing
 def test_get_health_kafka_not_initialized():
     """Health check returns 503 when Kafka writer is not initialized."""
-    handler = HandlerHealth()
-    postgres_config = {"database": "db", "host": "", "user": "", "password": "", "port": ""}
+    writers = {
+        "kafka": _create_mock_writer((False, "producer initialization failed")),
+        "eventbridge": _create_mock_writer((False, "client initialization failed")),
+        "postgres": _create_mock_writer((False, "host not configured")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": None}),
-        patch(
-            "src.handlers.handler_health.writer_eventbridge.STATE",
-            {"client": None, "event_bus_arn": "arn:aws:events:us-east-1:123:event-bus/bus"},
-        ),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     assert response["statusCode"] == 503
     body = json.loads(response["body"])
@@ -86,15 +89,14 @@ def test_get_health_kafka_not_initialized():
 ## Healthy when eventbridge is disabled
 def test_get_health_eventbridge_disabled():
     """Health check returns 200 when EventBridge is disabled (empty event_bus_arn)."""
-    handler = HandlerHealth()
-    postgres_config = {"database": "db", "host": "localhost", "user": "user", "password": "pass", "port": "5432"}
+    writers = {
+        "kafka": _create_mock_writer((True, "ok")),
+        "eventbridge": _create_mock_writer((True, "not configured")),
+        "postgres": _create_mock_writer((True, "ok")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": None, "event_bus_arn": ""}),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     assert response["statusCode"] == 200
 
@@ -102,14 +104,14 @@ def test_get_health_eventbridge_disabled():
 ## Healthy when postgres is disabled
 def test_get_health_postgres_disabled():
     """Health check returns 200 when PostgreSQL is disabled (empty database)."""
-    handler = HandlerHealth()
+    writers = {
+        "kafka": _create_mock_writer((True, "ok")),
+        "eventbridge": _create_mock_writer((True, "ok")),
+        "postgres": _create_mock_writer((True, "not configured")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", {"database": ""}),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     assert response["statusCode"] == 200
 
@@ -117,15 +119,14 @@ def test_get_health_postgres_disabled():
 ## Degraded state - postgres host not configured
 def test_get_health_postgres_host_not_configured():
     """Health check returns 503 when PostgreSQL host is not configured."""
-    handler = HandlerHealth()
-    postgres_config = {"database": "db", "host": "", "user": "user", "password": "pass", "port": "5432"}
+    writers = {
+        "kafka": _create_mock_writer((True, "ok")),
+        "eventbridge": _create_mock_writer((True, "ok")),
+        "postgres": _create_mock_writer((False, "host not configured")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     assert response["statusCode"] == 503
     body = json.loads(response["body"])
@@ -135,15 +136,14 @@ def test_get_health_postgres_host_not_configured():
 ## Uptime calculation
 def test_get_health_uptime_is_positive():
     """Verify uptime_seconds is calculated and is a positive integer."""
-    handler = HandlerHealth()
-    postgres_config = {"database": "db", "host": "localhost", "user": "user", "password": "pass", "port": "5432"}
+    writers = {
+        "kafka": _create_mock_writer((True, "ok")),
+        "eventbridge": _create_mock_writer((True, "ok")),
+        "postgres": _create_mock_writer((True, "ok")),
+    }
+    handler = HandlerHealth(writers)
 
-    with (
-        patch("src.handlers.handler_health.writer_kafka.STATE", {"producer": MagicMock()}),
-        patch("src.handlers.handler_health.writer_eventbridge.STATE", {"client": MagicMock(), "event_bus_arn": "arn"}),
-        patch("src.handlers.handler_health.writer_postgres.POSTGRES", postgres_config),
-    ):
-        response = handler.get_health()
+    response = handler.get_health()
 
     body = json.loads(response["body"])
     assert "uptime_seconds" in body
