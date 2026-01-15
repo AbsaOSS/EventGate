@@ -25,6 +25,7 @@ import os
 from typing import Any, Dict, Optional, Tuple
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.trace_logging import log_payload_at_trace
 from src.writers.writer import Writer
@@ -52,17 +53,31 @@ class WriterPostgres(Writer):
 
     def __init__(self, config: Dict[str, Any]) -> None:
         super().__init__(config)
-        secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
-        secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
-
-        if secret_name and secret_region:
-            aws_secrets = boto3.Session().client(service_name="secretsmanager", region_name=secret_region)
-            postgres_secret = aws_secrets.get_secret_value(SecretId=secret_name)["SecretString"]
-            self._db_config: Dict[str, Any] = json.loads(postgres_secret)
-        else:
-            self._db_config = {"database": ""}
-
+        self._secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
+        self._secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
+        self._db_config: Optional[Dict[str, Any]] = None
         logger.debug("Initialized PostgreSQL writer")
+
+    def _load_db_config(self) -> None:
+        """
+        Load database config from AWS Secrets Manager.
+        """
+        if not self._secret_name or not self._secret_region:
+            self._db_config = {"database": ""}
+            return
+
+        aws_secrets = boto3.Session().client(service_name="secretsmanager", region_name=self._secret_region)
+        postgres_secret = aws_secrets.get_secret_value(SecretId=self._secret_name)["SecretString"]
+        self._db_config = json.loads(postgres_secret)
+        logger.debug("Loaded PostgreSQL config from Secrets Manager")
+
+    def _ensure_db_config(self) -> Dict[str, Any]:
+        """
+        Ensure database config is loaded and return it.
+        """
+        if self._db_config is None:
+            self._load_db_config()
+        return self._db_config  # type: ignore[return-value]
 
     def _postgres_edla_write(self, cursor: Any, table: str, message: Dict[str, Any]) -> None:
         """
@@ -260,7 +275,9 @@ class WriterPostgres(Writer):
             Tuple of (success: bool, error_message: Optional[str]).
         """
         try:
-            if not self._db_config.get("database"):
+            db_config = self._ensure_db_config()
+
+            if not db_config.get("database"):
                 logger.debug("No Postgres - skipping Postgres writer")
                 return True, None
             if psycopg2 is None:
@@ -270,11 +287,11 @@ class WriterPostgres(Writer):
             log_payload_at_trace(logger, "Postgres", topic_name, message)
 
             with psycopg2.connect(  # type: ignore[attr-defined]
-                database=self._db_config["database"],
-                host=self._db_config["host"],
-                user=self._db_config["user"],
-                password=self._db_config["password"],
-                port=self._db_config["port"],
+                database=db_config["database"],
+                host=db_config["host"],
+                user=db_config["user"],
+                password=db_config["password"],
+                port=db_config["port"],
             ) as connection:
                 with connection.cursor() as cursor:
                     if topic_name == "public.cps.za.dlchange":
@@ -290,7 +307,7 @@ class WriterPostgres(Writer):
 
                 connection.commit()
         except (RuntimeError, PsycopgError) as e:
-            err_msg = f"The Postgres writer with failed unknown error: {str(e)}"
+            err_msg = f"The Postgres writer failed with unknown error: {str(e)}"
             logger.exception(err_msg)
             return False, err_msg
 
@@ -303,16 +320,22 @@ class WriterPostgres(Writer):
         Returns:
             Tuple of (is_healthy: bool, message: str).
         """
-        if not self._db_config.get("database"):
+        # Checking if Postgres intentionally disabled
+        if not self._secret_name or not self._secret_region:
             return True, "not configured"
 
-        if not self._db_config.get("host"):
-            return False, "host not configured"
-        if not self._db_config.get("user"):
-            return False, "user not configured"
-        if not self._db_config.get("password"):
-            return False, "password not configured"
-        if not self._db_config.get("port"):
-            return False, "port not configured"
+        try:
+            db_config = self._ensure_db_config()
+            logger.debug("PostgreSQL config loaded during health check")
+        except (BotoCoreError, ClientError) as err:
+            return False, str(err)
+
+        # Validate database configuration fields
+        if not db_config.get("database"):
+            return True, "database not configured"
+
+        missing_fields = [field for field in ("host", "user", "password", "port") if not db_config.get(field)]
+        if missing_fields:
+            return False, f"{missing_fields[0]} not configured"
 
         return True, "ok"

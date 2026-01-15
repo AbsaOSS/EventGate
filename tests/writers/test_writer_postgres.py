@@ -249,7 +249,7 @@ def test_write_exception_returns_false(reset_env, monkeypatch):
     writer = WriterPostgres({})
     writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     ok, err = writer.write("public.cps.za.test", {})
-    assert not ok and "failed unknown error" in err
+    assert not ok and "failed with unknown error" in err
 
 
 def test_init_with_secret(monkeypatch, reset_env):
@@ -264,6 +264,9 @@ def test_init_with_secret(monkeypatch, reset_env):
 
     monkeypatch.setattr(wp.boto3, "Session", lambda: MockSession())
     writer = WriterPostgres({})
+    assert writer._db_config is None
+    # Trigger lazy load via check_health
+    writer.check_health()
     assert writer._db_config == secret_dict
 
 
@@ -311,21 +314,39 @@ def test_write_runs_success(reset_env, monkeypatch):
 
 
 def test_check_health_not_configured():
+    # No secret env vars set, so it's "not configured"
     writer = WriterPostgres({})
-    writer._db_config = {"database": ""}
     healthy, msg = writer.check_health()
     assert healthy and msg == "not configured"
 
 
-def test_check_health_success():
+def test_check_health_success(reset_env, monkeypatch):
+    secret_dict = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    os.environ["POSTGRES_SECRET_NAME"] = "mysecret"
+    os.environ["POSTGRES_SECRET_REGION"] = "eu-west-1"
+    mock_client = types.SimpleNamespace(get_secret_value=lambda SecretId: {"SecretString": json.dumps(secret_dict)})
+
+    class MockSession:
+        def client(self, service_name, region_name):
+            return mock_client
+
+    monkeypatch.setattr(wp.boto3, "Session", MockSession)
     writer = WriterPostgres({})
-    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     healthy, msg = writer.check_health()
     assert healthy and msg == "ok"
 
 
-def test_check_health_missing_host():
+def test_check_health_missing_host(reset_env, monkeypatch):
+    secret_dict = {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}
+    os.environ["POSTGRES_SECRET_NAME"] = "mysecret"
+    os.environ["POSTGRES_SECRET_REGION"] = "eu-west-1"
+    mock_client = types.SimpleNamespace(get_secret_value=lambda SecretId: {"SecretString": json.dumps(secret_dict)})
+
+    class MockSession:
+        def client(self, service_name, region_name):
+            return mock_client
+
+    monkeypatch.setattr(wp.boto3, "Session", MockSession)
     writer = WriterPostgres({})
-    writer._db_config = {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}
     healthy, msg = writer.check_health()
     assert not healthy and "host not configured" in msg
