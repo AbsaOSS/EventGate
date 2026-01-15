@@ -306,7 +306,7 @@ class WriterPostgres(Writer):
                         return False, msg
 
                 connection.commit()
-        except (RuntimeError, PsycopgError) as e:
+        except (RuntimeError, PsycopgError, BotoCoreError, ClientError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {str(e)}"
             logger.exception(err_msg)
             return False, err_msg
