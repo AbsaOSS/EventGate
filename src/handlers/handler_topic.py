@@ -52,13 +52,14 @@ class HandlerTopic:
         Returns:
             HandlerTopic: The current instance with loaded topic schemas.
         """
-        logger.debug("Loading topic schemas from %s", self.conf_dir)
+        topic_schemas_dir = os.path.join(self.conf_dir, "topic_schemas")
+        logger.debug("Loading topic schemas from %s", topic_schemas_dir)
 
-        with open(os.path.join(self.conf_dir, "topic_runs.json"), "r", encoding="utf-8") as file:
+        with open(os.path.join(topic_schemas_dir, "runs.json"), "r", encoding="utf-8") as file:
             self.topics["public.cps.za.runs"] = json.load(file)
-        with open(os.path.join(self.conf_dir, "topic_dlchange.json"), "r", encoding="utf-8") as file:
+        with open(os.path.join(topic_schemas_dir, "dlchange.json"), "r", encoding="utf-8") as file:
             self.topics["public.cps.za.dlchange"] = json.load(file)
-        with open(os.path.join(self.conf_dir, "topic_test.json"), "r", encoding="utf-8") as file:
+        with open(os.path.join(topic_schemas_dir, "test.json"), "r", encoding="utf-8") as file:
             self.topics["public.cps.za.test"] = json.load(file)
 
         logger.debug("Loaded topic schemas successfully")
