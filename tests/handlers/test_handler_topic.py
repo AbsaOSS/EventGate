@@ -34,9 +34,9 @@ def test_load_topic_schemas_success():
     handler = HandlerTopic("conf", access_config, mock_handler_token, mock_writers)
 
     mock_schemas = {
-        "topic_runs.json": {"type": "object", "properties": {"run_id": {"type": "string"}}},
-        "topic_dlchange.json": {"type": "object", "properties": {"change_id": {"type": "string"}}},
-        "topic_test.json": {"type": "object", "properties": {"event_id": {"type": "string"}}},
+        "runs.json": {"type": "object", "properties": {"run_id": {"type": "string"}}},
+        "dlchange.json": {"type": "object", "properties": {"change_id": {"type": "string"}}},
+        "test.json": {"type": "object", "properties": {"event_id": {"type": "string"}}},
     }
 
     def mock_open_side_effect(file_path, *_args, **_kwargs):

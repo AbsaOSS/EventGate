@@ -1,0 +1,359 @@
+name: AquaSec Full Repository Scan
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [ opened ]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  security-events: write
+
+concurrency:
+  group: aquasec-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aquasec-scanning:
+    name: AquaSec Full Repository Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Retrieve AquaSec Scan Results
+        env:
+          AQUA_KEY: ${{ secrets.AQUA_KEY }}
+          AQUA_SECRET: ${{ secrets.AQUA_SECRET }}
+          REPOSITORY_ID: ${{ secrets.AQUA_REPOSITORY_ID }}
+        run: |
+          set -euo pipefail
+          
+          echo "=== Validating secret variables ==="
+          
+          if ! [[ "$REPOSITORY_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo "Error: AQUA_REPOSITORY_ID is not a valid UUID format"
+            exit 1
+          fi
+          
+          echo "=== Authenticating with AquaSec ==="
+          
+          METHOD="POST"
+          AUTH_ENDPOINT="https://eu-1.api.cloudsploit.com/v2/tokens"
+          TIMESTAMP=$(date -u +%s)
+          POST_BODY='{"group_id":1228,"allowed_endpoints":["GET"],"validity":240}'
+          STRING_TO_SIGN="${TIMESTAMP}${METHOD}/v2/tokens${POST_BODY}"
+          SIGNATURE=$(echo -n "$STRING_TO_SIGN" | openssl dgst -sha256 -hmac "${AQUA_SECRET}" -hex | sed 's/.*= //g')
+
+          AUTH_RESPONSE=$(curl -s --max-time 30 -X $METHOD "$AUTH_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $AQUA_KEY" \
+            -H "X-Timestamp: $TIMESTAMP" \
+            -H "X-Signature: $SIGNATURE" \
+            -d "$POST_BODY")
+          
+          RESPONSE_STATUS=$(echo "$AUTH_RESPONSE" | jq -r '.status')
+          
+          if [ "$RESPONSE_STATUS" = "200" ]; then
+            echo "Login successful."
+            BEARER_TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.data')
+          else
+            echo "Login failed with error message: $(echo "$AUTH_RESPONSE" | jq -r '.errors')"
+            exit 1
+          fi
+          
+          echo "=== Receiving AquaSec Scan Results ==="
+          
+          SCAN_RESULTS_ENDPOINT="https://eu-1.codesec.aquasec.com/api/v1/scans/results"
+          FINDINGS_JSON="[]"
+          PAGE_NUM=1
+          PAGE_SIZE=100
+          TOTAL_EXPECTED=0
+          
+          while true; do
+            echo "Fetching page $PAGE_NUM..."
+          
+            REQUEST_URL="${SCAN_RESULTS_ENDPOINT}?repositoryIds=${REPOSITORY_ID}&size=${PAGE_SIZE}&page=${PAGE_NUM}"
+          
+            PAGE_RESPONSE=$(curl -s --max-time 30 -X GET "$REQUEST_URL" \
+              -H "Authorization: Bearer $BEARER_TOKEN" \
+              -H "Accept: application/json")
+          
+            if [ -z "$PAGE_RESPONSE" ]; then
+              echo "Failed to retrieve scan results on page $PAGE_NUM"
+              exit 1
+            fi
+          
+            if [ $PAGE_NUM -eq 1 ]; then
+              TOTAL_EXPECTED=$(echo "$PAGE_RESPONSE" | jq -r '.total // 0')
+              echo "Total findings expected: $TOTAL_EXPECTED"
+            fi
+          
+            PAGE_DATA=$(echo "$PAGE_RESPONSE" | jq -c '.data // []')
+            PAGE_COUNT=$(echo "$PAGE_DATA" | jq 'length')
+            echo "Retrieved $PAGE_COUNT findings on page $PAGE_NUM"
+          
+            FINDINGS_JSON=$(echo "$FINDINGS_JSON" "$PAGE_DATA" | jq -s 'add')
+          
+            FINDINGS_COUNT=$(echo "$FINDINGS_JSON" | jq 'length')
+          
+            if [ "$FINDINGS_COUNT" -ge "$TOTAL_EXPECTED" ] || [ "$PAGE_COUNT" -eq 0 ]; then
+              break
+            fi
+          
+            PAGE_NUM=$((PAGE_NUM + 1))
+            sleep 2
+          done
+          
+          FINDINGS_COUNT=$(echo "$FINDINGS_JSON" | jq 'length')
+          echo "Total findings retrieved: $FINDINGS_COUNT"
+          
+          jq -n --argjson total "$FINDINGS_COUNT" --argjson data "$FINDINGS_JSON" \
+            '{"total": $total, "size": $total, "page": 1, "data": $data}' > aquasec_scan_results.json
+          
+          echo "Full repository scan retrieved successfully"
+
+      - name: Convert to SARIF 2.1.0
+        shell: python
+        run: |
+          import json
+          
+          print("=== Converting Scan Result to SARIF Format ===")
+          
+          # Severity mapping: SARIF level, security-severity, severity tag
+          SEVERITY_MAP = {
+              1: ("note", "2.0", "LOW"),
+              2: ("warning", "5.5", "MEDIUM"),
+              3: ("error", "8.0", "HIGH"),
+              4: ("error", "9.5", "CRITICAL"),
+          }
+          
+          # Truncate text to follow with GitHub SARIF field limits
+          def truncate(text, max_len=1024):
+              if not text:
+                  return "Security issue detected"
+              return text[:max_len] if len(text) > max_len else text
+
+          with open("aquasec_scan_results.json", "r") as f:
+              data = json.load(f)
+          
+          aquasec_findings = data.get("data", [])
+          rule_index_lookup = {}
+          sarif_unique_rules = []
+          sarif_findings = []
+          
+          for finding in aquasec_findings:
+              target_file = finding.get("target_file", "")
+              avd_id = finding.get("avd_id", "")
+              severity = finding.get("severity", 1)
+              level, sec_severity, sev_tag = SEVERITY_MAP.get(severity, SEVERITY_MAP[1])
+              title = finding.get("title", "")
+              message = finding.get("message", "")
+              extra = finding.get("extraData", {})
+              category = finding.get("category", "")
+          
+              if avd_id not in rule_index_lookup:
+                  tags = [category, "security", sev_tag]
+                  
+                  refs = extra.get("references", [])
+                  remediation = extra.get("remediation", "")
+                  
+                  rule = {
+                      "id": avd_id,
+                      "name": category,
+                      "shortDescription": {"text": truncate(title)},
+                      "fullDescription": {"text": truncate(message)},
+                      "defaultConfiguration": {"level": level},
+                      "help": {
+                          "text": truncate(remediation),
+                          "markdown": f"**{category} {avd_id}**\n| Severity | Check | Message |\n| --- | --- | --- |\n|{sev_tag}|{truncate(title, 100)}|{truncate(message, 200)}|"
+                      },
+                      "properties": {
+                          "precision": "very-high",
+                          "security-severity": sec_severity,
+                          "tags": tags
+                      }
+                  }
+                  
+                  if refs:
+                      rule["helpUri"] = refs[0]
+                  
+                  rule_index_lookup[avd_id] = len(sarif_unique_rules)
+                  sarif_unique_rules.append(rule)
+              
+              # Sanitize security finding line numbers to please SARIF schema
+              start_line = finding.get("target_start_line")
+              if not start_line or start_line < 1:
+                  start_line = 1
+              end_line = finding.get("target_end_line")
+              if not end_line or end_line < start_line:
+                  end_line = start_line
+              
+              sarif_finding = {
+                  "ruleId": avd_id,
+                  "ruleIndex": rule_index_lookup[avd_id],
+                  "level": level,
+                  "message": {"text": truncate(message)},
+                  "locations": [{
+                      "physicalLocation": {
+                          "artifactLocation": {"uri": target_file},
+                          "region": {"startLine": start_line, "endLine": end_line}
+                      }
+                  }]
+              }
+              
+              sarif_findings.append(sarif_finding)
+          
+          sarif_output = {
+              "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{
+                  "tool": {
+                      "driver": {
+                          "fullName": "AquaSec Security Scanner",
+                          "informationUri": "https://www.aquasec.com/",
+                          "name": "AquaSec",
+                          "version": "1.0.0",
+                          "rules": sarif_unique_rules
+                      }
+                  },
+                  "results": sarif_findings
+              }]
+          }
+          
+          with open("aquasec_scan.sarif", "w") as f:
+              json.dump(sarif_output, f, indent=2)
+          
+          print(f"Converted {len(sarif_findings)} findings to SARIF 2.1.0 format")
+
+      - name: Upload Scan Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb
+        with:
+          sarif_file: aquasec_scan.sarif
+          category: aquasec
+
+      - name: Create Scan Summary Table
+        id: scan_summary_table
+        shell: python
+        run: |
+          import os
+          import json
+          import sys
+          from collections import Counter
+
+          SARIF_PATH = "aquasec_scan.sarif"
+          SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+          CATEGORIES = ["sast", "vulnerabilities", "iacMisconfigurations", "secrets", "pipelineMisconfigurations", "license"]
+
+          print("=== Generating Scan Summary Table ===")
+          
+          try:
+              with open(SARIF_PATH, "r", encoding="utf-8") as f:
+                  sarif = json.load(f)
+
+              if "runs" not in sarif or not sarif["runs"]:
+                  raise ValueError("SARIF file contains no runs")
+
+              run = sarif["runs"][0]
+              rules = run.get("tool", {}).get("driver", {}).get("rules", [])
+              results = run.get("results", [])
+
+          except (IOError, json.JSONDecodeError, ValueError) as e:
+              print(f"Error processing SARIF file: {e}", file=sys.stderr)
+              sys.exit(1)
+
+          # Initialize counters for each category
+          category_severity_counts = {cat: Counter() for cat in CATEGORIES}
+
+          # Count results by category and severity
+          for result in results:
+              rule_idx = result.get("ruleIndex")
+              if rule_idx is None or rule_idx >= len(rules):
+                  continue
+              
+              rule = rules[rule_idx]
+              category = rule.get("name", "")
+              tags = rule.get("properties", {}).get("tags", [])
+              severity = next((s for s in SEVERITIES if s in tags), None)
+              
+              if category in CATEGORIES and severity:
+                  category_severity_counts[category][severity] += 1
+
+          # Build Markdown summary table
+          headers = ["AQUASEC"] + SEVERITIES + ["TOTAL"]
+          summary_table = "| " + " | ".join(headers) + " |\n"
+          summary_table += "|---|---|---|---|---|---|\n"
+
+          total_severity = Counter()
+          total_all = 0
+          for category in CATEGORIES:
+              row = [category]
+              category_total = 0
+              for severity in SEVERITIES:
+                  count = category_severity_counts[category][severity]
+                  row.append(str(count))
+                  total_severity[severity] += count
+                  category_total += count
+              row.append(f"**{category_total}**")
+              total_all += category_total
+              summary_table += "| " + " | ".join(row) + " |\n"
+
+          total_row = ["**➡️ Total**"] + [f"**{total_severity[sev]}**" for sev in SEVERITIES] + [f"**{total_all}**"]
+          summary_table += "| " + " | ".join(total_row) + " |"
+
+          try:
+              if "GITHUB_OUTPUT" in os.environ:
+                  with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                      f.write("table<<EOF\n")
+                      f.write(summary_table + "\n")
+                      f.write("EOF\n")
+              else:
+                  print("Warning: GITHUB_OUTPUT not set", file=sys.stderr)
+          except IOError as e:
+              print(f"Error writing output: {e}", file=sys.stderr)
+              sys.exit(1)
+
+      - name: GitHub scan summary comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          SUMMARY_TABLE: ${{ steps.scan_summary_table.outputs.table }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const marker = '<!-- aquasec-scan-comment -->';
+            const link = `https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning?query=pr%3A${context.issue.number}+is%3Aopen`;
+            const sentence = `AquaSec has completed a full security repository scan ✅ You can find the analysis results for this PR branch on [this overview](${link}).\n Below is the summary of the findings:`;
+            const summaryTable = process.env.SUMMARY_TABLE;
+            const body = marker + "\n" + sentence + "\n\n" + summaryTable;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            
+            const existingComment = comments.find(c => c.body.includes(marker));
+            
+            // Create a new comment or update existing one
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body
+              });
+            }

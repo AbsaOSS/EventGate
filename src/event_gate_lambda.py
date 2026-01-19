@@ -34,6 +34,7 @@ from src.writers.writer_kafka import WriterKafka
 from src.writers.writer_postgres import WriterPostgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ with open(os.path.join(CONF_DIR, "config.json"), "r", encoding="utf-8") as file:
 logger.debug("Loaded main configuration")
 
 # Load API definition
-with open(os.path.join(CONF_DIR, "api.yaml"), "r", encoding="utf-8") as file:
+with open(os.path.join(PROJECT_ROOT, "api.yaml"), "r", encoding="utf-8") as file:
     API = file.read()
 logger.debug("Loaded API definition")
 
