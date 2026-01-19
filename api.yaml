@@ -36,7 +36,7 @@ paths:
       description: Allows a user to obtain credentials (JWT token) from LoginService for the service
       responses:
         '303':
-          description: Redirect to actual address of Loging service which performs auth up to its capabilities
+          description: Redirect to actual address of Login service which performs auth up to its capabilities
 
   /health:
     get:
