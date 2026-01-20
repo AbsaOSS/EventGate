@@ -23,6 +23,7 @@ import os
 from typing import Dict, Any
 
 import jwt
+from boto3.resources.base import ServiceResource
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
@@ -31,8 +32,6 @@ from src.utils.utils import build_error_response
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 
 class HandlerTopic:
@@ -40,11 +39,36 @@ class HandlerTopic:
     HandlerTopic manages topic schemas, access control, and message posting.
     """
 
-    def __init__(self, conf_dir: str, access_config: Dict[str, list[str]], handler_token: HandlerToken):
+    def __init__(self, conf_dir: str, config: Dict[str, Any], aws_s3: ServiceResource, handler_token: HandlerToken):
         self.conf_dir = conf_dir
-        self.access_config = access_config
+        self.config = config
+        self.aws_s3 = aws_s3
         self.handler_token = handler_token
+        self.access_config: Dict[str, list[str]] = {}
         self.topics: Dict[str, Dict[str, Any]] = {}
+
+    def load_access_config(self) -> "HandlerTopic":
+        """
+        Load access control configuration from S3 or local file.
+        Returns:
+            HandlerTopic: The current instance with loaded access config.
+        """
+        access_path = self.config["access_config"]
+        logger.debug("Loading access configuration from %s", access_path)
+
+        if access_path.startswith("s3://"):
+            name_parts = access_path.split("/")
+            bucket_name = name_parts[2]
+            bucket_object_key = "/".join(name_parts[3:])
+            self.access_config = json.loads(
+                self.aws_s3.Bucket(bucket_name).Object(bucket_object_key).get()["Body"].read().decode("utf-8")
+            )
+        else:
+            with open(access_path, "r", encoding="utf-8") as file:
+                self.access_config = json.load(file)
+
+        logger.debug("Loaded access configuration")
+        return self
 
     def load_topic_schemas(self) -> "HandlerTopic":
         """
@@ -78,7 +102,29 @@ class HandlerTopic:
             "body": json.dumps(list(self.topics)),
         }
 
-    def get_topic_schema(self, topic_name: str) -> Dict[str, Any]:
+    def handle_request(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle GET/POST requests for /topics/{topic_name} resource.
+
+        Args:
+            event: The API Gateway event containing path parameters, method, body, and headers.
+        Returns:
+            Dict[str, Any]: API Gateway response.
+        """
+        topic_name = event["pathParameters"]["topic_name"].lower()
+        method = event.get("httpMethod")
+
+        if method == "GET":
+            return self._get_topic_schema(topic_name)
+        if method == "POST":
+            return self._post_topic_message(
+                topic_name,
+                json.loads(event["body"]),
+                self.handler_token.extract_token(event.get("headers", {})),
+            )
+        return build_error_response(404, "route", "Resource not found")
+
+    def _get_topic_schema(self, topic_name: str) -> Dict[str, Any]:
         """
         Return the JSON schema for a specific topic.
         Args:
@@ -97,7 +143,7 @@ class HandlerTopic:
             "body": json.dumps(self.topics[topic_name]),
         }
 
-    def post_topic_message(self, topic_name: str, topic_message: Dict[str, Any], token_encoded: str) -> Dict[str, Any]:
+    def _post_topic_message(self, topic_name: str, topic_message: Dict[str, Any], token_encoded: str) -> Dict[str, Any]:
         """
         Validate auth and schema; dispatch message to all writers.
         Args:

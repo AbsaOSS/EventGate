@@ -14,7 +14,10 @@
 # limitations under the License.
 #
 
-"""Event Gate Lambda function implementation."""
+"""
+This module contains the AWS Lambda entry point for the EventGate service.
+"""
+
 import json
 import logging
 import os
@@ -24,6 +27,7 @@ from typing import Any, Dict
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError
 
+from src.handlers.handler_api import HandlerApi
 from src.handlers.handler_token import HandlerToken
 from src.handlers.handler_topic import HandlerTopic
 from src.handlers.handler_health import HandlerHealth
@@ -32,14 +36,15 @@ from src.utils.utils import build_error_response
 from src.writers import writer_eventbridge, writer_kafka, writer_postgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # Initialize logger
-logger = logging.getLogger(__name__)
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    root_logger.addHandler(logging.StreamHandler())
+
 log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
-if not logger.handlers:
-    logger.addHandler(logging.StreamHandler())
+root_logger.setLevel(log_level)
+logger = logging.getLogger(__name__)
 logger.debug("Initialized logger with level %s", log_level)
 
 # Load main configuration
@@ -50,11 +55,6 @@ with open(os.path.join(CONF_DIR, "config.json"), "r", encoding="utf-8") as file:
     config = json.load(file)
 logger.debug("Loaded main configuration")
 
-# Load API definition
-with open(os.path.join(PROJECT_ROOT, "api.yaml"), "r", encoding="utf-8") as file:
-    API = file.read()
-logger.debug("Loaded API definition")
-
 # Initialize S3 client with SSL verification
 try:
     ssl_verify = config.get(SSL_CA_BUNDLE_KEY, True)
@@ -64,41 +64,33 @@ except (BotoCoreError, NoCredentialsError) as exc:
     logger.exception("Failed to initialize AWS S3 client")
     raise RuntimeError("AWS S3 client initialization failed") from exc
 
-# Load access configuration
-ACCESS: Dict[str, list[str]] = {}
-if config["access_config"].startswith("s3://"):
-    name_parts = config["access_config"].split("/")
-    BUCKET_NAME = name_parts[2]
-    BUCKET_OBJECT_KEY = "/".join(name_parts[3:])
-    ACCESS = json.loads(aws_s3.Bucket(BUCKET_NAME).Object(BUCKET_OBJECT_KEY).get()["Body"].read().decode("utf-8"))
-else:
-    with open(config["access_config"], "r", encoding="utf-8") as file:
-        ACCESS = json.load(file)
-logger.debug("Loaded access configuration")
-
-# Initialize token handler and load token public keys
-handler_token = HandlerToken(config).load_public_keys()
-
 # Initialize EventGate writers
 writer_eventbridge.init(logger, config)
 writer_kafka.init(logger, config)
 writer_postgres.init(logger)
 
-# Initialize topic handler and load topic schemas
-handler_topic = HandlerTopic(CONF_DIR, ACCESS, handler_token).load_topic_schemas()
-
-# Initialize health handler
+# Initialize EventGate handlers
+handler_token = HandlerToken(config).load_public_keys()
+handler_topic = HandlerTopic(CONF_DIR, config, aws_s3, handler_token).load_access_config().load_topic_schemas()
 handler_health = HandlerHealth()
+handler_api = HandlerApi().load_api_definition()
 
 
-def get_api() -> Dict[str, Any]:
-    """Return the OpenAPI specification text."""
-    return {"statusCode": 200, "body": API}
+# Route to handler function mapping
+ROUTE_MAP: Dict[str, Any] = {
+    "/api": lambda _: handler_api.get_api(),
+    "/token": lambda _: handler_token.get_token_provider_info(),
+    "/health": lambda _: handler_health.get_health(),
+    "/topics": lambda _: handler_topic.get_topics_list(),
+    "/topics/{topic_name}": handler_topic.handle_request,
+    "/terminate": lambda _: sys.exit("TERMINATING"),
+}
 
 
 def lambda_handler(event: Dict[str, Any], _context: Any = None) -> Dict[str, Any]:
     """
     AWS Lambda entry point. Dispatches based on API Gateway proxy 'resource' and 'httpMethod'.
+
     Args:
         event: The event data from API Gateway.
         _context: The mandatory context argument for AWS Lambda invocation (unused).
@@ -109,26 +101,11 @@ def lambda_handler(event: Dict[str, Any], _context: Any = None) -> Dict[str, Any
     """
     try:
         resource = event.get("resource", "").lower()
-        if resource == "/api":
-            return get_api()
-        if resource == "/token":
-            return handler_token.get_token_provider_info()
-        if resource == "/health":
-            return handler_health.get_health()
-        if resource == "/topics":
-            return handler_topic.get_topics_list()
-        if resource == "/topics/{topic_name}":
-            method = event.get("httpMethod")
-            if method == "GET":
-                return handler_topic.get_topic_schema(event["pathParameters"]["topic_name"].lower())
-            if method == "POST":
-                return handler_topic.post_topic_message(
-                    event["pathParameters"]["topic_name"].lower(),
-                    json.loads(event["body"]),
-                    handler_token.extract_token(event.get("headers", {})),
-                )
-        if resource == "/terminate":
-            sys.exit("TERMINATING")
+        route_function = ROUTE_MAP.get(resource)
+
+        if route_function:
+            return route_function(event)
+
         return build_error_response(404, "route", "Resource not found")
     except (KeyError, json.JSONDecodeError, ValueError, AttributeError, TypeError, RuntimeError) as request_exc:
         logger.exception("Request processing error: %s", request_exc)
