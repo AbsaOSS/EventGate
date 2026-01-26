@@ -28,7 +28,7 @@ from jsonschema.exceptions import ValidationError
 
 from src.handlers.handler_token import HandlerToken
 from src.utils.utils import build_error_response
-from src.writers import writer_eventbridge, writer_kafka, writer_postgres
+from src.writers.writer import Writer
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -40,10 +40,17 @@ class HandlerTopic:
     HandlerTopic manages topic schemas, access control, and message posting.
     """
 
-    def __init__(self, conf_dir: str, access_config: Dict[str, list[str]], handler_token: HandlerToken):
+    def __init__(
+        self,
+        conf_dir: str,
+        access_config: Dict[str, list[str]],
+        handler_token: HandlerToken,
+        writers: Dict[str, Writer],
+    ):
         self.conf_dir = conf_dir
         self.access_config = access_config
         self.handler_token = handler_token
+        self.writers = writers
         self.topics: Dict[str, Dict[str, Any]] = {}
 
     def load_topic_schemas(self) -> "HandlerTopic":
@@ -129,17 +136,11 @@ class HandlerTopic:
         except ValidationError as exc:
             return build_error_response(400, "validation", exc.message)
 
-        kafka_ok, kafka_err = writer_kafka.write(topic_name, topic_message)
-        eventbridge_ok, eventbridge_err = writer_eventbridge.write(topic_name, topic_message)
-        postgres_ok, postgres_err = writer_postgres.write(topic_name, topic_message)
-
         errors = []
-        if not kafka_ok:
-            errors.append({"type": "kafka", "message": kafka_err})
-        if not eventbridge_ok:
-            errors.append({"type": "eventbridge", "message": eventbridge_err})
-        if not postgres_ok:
-            errors.append({"type": "postgres", "message": postgres_err})
+        for writer_name, writer in self.writers.items():
+            ok, err = writer.write(topic_name, topic_message)
+            if not ok:
+                errors.append({"type": writer_name, "message": err})
 
         if errors:
             return {

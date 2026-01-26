@@ -13,18 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import json
-import logging
 import os
 import types
+
 import pytest
 
-from src.writers import writer_postgres
-
-
-@pytest.fixture(scope="module", autouse=True)
-def init_module_logger():
-    writer_postgres.init(logging.getLogger("test"))
+from src.writers.writer_postgres import WriterPostgres
+import src.writers.writer_postgres as wp
 
 
 class MockCursor:
@@ -39,6 +36,7 @@ class MockCursor:
 
 
 def test_postgres_edla_write_with_optional_fields():
+    writer = WriterPostgres({})
     cur = MockCursor()
     message = {
         "event_id": "e1",
@@ -55,7 +53,7 @@ def test_postgres_edla_write_with_optional_fields():
         "format_options": {"compression": "snappy"},
         "additional_info": {"foo": "bar"},
     }
-    writer_postgres.postgres_edla_write(cur, "table_a", message)
+    writer._postgres_edla_write(cur, "table_a", message)
     assert len(cur.executions) == 1
     _sql, params = cur.executions[0]
     assert len(params) == 13
@@ -68,6 +66,7 @@ def test_postgres_edla_write_with_optional_fields():
 
 
 def test_postgres_edla_write_missing_optional():
+    writer = WriterPostgres({})
     cur = MockCursor()
     message = {
         "event_id": "e2",
@@ -80,7 +79,7 @@ def test_postgres_edla_write_missing_optional():
         "operation": "overwrite",
         "format": "delta",
     }
-    writer_postgres.postgres_edla_write(cur, "table_a", message)
+    writer._postgres_edla_write(cur, "table_a", message)
     _sql, params = cur.executions[0]
     assert params[6] == ""
     assert params[9] is None
@@ -90,6 +89,7 @@ def test_postgres_edla_write_missing_optional():
 
 
 def test_postgres_run_write():
+    writer = WriterPostgres({})
     cur = MockCursor()
     message = {
         "event_id": "r1",
@@ -113,7 +113,7 @@ def test_postgres_run_write():
             },
         ],
     }
-    writer_postgres.postgres_run_write(cur, "runs_table", "jobs_table", message)
+    writer._postgres_run_write(cur, "runs_table", "jobs_table", message)
     assert len(cur.executions) == 3
 
     # Check run insert
@@ -135,6 +135,7 @@ def test_postgres_run_write():
 
 
 def test_postgres_test_write():
+    writer = WriterPostgres({})
     cur = MockCursor()
     message = {
         "event_id": "t1",
@@ -144,7 +145,7 @@ def test_postgres_test_write():
         "timestamp": 999,
         "additional_info": {"a": 1},
     }
-    writer_postgres.postgres_test_write(cur, "table_test", message)
+    writer._postgres_test_write(cur, "table_test", message)
     assert len(cur.executions) == 1
     _sql, params = cur.executions[0]
     assert params[0] == "t1"
@@ -156,13 +157,8 @@ def test_postgres_test_write():
 
 
 @pytest.fixture
-def reset_state(monkeypatch):
-    # Preserve psycopg2 ref
-    original_psycopg2 = writer_postgres.psycopg2
-    writer_postgres.POSTGRES = {"database": ""}
+def reset_env():
     yield
-    writer_postgres.psycopg2 = original_psycopg2
-    writer_postgres.POSTGRES = {"database": ""}
     os.environ.pop("POSTGRES_SECRET_NAME", None)
     os.environ.pop("POSTGRES_SECRET_REGION", None)
 
@@ -207,48 +203,56 @@ class DummyPsycopg:
         return DummyConnection(self.store)
 
 
-def test_write_skips_when_no_database(reset_state):
-    writer_postgres.POSTGRES = {"database": ""}
-    ok, err = writer_postgres.write("public.cps.za.test", {})
+# --- write() ---
+
+
+def test_write_skips_when_no_database(reset_env):
+    writer = WriterPostgres({})
+    writer._db_config = {"database": ""}
+    ok, err = writer.write("public.cps.za.test", {})
     assert ok and err is None
 
 
-def test_write_skips_when_psycopg2_missing(reset_state, monkeypatch):
-    writer_postgres.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
-    monkeypatch.setattr(writer_postgres, "psycopg2", None)
-    ok, err = writer_postgres.write("public.cps.za.test", {})
+def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(wp, "psycopg2", None)
+    ok, err = writer.write("public.cps.za.test", {})
     assert ok and err is None
 
 
-def test_write_unknown_topic_returns_false(reset_state, monkeypatch):
+def test_write_unknown_topic_returns_false(reset_env, monkeypatch):
     store = []
-    monkeypatch.setattr(writer_postgres, "psycopg2", DummyPsycopg(store))
-    writer_postgres.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
-    ok, err = writer_postgres.write("public.cps.za.unknown", {})
+    monkeypatch.setattr(wp, "psycopg2", DummyPsycopg(store))
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    ok, err = writer.write("public.cps.za.unknown", {})
     assert not ok and "unknown topic" in err
 
 
-def test_write_success_known_topic(reset_state, monkeypatch):
+def test_write_success_known_topic(reset_env, monkeypatch):
     store = []
-    monkeypatch.setattr(writer_postgres, "psycopg2", DummyPsycopg(store))
-    writer_postgres.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(wp, "psycopg2", DummyPsycopg(store))
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
-    ok, err = writer_postgres.write("public.cps.za.test", message)
+    ok, err = writer.write("public.cps.za.test", message)
     assert ok and err is None and len(store) == 1
 
 
-def test_write_exception_returns_false(reset_state, monkeypatch):
+def test_write_exception_returns_false(reset_env, monkeypatch):
     class FailingPsycopg:
         def connect(self, **kwargs):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(writer_postgres, "psycopg2", FailingPsycopg())
-    writer_postgres.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
-    ok, err = writer_postgres.write("public.cps.za.test", {})
-    assert not ok and "failed unknown error" in err
+    monkeypatch.setattr(wp, "psycopg2", FailingPsycopg())
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    ok, err = writer.write("public.cps.za.test", {})
+    assert not ok and "failed with unknown error" in err
 
 
-def test_init_with_secret(monkeypatch, reset_state):
+def test_init_with_secret(monkeypatch, reset_env):
     secret_dict = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     os.environ["POSTGRES_SECRET_NAME"] = "mysecret"
     os.environ["POSTGRES_SECRET_REGION"] = "eu-west-1"
@@ -258,15 +262,19 @@ def test_init_with_secret(monkeypatch, reset_state):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(writer_postgres.boto3, "Session", lambda: MockSession())
-    writer_postgres.init(logging.getLogger("test"))
-    assert writer_postgres.POSTGRES == secret_dict
+    monkeypatch.setattr(wp.boto3, "Session", lambda: MockSession())
+    writer = WriterPostgres({})
+    assert writer._db_config is None
+    # Trigger lazy load via check_health
+    writer.check_health()
+    assert writer._db_config == secret_dict
 
 
-def test_write_dlchange_success(reset_state, monkeypatch):
+def test_write_dlchange_success(reset_env, monkeypatch):
     store = []
-    monkeypatch.setattr(writer_postgres, "psycopg2", DummyPsycopg(store))
-    writer_postgres.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(wp, "psycopg2", DummyPsycopg(store))
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     message = {
         "event_id": "e1",
         "tenant_id": "t",
@@ -278,14 +286,15 @@ def test_write_dlchange_success(reset_state, monkeypatch):
         "operation": "append",
         "format": "parquet",
     }
-    ok, err = writer_postgres.write("public.cps.za.dlchange", message)
+    ok, err = writer.write("public.cps.za.dlchange", message)
     assert ok and err is None and len(store) == 1
 
 
-def test_write_runs_success(reset_state, monkeypatch):
+def test_write_runs_success(reset_env, monkeypatch):
     store = []
-    monkeypatch.setattr(writer_postgres, "psycopg2", DummyPsycopg(store))
-    writer_postgres.POSTGRES = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(wp, "psycopg2", DummyPsycopg(store))
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     message = {
         "event_id": "r1",
         "job_ref": "job",
@@ -297,5 +306,47 @@ def test_write_runs_success(reset_state, monkeypatch):
         "timestamp_end": 2,
         "jobs": [{"catalog_id": "c", "status": "ok", "timestamp_start": 1, "timestamp_end": 2}],
     }
-    ok, err = writer_postgres.write("public.cps.za.runs", message)
+    ok, err = writer.write("public.cps.za.runs", message)
     assert ok and err is None and len(store) == 2  # run + job insert
+
+
+# --- check_health() ---
+
+
+def test_check_health_not_configured():
+    # No secret env vars set, so it's "not configured"
+    writer = WriterPostgres({})
+    healthy, msg = writer.check_health()
+    assert healthy and msg == "not configured"
+
+
+def test_check_health_success(reset_env, monkeypatch):
+    secret_dict = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    os.environ["POSTGRES_SECRET_NAME"] = "mysecret"
+    os.environ["POSTGRES_SECRET_REGION"] = "eu-west-1"
+    mock_client = types.SimpleNamespace(get_secret_value=lambda SecretId: {"SecretString": json.dumps(secret_dict)})
+
+    class MockSession:
+        def client(self, service_name, region_name):
+            return mock_client
+
+    monkeypatch.setattr(wp.boto3, "Session", MockSession)
+    writer = WriterPostgres({})
+    healthy, msg = writer.check_health()
+    assert healthy and msg == "ok"
+
+
+def test_check_health_missing_host(reset_env, monkeypatch):
+    secret_dict = {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}
+    os.environ["POSTGRES_SECRET_NAME"] = "mysecret"
+    os.environ["POSTGRES_SECRET_REGION"] = "eu-west-1"
+    mock_client = types.SimpleNamespace(get_secret_value=lambda SecretId: {"SecretString": json.dumps(secret_dict)})
+
+    class MockSession:
+        def client(self, service_name, region_name):
+            return mock_client
+
+    monkeypatch.setattr(wp.boto3, "Session", MockSession)
+    writer = WriterPostgres({})
+    healthy, msg = writer.check_health()
+    assert not healthy and "host not configured" in msg
