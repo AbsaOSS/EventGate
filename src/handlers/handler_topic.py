@@ -29,7 +29,6 @@ from jsonschema.exceptions import ValidationError
 
 from src.handlers.handler_token import HandlerToken
 from src.utils.utils import build_error_response
-from src.writers import writer_eventbridge, writer_kafka, writer_postgres
 
 logger = logging.getLogger(__name__)
 
@@ -175,17 +174,11 @@ class HandlerTopic:
         except ValidationError as exc:
             return build_error_response(400, "validation", exc.message)
 
-        kafka_ok, kafka_err = writer_kafka.write(topic_name, topic_message)
-        eventbridge_ok, eventbridge_err = writer_eventbridge.write(topic_name, topic_message)
-        postgres_ok, postgres_err = writer_postgres.write(topic_name, topic_message)
-
         errors = []
-        if not kafka_ok:
-            errors.append({"type": "kafka", "message": kafka_err})
-        if not eventbridge_ok:
-            errors.append({"type": "eventbridge", "message": eventbridge_err})
-        if not postgres_ok:
-            errors.append({"type": "postgres", "message": postgres_err})
+        for writer_name, writer in self.writers.items():
+            ok, err = writer.write(topic_name, topic_message)
+            if not ok:
+                errors.append({"type": writer_name, "message": err})
 
         if errors:
             return {

@@ -1,12 +1,10 @@
-# Event Gate—for Developers
+# EventGate for Developers
 
 - [Get Started](#get-started)
 - [Set Up Python Environment](#set-up-python-environment)
 - [Run Pylint Tool Locally](#run-pylint-tool-locally)
 - [Run Black Tool Locally](#run-black-tool-locally)
 - [Run mypy Tool Locally](#run-mypy-tool-locally)
-- [Run TFLint Tool Locally](#run-tflint-tool-locally)
-- [Run Trivy Tool Locally](#run-trivy-tool-locally)
 - [Run Unit Test](#running-unit-test)
 - [Code Coverage](#code-coverage)
 
@@ -103,46 +101,7 @@ To run mypy on a specific file, follow the pattern `mypy <path_to_file>/<name_of
 Example:
 ```shell
 mypy src/writer_kafka.py
-``` 
-
-## Run TFLint Tool Locally
-
-This project uses the [TFLint](https://github.com/terraform-linters/tflint) tool for static analysis of Terraform code.
-We are forcing to eliminate **all** errors reported by TFLint. Any detected warnings and notices should be corrected as well as a best practice.
-
-- Find possible errors (like invalid instance types) for Major Cloud providers (AWS/Azure/GCP).
-- Warn about deprecated syntax, unused declarations. 
-- Enforce best practices, naming conventions.
-
-> For installation instructions, please refer to the [following link.](https://github.com/terraform-linters/tflint)
-
-### Run TFLint
-
-For running TFLint you need to be in the `terraform/` directory. From the root file run the following commands:
-```shell
-cd terraform
-tflint --init
-tflint
-cd ..
 ```
-
-## Run Trivy Tool Locally
-
-This project uses the [Trivy](https://trivy.dev/latest/) tool to scan changes for security issues and misconfigurations.
-It is an open‑source security scanner maintained by Aqua Security (AquaSec).
-
-> For installation instructions, please refer to the [following link.](https://trivy.dev/latest/getting-started/installation/)
-
-### Run Trivy
-
-For running Trivy tool locally you can execute one of following commands from the root file:
-```shell
-trivy fs . --scanners vuln,secret,misconfig,license > trivy_scan.txt # Scan the whole project with all available scans (all severities for the whole project)
-trivy fs --severity MEDIUM,HIGH,CRITICAL terraform/ > trivy_scan.txt # Show only selected severities for terraform files
-trivy config Dockerfile > trivy_scan.txt # Scan only Dockerfile
-```
-
-You can see the scan results in the `trivy_scan.txt` file located in the root directory.
 
 ## Running Unit Test
 

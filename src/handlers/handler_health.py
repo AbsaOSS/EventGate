@@ -23,7 +23,7 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, Any
 
-from src.writers import writer_eventbridge, writer_kafka, writer_postgres
+from src.writers.writer import Writer
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -35,8 +35,9 @@ class HandlerHealth:
     HandlerHealth manages service health checks and dependency status monitoring.
     """
 
-    def __init__(self):
+    def __init__(self, writers: Dict[str, Writer]):
         self.start_time: datetime = datetime.now(timezone.utc)
+        self.writers = writers
 
     def get_health(self) -> Dict[str, Any]:
         """
@@ -51,28 +52,10 @@ class HandlerHealth:
 
         failures: Dict[str, str] = {}
 
-        # Check Kafka writer
-        if writer_kafka.STATE.get("producer") is None:
-            failures["kafka"] = "producer not initialized"
-
-        # Check EventBridge writer
-        eventbus_arn = writer_eventbridge.STATE.get("event_bus_arn")
-        eventbridge_client = writer_eventbridge.STATE.get("client")
-        if eventbus_arn:
-            if eventbridge_client is None:
-                failures["eventbridge"] = "client not initialized"
-
-        # Check PostgreSQL writer
-        postgres_config = writer_postgres.POSTGRES
-        if postgres_config.get("database"):
-            if not postgres_config.get("host"):
-                failures["postgres"] = "host not configured"
-            elif not postgres_config.get("user"):
-                failures["postgres"] = "user not configured"
-            elif not postgres_config.get("password"):
-                failures["postgres"] = "password not configured"
-            elif not postgres_config.get("port"):
-                failures["postgres"] = "port not configured"
+        for name, writer in self.writers.items():
+            healthy, msg = writer.check_health()
+            if not healthy:
+                failures[name] = msg
 
         uptime_seconds = int((datetime.now(timezone.utc) - self.start_time).total_seconds())
 

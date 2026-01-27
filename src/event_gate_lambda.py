@@ -33,7 +33,9 @@ from src.handlers.handler_topic import HandlerTopic
 from src.handlers.handler_health import HandlerHealth
 from src.utils.constants import SSL_CA_BUNDLE_KEY
 from src.utils.utils import build_error_response
-from src.writers import writer_eventbridge, writer_kafka, writer_postgres
+from src.writers.writer_eventbridge import WriterEventBridge
+from src.writers.writer_kafka import WriterKafka
+from src.writers.writer_postgres import WriterPostgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 
 
@@ -65,9 +67,11 @@ except (BotoCoreError, NoCredentialsError) as exc:
     raise RuntimeError("AWS S3 client initialization failed") from exc
 
 # Initialize EventGate writers
-writer_eventbridge.init(logger, config)
-writer_kafka.init(logger, config)
-writer_postgres.init(logger)
+writers = {
+    "kafka": WriterKafka(config),
+    "eventbridge": WriterEventBridge(config),
+    "postgres": WriterPostgres(config),
+}
 
 # Initialize EventGate handlers
 handler_token = HandlerToken(config).load_public_keys()
