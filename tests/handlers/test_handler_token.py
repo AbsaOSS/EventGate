@@ -106,7 +106,7 @@ def test_refresh_keys_not_needed_when_keys_fresh(token_handler):
     token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
     token_handler.public_keys = [Mock(spec=RSAPublicKey)]
 
-    with patch.object(token_handler, "load_public_keys") as mock_load:
+    with patch.object(token_handler, "with_public_keys_queried") as mock_load:
         token_handler._refresh_keys_if_needed()
         mock_load.assert_not_called()
 
@@ -116,7 +116,7 @@ def test_refresh_keys_triggered_when_keys_stale(token_handler):
     token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=29)
     token_handler.public_keys = [Mock(spec=RSAPublicKey)]
 
-    with patch.object(token_handler, "load_public_keys") as mock_load:
+    with patch.object(token_handler, "with_public_keys_queried") as mock_load:
         token_handler._refresh_keys_if_needed()
         mock_load.assert_called_once()
 
@@ -127,7 +127,7 @@ def test_refresh_keys_handles_load_failure_gracefully(token_handler):
     token_handler.public_keys = [old_key]
     token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=29)
 
-    with patch.object(token_handler, "load_public_keys", side_effect=RuntimeError("Network error")):
+    with patch.object(token_handler, "with_public_keys_queried", side_effect=RuntimeError("Network error")):
         token_handler._refresh_keys_if_needed()
         assert token_handler.public_keys == [old_key]
 
