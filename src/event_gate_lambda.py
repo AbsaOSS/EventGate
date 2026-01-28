@@ -74,10 +74,10 @@ writers = {
 }
 
 # Initialize EventGate handlers
-handler_token = HandlerToken(config).load_public_keys()
-handler_topic = HandlerTopic(CONF_DIR, config, aws_s3, handler_token).load_access_config().load_topic_schemas()
-handler_health = HandlerHealth()
-handler_api = HandlerApi().load_api_definition()
+handler_token = HandlerToken(config).with_public_keys_queried()
+handler_topic = HandlerTopic(config, aws_s3, handler_token, writers).with_load_access_config().with_load_topic_schemas()
+handler_health = HandlerHealth(writers)
+handler_api = HandlerApi().with_api_definition_loaded()
 
 
 # Route to handler function mapping

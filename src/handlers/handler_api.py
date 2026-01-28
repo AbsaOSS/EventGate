@@ -33,20 +33,30 @@ class HandlerApi:
     def __init__(self):
         self.api_spec: str = ""
 
-    def load_api_definition(self) -> "HandlerApi":
+    def with_api_definition_loaded(self) -> "HandlerApi":
         """
         Load the OpenAPI specification from api.yaml file.
 
         Returns:
             HandlerApi: The current instance with loaded API definition.
+        Raises:
+            RuntimeError: If loading or reading the API specification fails.
         """
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
         api_path = os.path.join(project_root, "api.yaml")
 
-        with open(api_path, "r", encoding="utf-8") as file:
-            self.api_spec = file.read()
-        logger.debug("Loaded API definition from %s", api_path)
-        return self
+        try:
+            with open(api_path, "r", encoding="utf-8") as file:
+                self.api_spec = file.read()
+
+            if not self.api_spec:
+                raise ValueError("API specification file is empty")
+
+            logger.debug("Loaded API definition from %s", api_path)
+            return self
+        except (FileNotFoundError, PermissionError, ValueError) as exc:
+            logger.exception("Failed to load or read API specification from %s", api_path)
+            raise RuntimeError("API specification initialization failed") from exc
 
     def get_api(self) -> Dict[str, Any]:
         """

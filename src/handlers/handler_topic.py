@@ -28,7 +28,9 @@ from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
 from src.handlers.handler_token import HandlerToken
+from src.utils.conf_path import CONF_DIR
 from src.utils.utils import build_error_response
+from src.writers.writer import Writer
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +40,21 @@ class HandlerTopic:
     HandlerTopic manages topic schemas, access control, and message posting.
     """
 
-    def __init__(self, conf_dir: str, config: Dict[str, Any], aws_s3: ServiceResource, handler_token: HandlerToken):
-        self.conf_dir = conf_dir
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        aws_s3: ServiceResource,
+        handler_token: HandlerToken,
+        writers: Dict[str, Writer],
+    ):
         self.config = config
         self.aws_s3 = aws_s3
         self.handler_token = handler_token
+        self.writers = writers
         self.access_config: Dict[str, list[str]] = {}
         self.topics: Dict[str, Dict[str, Any]] = {}
 
-    def load_access_config(self) -> "HandlerTopic":
+    def with_load_access_config(self) -> "HandlerTopic":
         """
         Load access control configuration from S3 or local file.
         Returns:
@@ -69,13 +77,13 @@ class HandlerTopic:
         logger.debug("Loaded access configuration")
         return self
 
-    def load_topic_schemas(self) -> "HandlerTopic":
+    def with_load_topic_schemas(self) -> "HandlerTopic":
         """
         Load topic schemas from configuration files.
         Returns:
             HandlerTopic: The current instance with loaded topic schemas.
         """
-        topic_schemas_dir = os.path.join(self.conf_dir, "topic_schemas")
+        topic_schemas_dir = os.path.join(CONF_DIR, "topic_schemas")
         logger.debug("Loading topic schemas from %s", topic_schemas_dir)
 
         with open(os.path.join(topic_schemas_dir, "runs.json"), "r", encoding="utf-8") as file:
@@ -152,10 +160,15 @@ class HandlerTopic:
         Returns:
             Dict[str, Any]: API Gateway response indicating success or failure.
         Raises:
+            RuntimeError: If access configuration is not loaded.
             jwt.PyJWTError: If token decoding fails.
             ValidationError: If message validation fails.
         """
         logger.debug("Handling POST TopicMessage(%s)", topic_name)
+
+        if not self.access_config:
+            logger.error("Access configuration not loaded")
+            raise RuntimeError("Access configuration not loaded")
 
         try:
             token: Dict[str, Any] = self.handler_token.decode_jwt(token_encoded)

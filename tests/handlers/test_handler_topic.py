@@ -27,12 +27,17 @@ def test_load_access_config_from_local_file():
     """Test loading access config from local file."""
     mock_handler_token = MagicMock()
     mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
     config = {"access_config": "conf/access.json"}
-    handler = HandlerTopic("conf", config, mock_aws_s3, mock_handler_token)
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
 
     access_data = {"public.cps.za.test": ["TestUser"]}
     with patch("builtins.open", mock_open(read_data=json.dumps(access_data))):
-        result = handler.load_access_config()
+        result = handler.with_load_access_config()
 
     assert result is handler
     assert handler.access_config == access_data
@@ -42,15 +47,20 @@ def test_load_access_config_from_s3():
     """Test loading access config from S3."""
     mock_handler_token = MagicMock()
     mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
     config = {"access_config": "s3://my-bucket/path/to/access.json"}
-    handler = HandlerTopic("conf", config, mock_aws_s3, mock_handler_token)
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
 
     access_data = {"public.cps.za.test": ["TestUser"]}
     mock_body = MagicMock()
     mock_body.read.return_value = json.dumps(access_data).encode("utf-8")
     mock_aws_s3.Bucket.return_value.Object.return_value.get.return_value = {"Body": mock_body}
 
-    result = handler.load_access_config()
+    result = handler.with_load_access_config()
 
     assert result is handler
     assert handler.access_config == access_data
@@ -61,10 +71,14 @@ def test_load_access_config_from_s3():
 ## load_topic_schemas()
 def test_load_topic_schemas_success():
     mock_handler_token = MagicMock()
-    mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
     config = {"access_config": "conf/access.json"}
-    handler = HandlerTopic("conf", config, mock_aws_s3, mock_handler_token)
-    handler.access_config = {"public.cps.za.test": ["TestUser"]}
+    mock_aws_s3 = MagicMock()
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
 
     mock_schemas = {
         "runs.json": {"type": "object", "properties": {"run_id": {"type": "string"}}},
@@ -79,7 +93,7 @@ def test_load_topic_schemas_success():
         raise FileNotFoundError(file_path)
 
     with patch("builtins.open", side_effect=mock_open_side_effect):
-        result = handler.load_topic_schemas()
+        result = handler.with_load_topic_schemas()
 
     assert result is handler
     assert len(handler.topics) == 3
