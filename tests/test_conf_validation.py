@@ -59,9 +59,9 @@ def test_access_json_structure():
         assert all(isinstance(u, str) for u in users), f"All users for topic {topic} must be strings"
 
 
-@pytest.mark.parametrize("topic_file", glob(os.path.join(CONF_DIR, "topic_*.json")))
+@pytest.mark.parametrize("topic_file", glob(os.path.join(CONF_DIR, "topic_schemas", "*.json")))
 def test_topic_json_schemas_basic(topic_file):
-    assert topic_file, "No topic_*.json files found"
+    assert topic_file, "No *.json files found in topic_schemas/"
     schema = load_json(topic_file)
     assert schema.get("type") == "object", "Schema root 'type' must be 'object'"
     props = schema.get("properties")
