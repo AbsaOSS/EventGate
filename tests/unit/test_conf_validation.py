@@ -1,5 +1,3 @@
-import os
-
 #
 # Copyright 2025 ABSA Group Limited
 #
@@ -15,11 +13,13 @@ import os
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import json
+import os
 from glob import glob
 import pytest
 
-CONF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "conf")
+CONF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "../conf")
 
 REQUIRED_CONFIG_KEYS = {
     "access_config",
