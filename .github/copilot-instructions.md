@@ -8,7 +8,7 @@ Structure
 - Handlers: `src/handlers/` (HandlerApi, HandlerToken, HandlerTopic, HandlerHealth)
 - Writers: `src/writers/` (inherit from `Writer` base class)
 - Config: `conf/config.json`, `conf/access.json`, `conf/topic_schemas/*.json`
-- Terraform scripts are not part of this repository
+- Production Terraform scripts are not part of this repository; `terraform_examples/` for reference configurations only
 
 Python style
 - Python 3.13
