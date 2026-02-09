@@ -70,11 +70,11 @@ class HandlerToken:
             return
         try:
             logger.debug("Token public keys are stale, refreshing now")
-            self.load_public_keys()
+            self.with_public_keys_queried()
         except RuntimeError:
             logger.warning("Token public key refresh failed, using existing keys")
 
-    def load_public_keys(self) -> "HandlerToken":
+    def with_public_keys_queried(self) -> "HandlerToken":
         """
         Load token public keys from the configured URL.
         Returns:

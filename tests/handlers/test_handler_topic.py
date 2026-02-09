@@ -22,11 +22,63 @@ import jwt
 from src.handlers.handler_topic import HandlerTopic
 
 
+## load_access_config()
+def test_load_access_config_from_local_file():
+    """Test loading access config from local file."""
+    mock_handler_token = MagicMock()
+    mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
+    config = {"access_config": "conf/access.json"}
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
+
+    access_data = {"public.cps.za.test": ["TestUser"]}
+    with patch("builtins.open", mock_open(read_data=json.dumps(access_data))):
+        result = handler.with_load_access_config()
+
+    assert result is handler
+    assert handler.access_config == access_data
+
+
+def test_load_access_config_from_s3():
+    """Test loading access config from S3."""
+    mock_handler_token = MagicMock()
+    mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
+    config = {"access_config": "s3://my-bucket/path/to/access.json"}
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
+
+    access_data = {"public.cps.za.test": ["TestUser"]}
+    mock_body = MagicMock()
+    mock_body.read.return_value = json.dumps(access_data).encode("utf-8")
+    mock_aws_s3.Bucket.return_value.Object.return_value.get.return_value = {"Body": mock_body}
+
+    result = handler.with_load_access_config()
+
+    assert result is handler
+    assert handler.access_config == access_data
+    mock_aws_s3.Bucket.assert_called_once_with("my-bucket")
+    mock_aws_s3.Bucket.return_value.Object.assert_called_once_with("path/to/access.json")
+
+
 ## load_topic_schemas()
 def test_load_topic_schemas_success():
     mock_handler_token = MagicMock()
-    access_config = {"public.cps.za.test": ["TestUser"]}
-    handler = HandlerTopic("conf", access_config, mock_handler_token)
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
+    config = {"access_config": "conf/access.json"}
+    mock_aws_s3 = MagicMock()
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
 
     mock_schemas = {
         "runs.json": {"type": "object", "properties": {"run_id": {"type": "string"}}},
@@ -41,7 +93,7 @@ def test_load_topic_schemas_success():
         raise FileNotFoundError(file_path)
 
     with patch("builtins.open", side_effect=mock_open_side_effect):
-        result = handler.load_topic_schemas()
+        result = handler.with_load_topic_schemas()
 
     assert result is handler
     assert len(handler.topics) == 3
@@ -135,12 +187,10 @@ def test_post_invalid_token_decode(event_gate_module, make_event, valid_payload)
 
 # --- POST success & failure aggregation ---
 def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
-    with (
-        patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(True, None)),
-        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(True, None)),
-        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
-    ):
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        for writer in event_gate_module.handler_topic.writers.values():
+            writer.write = MagicMock(return_value=(True, None))
+
         event = make_event(
             "/topics/{topic_name}",
             method="POST",
@@ -156,12 +206,11 @@ def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
 
 
 def test_post_single_writer_failure(event_gate_module, make_event, valid_payload):
-    with (
-        patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(False, "Kafka boom")),
-        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(True, None)),
-        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
-    ):
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.writers["kafka"].write = MagicMock(return_value=(False, "Kafka boom"))
+        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=(True, None))
+        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=(True, None))
+
         event = make_event(
             "/topics/{topic_name}",
             method="POST",
@@ -178,12 +227,11 @@ def test_post_single_writer_failure(event_gate_module, make_event, valid_payload
 
 
 def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payload):
-    with (
-        patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(False, "Kafka A")),
-        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(False, "EB B")),
-        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
-    ):
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.writers["kafka"].write = MagicMock(return_value=(False, "Kafka A"))
+        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=(False, "EB B"))
+        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=(True, None))
+
         event = make_event(
             "/topics/{topic_name}",
             method="POST",
@@ -198,12 +246,10 @@ def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payl
 
 
 def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event, valid_payload):
-    with (
-        patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}),
-        patch("src.handlers.handler_topic.writer_kafka.write", return_value=(True, None)),
-        patch("src.handlers.handler_topic.writer_eventbridge.write", return_value=(True, None)),
-        patch("src.handlers.handler_topic.writer_postgres.write", return_value=(True, None)),
-    ):
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        for writer in event_gate_module.handler_topic.writers.values():
+            writer.write = MagicMock(return_value=(True, None))
+
         event = make_event(
             "/topics/{topic_name}",
             method="POST",
