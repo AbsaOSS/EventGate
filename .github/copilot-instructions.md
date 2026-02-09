@@ -17,12 +17,15 @@ Python style
 - Lazy % formatting in logging: `logger.info("msg %s", var)`
 - F-strings in exceptions: `raise ValueError(f"Error {var}")`
 - All imports at top of file (never inside functions)
+- Apache 2.0 license header in every .py file (including `__init__.py`)
+- Docstrings must start with a short summary line
 
 Patterns
-- Classes with `__init__` cannot throw exceptions
+- `__init__` methods must not raise exceptions; defer validation and connection to first use (lazy init)
 - Writers: inherit from `Writer(ABC)`, implement `write(topic, message) -> (bool, str|None)` and `check_health() -> (bool, str)`
-- Writers use lazy initialization
-- Route dispatch via `ROUTES` dict mapping routes to handler functions
+- Route dispatch via `ROUTE_MAP` dict mapping routes to handler functions in `event_gate_lambda.py`
+- Separate business logic from environment access (env vars, file I/O, network calls)
+- No duplicate validation; centralize parsing in one layer where practical
 - Preserve existing formatting and conventions
 - Keep API Gateway response structure stable: `{"statusCode": int, "headers": {...}, "body": "..."}`
 - Keep error response format stable: `{"success": false, "statusCode": int, "errors": [...]}`
