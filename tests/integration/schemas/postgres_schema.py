@@ -13,3 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+"""PostgreSQL schema for integration tests."""
+
+SCHEMA_SQL = """
+-- Test topic table matching WriterPostgres test configuration
+CREATE TABLE IF NOT EXISTS public_cps_za_test (
+    event_id VARCHAR(255) NOT NULL,
+    tenant_id VARCHAR(255) NOT NULL,
+    source_app VARCHAR(255) NOT NULL,
+    environment VARCHAR(255) NOT NULL,
+    timestamp_event BIGINT,
+    additional_info JSONB
+);
+"""

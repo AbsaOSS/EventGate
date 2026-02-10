@@ -144,4 +144,63 @@ open htmlcov/index.html
 ```
 
 ## Run Integration Test Locally
-TODO
+
+Integration tests validate EventGate against real service dependencies using testcontainers-python.
+
+### Integration Test Approach
+
+EventGate uses a **direct invocation approach** for integration testing:
+- **Lambda handler is called directly** in Python (not run in a container)
+- **External dependencies run in Docker containers**: Kafka, PostgreSQL, LocalStack (EventBridge)
+- **Mock JWT provider runs in-process** as a background thread (no container)
+- Test configuration is dynamically generated and injected via environment variables
+
+This approach is faster (~8s vs 30s+), more reliable, and easier to debug than container-based Lambda testing.
+
+### Prerequisites
+- Docker running (Docker Desktop on macOS/Windows, or Docker Engine on Linux)
+- Python 3.13 with dependencies installed
+
+### Run Integration Tests
+
+Containers start and stop automatically:
+```shell
+pytest tests/integration/ -v
+```
+
+With detailed logging:
+```shell
+pytest tests/integration/ -v --log-cli-level=INFO
+```
+
+### Run Specific Integration Tests
+
+Run a single test file:
+```shell
+pytest tests/integration/test_health_endpoint.py -v
+```
+
+Run a specific test function:
+```shell
+pytest tests/integration/test_topics_endpoint.py::TestPostEventEndpoint::test_post_event_with_valid_token_returns_202 -v
+```
+
+### Troubleshooting
+
+If containers fail to start, check Docker is running:
+```shell
+docker info
+```
+
+If image pulls fail with TLS or timeout errors, pre-pull the required images manually:
+```shell
+docker pull testcontainers/ryuk:0.8.1
+docker pull postgres:16
+docker pull confluentinc/cp-kafka:7.6.0
+docker pull localstack/localstack:latest
+```
+
+View container logs in pytest output by increasing log level:
+```shell
+pytest tests/integration/ -v --log-cli-level=DEBUG
+```
