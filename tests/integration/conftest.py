@@ -249,6 +249,8 @@ def mock_jwt_server(jwt_keypair: Dict[str, Any]) -> Generator[str, None, None]:
             break
         except (ConnectionError, OSError):
             time.sleep(0.1)
+    else:
+        pytest.fail("Mock JWT server failed to start within 1 second.")
 
     yield url
 
@@ -331,9 +333,18 @@ def lambda_handler_factory(
 
     yield lambda_handler
 
-    # Cleanup.
-    os.environ.pop("POSTGRES_SECRET_NAME", None)
-    os.environ.pop("POSTGRES_SECRET_REGION", None)
+    # Cleanup environment variables.
+    for key in (
+        "LOG_LEVEL",
+        "AWS_ENDPOINT_URL",
+        "AWS_DEFAULT_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "POSTGRES_SECRET_NAME",
+        "POSTGRES_SECRET_REGION",
+        "CONF_DIR",
+    ):
+        os.environ.pop(key, None)
     if test_config_file.exists():
         test_config_file.unlink()
     if access_config_dst.exists():
