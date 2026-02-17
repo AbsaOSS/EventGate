@@ -112,7 +112,7 @@ Unit tests are written using pytest. To run the tests, use the following command
 pytest tests/unit/
 ```
 
-This will execute all tests located in the tests directory.
+This will execute all unit tests located in the tests/unit/ directory.
 
 ### Focused / Selective Test Runs
 Run a single test file:

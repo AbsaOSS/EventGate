@@ -32,7 +32,7 @@ Patterns
 - Keep error response format stable: `{"success": false, "statusCode": int, "errors": [...]}`
 
 Testing
-- Mirror src structure: `src/handlers/` -> `tests/handlers/`
+- Mirror src structure: `src/handlers/` -> `tests/unit/handlers/`
 - Unit tests: mock external services via `conftest.py` (Kafka, EventBridge, PostgreSQL, S3)
 - Integration tests: call `lambda_handler` directly with real containers (testcontainers-python for Kafka, PostgreSQL, LocalStack)
 - No real API/DB calls in unit tests
