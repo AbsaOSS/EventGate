@@ -28,6 +28,7 @@ from confluent_kafka import Consumer
 
 from tests.integration.conftest import EventGateTestClient
 from tests.integration.utils.jwt_helper import generate_token
+from tests.integration.utils.utils import create_runs_event
 
 
 class TestTopicsListEndpoint:
@@ -78,21 +79,21 @@ class TestPostEventEndpoint:
 
     @pytest.fixture
     def valid_event(self) -> dict:
-        """Generate a valid test event."""
-        return {
-            "event_id": str(uuid.uuid4()),
-            "tenant_id": "TEST",
-            "source_app": "integration-test",
-            "environment": "test",
-            "timestamp": int(time.time() * 1000),
-        }
+        """Generate a valid run event."""
+        return create_runs_event(
+            event_id=str(uuid.uuid4()),
+            job_ref="spark-app-001",
+            tenant_id="TEST",
+            source_app="integration-test",
+            catalog_id="db.schema.table",
+        )
 
     def test_post_event_without_token_returns_401(
         self, eventgate_client: EventGateTestClient, valid_event: dict
     ) -> None:
         """Test POST without JWT returns 401."""
         response = eventgate_client.post_event(
-            "public.cps.za.test",
+            "public.cps.za.runs",
             valid_event,
             token=None,
         )
@@ -104,7 +105,7 @@ class TestPostEventEndpoint:
     ) -> None:
         """Test POST with valid JWT returns accepted status."""
         response = eventgate_client.post_event(
-            "public.cps.za.test",
+            "public.cps.za.runs",
             valid_event,
             token=valid_token,
         )
@@ -118,7 +119,7 @@ class TestPostEventEndpoint:
         invalid_event = {"invalid_field": "value"}
 
         response = eventgate_client.post_event(
-            "public.cps.za.test",
+            "public.cps.za.runs",
             invalid_event,
             token=valid_token,
         )
@@ -131,7 +132,7 @@ class TestPostEventEndpoint:
         """Test POST from unauthorized user returns 403."""
         unauthorized_token = generate_token(jwt_keypair["private_key_pem"], "UnauthorizedUser")
         response = eventgate_client.post_event(
-            "public.cps.za.test",
+            "public.cps.za.runs",
             valid_event,
             token=unauthorized_token,
         )
@@ -156,15 +157,15 @@ class TestPostEventWriterVerification:
 
     @pytest.fixture(scope="class")
     def posted_event(self, eventgate_client: EventGateTestClient, valid_token: str) -> Dict[str, Any]:
-        """Post a unique event and return its payload for downstream assertions."""
-        event = {
-            "event_id": str(uuid.uuid4()),
-            "tenant_id": "VERIFY",
-            "source_app": "integration-test-verify",
-            "environment": "test",
-            "timestamp": int(time.time() * 1000),
-        }
-        response = eventgate_client.post_event("public.cps.za.test", event, token=valid_token)
+        """Post a unique runs event and return its payload for downstream assertions."""
+        event = create_runs_event(
+            event_id=str(uuid.uuid4()),
+            job_ref="spark-verify-001",
+            tenant_id="VERIFY",
+            source_app="integration-test-verify",
+            catalog_id="db.schema.verify_table",
+        )
+        response = eventgate_client.post_event("public.cps.za.runs", event, token=valid_token)
         assert 202 == response["statusCode"]
         return event
 
@@ -177,7 +178,7 @@ class TestPostEventWriterVerification:
                 "auto.offset.reset": "earliest",
             }
         )
-        consumer.subscribe(["public.cps.za.test"])
+        consumer.subscribe(["public.cps.za.runs"])
 
         try:
             messages = []
@@ -211,17 +212,27 @@ class TestPostEventWriterVerification:
         assert "Arn" in response
 
     def test_event_received_by_postgres(self, posted_event: Dict[str, Any], postgres_container: str) -> None:
-        """Verify the posted event was inserted into the PostgreSQL test table."""
+        """Verify the posted event was inserted into the PostgreSQL runs tables."""
         conn = psycopg2.connect(postgres_container)
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT event_id, tenant_id FROM public_cps_za_test WHERE event_id = %s",
+                    "SELECT event_id, tenant_id FROM public_cps_za_runs WHERE event_id = %s",
                     (posted_event["event_id"],),
                 )
-                row = cursor.fetchone()
-                assert row is not None
-                assert posted_event["event_id"] == row[0]
-                assert posted_event["tenant_id"] == row[1]
+                run_row = cursor.fetchone()
+                assert run_row is not None
+                assert posted_event["event_id"] == run_row[0]
+                assert posted_event["tenant_id"] == run_row[1]
+
+                cursor.execute(
+                    "SELECT event_id, catalog_id, status FROM public_cps_za_runs_jobs WHERE event_id = %s",
+                    (posted_event["event_id"],),
+                )
+                job_row = cursor.fetchone()
+                assert job_row is not None
+                assert posted_event["event_id"] == job_row[0]
+                assert posted_event["jobs"][0]["catalog_id"] == job_row[1]
+                assert posted_event["jobs"][0]["status"] == job_row[2]
         finally:
             conn.close()

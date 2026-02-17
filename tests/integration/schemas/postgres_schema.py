@@ -17,13 +17,27 @@
 """PostgreSQL schema for integration tests."""
 
 SCHEMA_SQL = """
--- Test topic table matching WriterPostgres test configuration
-CREATE TABLE IF NOT EXISTS public_cps_za_test (
+-- Table matching WriterPostgres._postgres_run_write columns
+CREATE TABLE IF NOT EXISTS public_cps_za_runs (
     event_id VARCHAR(255) NOT NULL,
+    job_ref VARCHAR(255) NOT NULL,
     tenant_id VARCHAR(255) NOT NULL,
     source_app VARCHAR(255) NOT NULL,
+    source_app_version VARCHAR(255) NOT NULL,
     environment VARCHAR(255) NOT NULL,
-    timestamp_event BIGINT,
+    timestamp_start BIGINT,
+    timestamp_end BIGINT
+);
+
+-- Table matching WriterPostgres._postgres_run_write job rows
+CREATE TABLE IF NOT EXISTS public_cps_za_runs_jobs (
+    event_id VARCHAR(255) NOT NULL,
+    country VARCHAR(255),
+    catalog_id VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    timestamp_start BIGINT,
+    timestamp_end BIGINT,
+    message TEXT,
     additional_info JSONB
 );
 """
