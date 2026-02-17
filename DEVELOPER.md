@@ -155,8 +155,6 @@ EventGate uses a **direct invocation approach** for integration testing:
 - **Mock JWT provider runs in-process** as a background thread (no container)
 - Test configuration is dynamically generated and injected via environment variables
 
-This approach is faster (~8s vs 30s+), more reliable, and easier to debug than container-based Lambda testing.
-
 ### Prerequisites
 - Docker running (Docker Desktop on macOS/Windows, or Docker Engine on Linux)
 - Python 3.13 with dependencies installed
