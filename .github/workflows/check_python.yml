@@ -111,29 +111,6 @@ jobs:
         id: check-format
         run: black --check $(git ls-files '*.py')
 
-  pytest-test:
-    name: Pytest Unit Tests with Coverage
-    needs: detect
-    if: needs.detect.outputs.python_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
-
-      - name: Check code coverage with Pytest
-        run: pytest --cov=. -v tests/ --cov-fail-under=80
-
   mypy-check:
     name: Mypy Type Check
     needs: detect
@@ -158,6 +135,55 @@ jobs:
       - name: Check types with Mypy
         id: check-types
         run: mypy .
+
+  unit-tests:
+    name: Pytest Unit Tests with Coverage
+    needs: detect
+    if: needs.detect.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check code coverage with Pytest
+        run: pytest --cov=. -v tests/unit/ --cov-fail-under=80
+
+  integration-tests:
+    name: Pytest Integration Tests
+    needs: detect
+    if: needs.detect.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short --log-cli-level=INFO
 
   noop:
     name: No Operation

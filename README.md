@@ -146,10 +146,9 @@ Use when Kafka access needs Kerberos / SASL_SSL or custom `librdkafka` build.
 | Static code analysis (Pylint) | [Run Pylint Tool Locally](./DEVELOPER.md#run-pylint-tool-locally)     |
 | Formatting (Black)            | [Run Black Tool Locally](./DEVELOPER.md#run-black-tool-locally)       |
 | Type checking (mypy)          | [Run mypy Tool Locally](./DEVELOPER.md#run-mypy-tool-locally)         |
-| Terraform Linter (TFLint)     | [Run TFLint Tool Locally](./DEVELOPER.md#run-tflint-tool-locally)     |
-| Security Scanner (Trivy)      | [Run Trivy Tool Locally](./DEVELOPER.md#run-trivy-tool-locally)       |
-| Unit tests                    | [Running Unit Test](./DEVELOPER.md#running-unit-test)                 |
+| Unit tests                    | [Run Unit Test Locally](./DEVELOPER.md#run-unit-test-locally)         |
 | Code coverage                 | [Code Coverage](./DEVELOPER.md#code-coverage)                         |
+| Integration tests             | [Run Integration Test Locally](./DEVELOPER.md#run-integration-test-locally) |
 
 ## Security & Authorization
 - JWT tokens must be RS256 signed; current and previous public keys are fetched at cold start from `token_public_keys_url` as DER base64 values (list `keys[*].key`, with single-key fallback `{ "key": "..." }`).

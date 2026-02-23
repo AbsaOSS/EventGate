@@ -19,6 +19,7 @@ Python style
 - All imports at top of file (never inside functions)
 - Apache 2.0 license header in every .py file (including `__init__.py`)
 - Docstrings must start with a short summary line
+- End all log messages with a period: `logger.info("Message.")`
 
 Patterns
 - `__init__` methods must not raise exceptions; defer validation and connection to first use (lazy init)
@@ -31,8 +32,9 @@ Patterns
 - Keep error response format stable: `{"success": false, "statusCode": int, "errors": [...]}`
 
 Testing
-- Mirror src structure: `src/handlers/` -> `tests/handlers/`
-- Mock external services via `conftest.py`: Kafka, EventBridge, PostgreSQL, S3
+- Mirror src structure: `src/handlers/` -> `tests/unit/handlers/`
+- Unit tests: mock external services via `conftest.py` (Kafka, EventBridge, PostgreSQL, S3)
+- Integration tests: call `lambda_handler` directly with real containers (testcontainers-python for Kafka, PostgreSQL, LocalStack)
 - No real API/DB calls in unit tests
 - Use `mocker.patch("module.dependency")` or `mocker.patch.object(Class, "method")`
 - Assert pattern: `assert expected == actual`

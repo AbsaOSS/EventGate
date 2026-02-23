@@ -5,8 +5,9 @@
 - [Run Pylint Tool Locally](#run-pylint-tool-locally)
 - [Run Black Tool Locally](#run-black-tool-locally)
 - [Run mypy Tool Locally](#run-mypy-tool-locally)
-- [Run Unit Test](#running-unit-test)
+- [Run Unit Test Locally](#run-unit-test-locally)
 - [Code Coverage](#code-coverage)
+- [Run Integration Test Locally](#run-integration-test-locally)
 
 ## Get Started
 
@@ -45,7 +46,7 @@ To run Pylint on a specific file, follow the pattern `pylint <path_to_file>/<nam
 
 Example:
 ```shell
-pylint src/writer_kafka.py
+pylint src/event_gate_lambda.py
 ``` 
 
 ## Run Black Tool Locally
@@ -68,7 +69,7 @@ To run Black on a specific file, follow the pattern `black <path_to_file>/<name_
 
 Example:
 ```shell
-black src/writer_kafka.py
+black src/writers/writer_kafka.py
 ``` 
 
 ### Expected Output
@@ -100,31 +101,31 @@ To run mypy on a specific file, follow the pattern `mypy <path_to_file>/<name_of
 
 Example:
 ```shell
-mypy src/writer_kafka.py
+mypy src/handlers/handler_token.py
 ```
 
-## Running Unit Test
+## Run Unit Test Locally
 
 Unit tests are written using pytest. To run the tests, use the following command:
 
 ```shell
-pytest tests/
+pytest tests/unit/
 ```
 
-This will execute all tests located in the tests directory.
+This will execute all unit tests located in the tests/unit/ directory.
 
 ### Focused / Selective Test Runs
 Run a single test file:
 ```shell
-pytest tests/test_writer_kafka.py -q
+pytest tests/unit/writers/test_writer_kafka.py
 ```
 Filter by keyword expression:
 ```shell
-pytest -k kafka -q
+pytest -k kafka
 ```
 Run a single test function (node id):
 ```shell
-pytest tests/test_event_gate_lambda.py::test_post_multiple_writer_failures -q
+pytest tests/unit/writers/test_writer_eventbridge.py::test_write_success
 ```
 
 ## Code Coverage
@@ -132,7 +133,7 @@ pytest tests/test_event_gate_lambda.py::test_post_multiple_writer_failures -q
 Code coverage is collected using the pytest-cov coverage tool. To run the tests and collect coverage information, use the following command:
 
 ```shell
-pytest --cov=. -v tests/ --cov-fail-under=80 --cov-report=term-missing
+pytest --cov=. -v tests/unit/ --cov-fail-under=80 --cov-report=html
 ```
 
 This will execute all tests in the tests directory and generate a code coverage report with missing line details and enforce a minimum 80% threshold.
@@ -140,4 +141,64 @@ This will execute all tests in the tests directory and generate a code coverage 
 Open the HTML coverage report:
 ```shell
 open htmlcov/index.html
+```
+
+## Run Integration Test Locally
+
+Integration tests validate EventGate against real service dependencies using testcontainers-python.
+
+### Integration Test Approach
+
+EventGate uses a **direct invocation approach** for integration testing:
+- **Lambda handler is called directly** in Python (not run in a container)
+- **External dependencies run in Docker containers**: Kafka, PostgreSQL, LocalStack (EventBridge)
+- **Mock JWT provider runs in-process** as a background thread (no container)
+- Test configuration is dynamically generated and injected via environment variables
+
+### Prerequisites
+- Docker running (Docker Desktop on macOS/Windows, or Docker Engine on Linux)
+- Python 3.13 with dependencies installed
+
+### Run Integration Tests
+
+Containers start and stop automatically:
+```shell
+pytest tests/integration/ -v
+```
+
+With detailed logging:
+```shell
+pytest tests/integration/ -v --log-cli-level=INFO
+```
+
+### Run Specific Integration Tests
+
+Run a single test file:
+```shell
+pytest tests/integration/test_health_endpoint.py -v
+```
+
+Run a specific test function:
+```shell
+pytest tests/integration/test_topics_endpoint.py::TestPostEventEndpoint::test_post_event_with_valid_token_returns_202 -v
+```
+
+### Troubleshooting
+
+If containers fail to start, check Docker is running:
+```shell
+docker info
+```
+
+If image pulls fail with TLS or timeout errors, pre-pull the required images manually:
+```shell
+docker pull testcontainers/ryuk:0.8.1
+docker pull postgres:16
+docker pull confluentinc/cp-kafka:7.6.0
+docker pull localstack/localstack:latest
+```
+
+View container logs in pytest output by increasing log level:
+```shell
+pytest tests/integration/ -v --log-cli-level=DEBUG
 ```
