@@ -49,3 +49,36 @@ resource "aws_lambda_function" "event_gate_lambda" {
     }
   }
 }
+
+resource "aws_lambda_function" "event_stats_lambda" {
+  function_name = "${var.resource_prefix}event-stats-lambda"
+  role          = var.lambda_stats_role_arn
+  architectures = ["x86_64"]
+  timeout       = 60
+
+  package_type = var.lambda_package_type
+  s3_bucket    = var.lambda_package_type == "Zip" ? var.lambda_src_s3_bucket : null
+  s3_key       = var.lambda_package_type == "Zip" ? var.lambda_src_s3_key : null
+  handler      = var.lambda_package_type == "Zip" ? "event_stats_lambda.lambda_handler" : null
+  runtime      = var.lambda_package_type == "Zip" ? "python3.13" : null
+
+  image_config {
+    command = var.lambda_package_type == "Image" ? ["src.event_stats_lambda.lambda_handler"] : null
+  }
+
+  source_code_hash = var.lambda_package_type == "Zip" ? data.aws_s3_object.event_gate_lambda_zip[0].etag : null
+
+  image_uri = var.lambda_package_type == "Image" ? var.lambda_src_ecr_image : null
+
+  vpc_config {
+    subnet_ids         = var.lambda_vpc_subnet_ids
+    security_group_ids = [aws_security_group.event_gate_sg.id]
+  }
+  tags = { "BuiltBy" = "Terraform" }
+
+  environment {
+    variables = {
+      LOG_LEVEL = "INFO"
+    }
+  }
+}
