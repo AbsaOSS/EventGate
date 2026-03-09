@@ -14,18 +14,16 @@
 # limitations under the License.
 #
 
-"""
-This module provides abstract base class for all EventGate writers.
-"""
+"""Abstract base class for all EventGate writers."""
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
 
 class Writer(ABC):
-    """
-    Abstract base class for EventGate writers.
-    All writers inherit from this class and implement the write() method. Writers use lazy initialization.
+    """Abstract base class for EventGate writers.
+    All writers inherit from this class and implement the write() method.
+    Writers use lazy initialization.
     """
 
     def __init__(self, config: Dict[str, Any]) -> None:
@@ -33,13 +31,10 @@ class Writer(ABC):
 
     @abstractmethod
     def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """
-        Publish a message to the target system.
-
+        """Publish a message to the target system.
         Args:
             topic_name: Target writer topic (destination) name.
             message: JSON-serializable payload to publish.
-
         Returns:
             Tuple of (success: bool, error_message: Optional[str]).
             - (True, None) on success or when writer is disabled/skipped.
@@ -48,9 +43,7 @@ class Writer(ABC):
 
     @abstractmethod
     def check_health(self) -> Tuple[bool, str]:
-        """
-        Check writer health and connectivity.
-
+        """Check writer health and connectivity.
         Returns:
             Tuple of (is_healthy: bool, message: str).
             - (True, "ok") - configured and working.

@@ -14,10 +14,7 @@
 # limitations under the License.
 #
 
-"""
-Kafka writer module.
-Provides functionality for publishing messages to Kafka topics.
-"""
+"""Kafka writer for publishing messages to Kafka topics."""
 
 import json
 import logging
@@ -40,20 +37,17 @@ _RETRY_BACKOFF_SEC = float(os.environ.get("KAFKA_RETRY_BACKOFF", "0.5"))
 
 
 class WriterKafka(Writer):
-    """
-    Kafka writer for publishing messages to Kafka topics.
+    """Kafka writer for publishing messages to Kafka topics.
     The Kafka producer is created on the first write() call.
     """
 
     def __init__(self, config: Dict[str, Any]) -> None:
         super().__init__(config)
         self._producer: Optional["Producer"] = None
-        logger.debug("Initialized Kafka writer")
+        logger.debug("Initialized Kafka writer.")
 
     def _create_producer(self) -> Optional[Producer]:
-        """
-        Create Kafka producer from config.
-
+        """Create Kafka producer from config.
         Returns:
             None if bootstrap server not configured else Producer instance.
         """
@@ -77,14 +71,12 @@ class WriterKafka(Writer):
                     "ssl.key.password": self.config["kafka_ssl_key_password"],
                 }
             )
-            logger.debug("Kafka producer will use SASL_SSL")
+            logger.debug("Kafka producer will use SASL_SSL.")
 
         return Producer(producer_config)
 
     def _flush_with_timeout(self, timeout: float) -> Optional[int]:
-        """
-        Flush the Kafka producer with a timeout.
-
+        """Flush the Kafka producer with a timeout.
         Args:
             timeout: Timeout in seconds.
         Returns:
@@ -99,9 +91,7 @@ class WriterKafka(Writer):
             return self._producer.flush()
 
     def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """
-        Publish a message to Kafka.
-
+        """Publish a message to Kafka.
         Args:
             topic_name: Kafka topic to publish to.
             message: JSON-serializable payload.
@@ -114,7 +104,7 @@ class WriterKafka(Writer):
 
             # If no bootstrap server configured, skipping Kafka writer
             if self._producer is None:
-                logger.debug("Kafka producer not initialized - skipping Kafka writer")
+                logger.debug("Kafka producer not initialized - skipping Kafka writer.")
                 return True, None
 
         log_payload_at_trace(logger, "Kafka", topic_name, message)
@@ -124,7 +114,7 @@ class WriterKafka(Writer):
 
         # Produce step
         try:
-            logger.debug("Sending to Kafka %s", topic_name)
+            logger.debug("Sending to Kafka %s.", topic_name)
             self._producer.produce(
                 topic_name,
                 key="",
@@ -149,14 +139,14 @@ class WriterKafka(Writer):
                 break
             if attempt < _MAX_RETRIES:
                 logger.warning(
-                    "Kafka flush pending (%s message(s) remain) attempt %d/%d", remaining, attempt, _MAX_RETRIES
+                    "Kafka flush pending (%s message(s) remain) attempt %d/%d.", remaining, attempt, _MAX_RETRIES
                 )
                 time.sleep(_RETRY_BACKOFF_SEC)
 
         # Warn if messages still pending after retries
         if isinstance(remaining, int) and remaining > 0:
             logger.warning(
-                "Kafka flush timeout after %ss: %d message(s) still pending", _KAFKA_FLUSH_TIMEOUT_SEC, remaining
+                "Kafka flush timeout after %ss: %d message(s) still pending.", _KAFKA_FLUSH_TIMEOUT_SEC, remaining
             )
 
         if errors:
@@ -167,9 +157,7 @@ class WriterKafka(Writer):
         return True, None
 
     def check_health(self) -> Tuple[bool, str]:
-        """
-        Check Kafka writer health.
-
+        """Check Kafka writer health.
         Returns:
             Tuple of (is_healthy: bool, message: str).
         """
@@ -179,7 +167,7 @@ class WriterKafka(Writer):
         try:
             if self._producer is None:
                 self._producer = self._create_producer()
-                logger.debug("Kafka producer initialized during health check")
+                logger.debug("Kafka producer initialized during health check.")
             if self._producer is None:
                 return False, "producer initialization failed"
             return True, "ok"

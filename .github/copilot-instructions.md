@@ -4,9 +4,12 @@ Purpose
 AWS Lambda event gateway that receives messages via API Gateway and dispatches them to Kafka, EventBridge, and PostgreSQL.
 
 Structure
-- Entry point: `src/event_gate_lambda.py`
-- Handlers: `src/handlers/` (HandlerApi, HandlerToken, HandlerTopic, HandlerHealth)
+- Main lambda (event ingestion): `src/event_gate_lambda.py`
+- Stats lambda (read-only queries): `src/event_stats_lambda.py`
+- Shared config loading: `src/utils/config_loader.py`
+- Handlers: `src/handlers/` (HandlerApi, HandlerToken, HandlerTopic, HandlerHealth, HandlerStats)
 - Writers: `src/writers/` (inherit from `Writer` base class)
+- Readers: `src/readers/` (read-only database access for stats)
 - Config: `conf/config.json`, `conf/access.json`, `conf/topic_schemas/*.json`
 - Production Terraform scripts are not part of this repository; `terraform_examples/` for reference configurations only
 
@@ -19,12 +22,13 @@ Python style
 - All imports at top of file (never inside functions)
 - Apache 2.0 license header in every .py file (including `__init__.py`)
 - Docstrings must start with a short summary line
+- No blank lines between docstring sections (summary, Args, Returns, Raises)
 - End all log messages with a period: `logger.info("Message.")`
 
 Patterns
 - `__init__` methods must not raise exceptions; defer validation and connection to first use (lazy init)
 - Writers: inherit from `Writer(ABC)`, implement `write(topic, message) -> (bool, str|None)` and `check_health() -> (bool, str)`
-- Route dispatch via `ROUTE_MAP` dict mapping routes to handler functions in `event_gate_lambda.py`
+- Route dispatch via `ROUTE_MAP` dict mapping routes to handler functions in `event_gate_lambda.py` and `event_stats_lambda.py`
 - Separate business logic from environment access (env vars, file I/O, network calls)
 - No duplicate validation; centralize parsing in one layer where practical
 - Preserve existing formatting and conventions
@@ -40,6 +44,8 @@ Testing
 - Assert pattern: `assert expected == actual`
 
 Quality gates (run after changes, fix only if below threshold)
+- Always run quality gates using the project virtual environment: `.venv/bin/python -m <tool>`
+- Once a quality gate passes, do not re-run it in different scenarios
 - black .
 - mypy .
 - pylint $(git ls-files '*.py') >= 9.5
