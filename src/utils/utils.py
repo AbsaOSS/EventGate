@@ -15,17 +15,18 @@
 #
 
 """Utility functions for the EventGate project."""
+
 import json
-from typing import Dict, Any
+import logging
+from typing import Any, Callable, Dict
 
 
 def build_error_response(status: int, err_type: str, message: str) -> Dict[str, Any]:
-    """
-    Build a standardized JSON error response body.
+    """Build a standardized JSON error response body.
     Args:
-        status (int): HTTP status code.
-        err_type (str): A short error classifier (e.g. 'auth', 'validation').
-        message (str): Human readable error description.
+        status: HTTP status code.
+        err_type: A short error classifier (e.g. ``auth``, ``validation``).
+        message: Human readable error description.
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     """
@@ -40,3 +41,36 @@ def build_error_response(status: int, err_type: str, message: str) -> Dict[str, 
             }
         ),
     }
+
+
+def dispatch_request(
+    event: Dict[str, Any],
+    route_map: Dict[str, Callable[..., Dict[str, Any]]],
+    request_logger: logging.Logger,
+) -> Dict[str, Any]:
+    """Dispatch an API Gateway event to the matching route handler.
+    Args:
+        event: API Gateway proxy event.
+        route_map: Mapping of resource paths to handler callables.
+        request_logger: Logger instance for error reporting.
+    Returns:
+        API Gateway response dictionary.
+    """
+    try:
+        resource = event.get("resource", "").lower()
+        route_function = route_map.get(resource)
+
+        if route_function:
+            return route_function(event)
+
+        return build_error_response(404, "route", "Resource not found.")
+    except (
+        KeyError,
+        json.JSONDecodeError,
+        ValueError,
+        AttributeError,
+        TypeError,
+        RuntimeError,
+    ) as request_exc:
+        request_logger.exception("Request processing error: %s.", request_exc)
+        return build_error_response(500, "internal", "Unexpected server error.")

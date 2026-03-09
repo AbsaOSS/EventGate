@@ -14,12 +14,76 @@
 # limitations under the License.
 #
 
-"""
-This module contains all constants and enums used across the project.
-"""
+"""Constants and enums used across the project."""
+
+from typing import Any
 
 # Configuration keys
 TOKEN_PROVIDER_URL_KEY = "token_provider_url"
 TOKEN_PUBLIC_KEY_URL_KEY = "token_public_key_url"
 TOKEN_PUBLIC_KEYS_URL_KEY = "token_public_keys_url"
 SSL_CA_BUNDLE_KEY = "ssl_ca_bundle"
+
+# Maps topic names to their PostgreSQL table(s)
+TOPIC_TABLE_MAP: dict[str, Any] = {
+    "public.cps.za.runs": {
+        "main": "public_cps_za_runs",
+        "jobs": "public_cps_za_runs_jobs",
+        "columns": {
+            "main": [
+                "event_id",
+                "job_ref",
+                "tenant_id",
+                "source_app",
+                "source_app_version",
+                "environment",
+                "timestamp_start",
+                "timestamp_end",
+            ],
+            "jobs": [
+                "internal_id",
+                "event_id",
+                "country",
+                "catalog_id",
+                "status",
+                "timestamp_start",
+                "timestamp_end",
+                "message",
+                "additional_info",
+            ],
+        },
+    },
+    "public.cps.za.dlchange": {
+        "main": "public_cps_za_dlchange",
+        "columns": {
+            "main": [
+                "event_id",
+                "tenant_id",
+                "source_app",
+                "source_app_version",
+                "environment",
+                "timestamp_event",
+                "country",
+                "catalog_id",
+                "operation",
+                "location",
+                "format",
+                "format_options",
+                "additional_info",
+            ],
+        },
+    },
+    "public.cps.za.test": {
+        "main": "public_cps_za_test",
+        "columns": {
+            "main": [
+                "event_id",
+                "tenant_id",
+                "source_app",
+                "environment",
+                "timestamp_event",
+                "additional_info",
+            ],
+        },
+    },
+}

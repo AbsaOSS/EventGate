@@ -14,60 +14,62 @@
 # limitations under the License.
 #
 
-"""
-This module provides the HandlerHealth class for service health monitoring.
-"""
+"""Health monitoring handler for EventGate services."""
+
 import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, Any
-
-from src.writers.writer import Writer
+from typing import Any, Dict, Mapping, Protocol, Tuple
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
 logger.setLevel(log_level)
 
 
-class HandlerHealth:
-    """
-    HandlerHealth manages service health checks and dependency status monitoring.
-    """
+class HealthCheckable(Protocol):
+    """Protocol for dependencies that support health checks."""
 
-    def __init__(self, writers: Dict[str, Writer]):
+    def check_health(self) -> Tuple[bool, str]:
+        """Check dependency health.
+        Returns:
+            Tuple of (is_healthy, message).
+        """
+
+
+class HandlerHealth:
+    """Manages service health checks and dependency status monitoring."""
+
+    def __init__(self, dependencies: Mapping[str, HealthCheckable]) -> None:
         self.start_time: datetime = datetime.now(timezone.utc)
-        self.writers = writers
+        self.dependencies = dependencies
 
     def get_health(self) -> Dict[str, Any]:
-        """
-        Check service health and return status.
-
+        """Check service health and return status.
         Returns:
-            Dict[str, Any]: API Gateway response with health status.
-                - 200: All dependencies healthy
-                - 503: One or more dependencies not initialized
+            API Gateway response with health status.
+            200 when all dependencies are healthy, 503 otherwise.
         """
-        logger.debug("Handling GET Health")
+        logger.debug("Handling GET Health.")
 
         failures: Dict[str, str] = {}
 
-        for name, writer in self.writers.items():
-            healthy, msg = writer.check_health()
+        for name, dependency in self.dependencies.items():
+            healthy, msg = dependency.check_health()
             if not healthy:
                 failures[name] = msg
 
         uptime_seconds = int((datetime.now(timezone.utc) - self.start_time).total_seconds())
 
         if not failures:
-            logger.debug("Health check passed")
+            logger.debug("Health check passed.")
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"status": "ok", "uptime_seconds": uptime_seconds}),
             }
 
-        logger.debug("Health check degraded: %s", failures)
+        logger.debug("Health check degraded: %s.", failures)
         return {
             "statusCode": 503,
             "headers": {"Content-Type": "application/json"},
