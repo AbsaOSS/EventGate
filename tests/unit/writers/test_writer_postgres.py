@@ -227,7 +227,7 @@ def test_write_unknown_topic_returns_false(reset_env, monkeypatch):
     writer = WriterPostgres({})
     writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     ok, err = writer.write("public.cps.za.unknown", {})
-    assert not ok and "unknown topic" in err
+    assert not ok and "Unknown topic" in err
 
 
 def test_write_success_known_topic(reset_env, monkeypatch):

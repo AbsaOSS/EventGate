@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os, sys
+import os
+import sys
 import base64
 import importlib.util
 import json

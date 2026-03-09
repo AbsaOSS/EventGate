@@ -43,6 +43,6 @@ def test_get_api_returns_correct_response():
         handler = HandlerApi().with_api_definition_loaded()
         response = handler.get_api()
 
-        assert response["statusCode"] == 200
-        assert response["headers"]["Content-Type"] == "application/yaml"
-        assert response["body"] == mock_content
+        assert 200 == response["statusCode"]
+        assert "application/yaml" == response["headers"]["Content-Type"]
+        assert mock_content == response["body"]

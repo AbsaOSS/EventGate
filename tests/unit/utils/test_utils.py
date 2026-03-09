@@ -24,12 +24,12 @@ def test_build_error_response_structure():
     """Test that build_error_response returns correct response structure."""
     resp = build_error_response(404, "topic", "Topic not found")
 
-    assert resp["statusCode"] == 404
-    assert resp["headers"]["Content-Type"] == "application/json"
+    assert 404 == resp["statusCode"]
+    assert "application/json" == resp["headers"]["Content-Type"]
 
     body = json.loads(resp["body"])
     assert body["success"] is False
-    assert body["statusCode"] == 404
-    assert len(body["errors"]) == 1
-    assert body["errors"][0]["type"] == "topic"
-    assert body["errors"][0]["message"] == "Topic not found"
+    assert 404 == body["statusCode"]
+    assert 1 == len(body["errors"])
+    assert "topic" == body["errors"][0]["type"]
+    assert "Topic not found" == body["errors"][0]["message"]
