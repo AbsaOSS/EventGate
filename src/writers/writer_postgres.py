@@ -41,7 +41,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-
 class WriterPostgres(Writer):
     """Postgres writer for storing events in PostgreSQL database.
     Database credentials are loaded from AWS Secrets Manager at initialization.
@@ -54,14 +53,10 @@ class WriterPostgres(Writer):
         self._db_config: dict[str, Any | None] | None = None
         logger.debug("Initialized PostgreSQL writer.")
 
-    def _load_db_config(self) -> None:
-        """Load database config from AWS Secrets Manager."""
-        self._db_config = load_postgres_config(self._secret_name, self._secret_region)
-
-    def _ensure_db_config(self) -> dict[str, Any]:
-        """Ensure database config is loaded and return it."""
+    def _load_db_config(self) -> dict[str, Any]:
+        """Load database config from AWS Secrets Manager if not already loaded."""
         if self._db_config is None:
-            self._load_db_config()
+            self._db_config = load_postgres_config(self._secret_name, self._secret_region)
         return self._db_config  # type: ignore[return-value]
 
     def _postgres_edla_write(self, cursor: Any, table: str, message: dict[str, Any]) -> None:
@@ -252,7 +247,7 @@ class WriterPostgres(Writer):
             Tuple of (success: bool, error_message: str | None).
         """
         try:
-            db_config = self._ensure_db_config()
+            db_config = self._load_db_config()
 
             if not db_config.get("database"):
                 logger.debug("No Postgres - skipping Postgres writer.")
@@ -303,7 +298,7 @@ class WriterPostgres(Writer):
             return True, "not configured"
 
         try:
-            db_config = self._ensure_db_config()
+            db_config = self._load_db_config()
             logger.debug("PostgreSQL config loaded during health check.")
         except (BotoCoreError, ClientError) as err:
             return False, str(err)

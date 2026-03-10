@@ -24,6 +24,12 @@ TOKEN_PUBLIC_KEY_URL_KEY = "token_public_key_url"
 TOKEN_PUBLIC_KEYS_URL_KEY = "token_public_keys_url"
 SSL_CA_BUNDLE_KEY = "ssl_ca_bundle"
 
+# Query constants
+POSTGRES_DEFAULT_SORT: list[str] = ["-j.internal_id"]  # Default sort newest first
+POSTGRES_DEFAULT_WINDOW = 7 * 24 * 60 * 60 * 1000  # 7 days in epoch milliseconds
+POSTGRES_DEFAULT_LIMIT = 50
+POSTGRES_MAX_LIMIT = 1000
+
 # Maps topic names to their PostgreSQL table(s)
 TOPIC_TABLE_MAP: dict[str, Any] = {
     "public.cps.za.runs": {

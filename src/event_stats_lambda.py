@@ -65,11 +65,11 @@ topics: dict[str, dict[str, Any]] = {name: {} for name in topic_names}
 access_config = load_access_config(config, aws_s3)
 
 # Initialize EventStats readers
-reader_postgres = ReaderPostgres(config)
+reader_postgres = ReaderPostgres()
 
 # Initialize EventStats handlers
 handler_token = HandlerToken(config).with_public_keys_queried()
-handler_stats = HandlerStats(config, handler_token, reader_postgres, topics, access_config)
+handler_stats = HandlerStats(handler_token, access_config, topics, reader_postgres)
 handler_health = HandlerHealth({"postgres_reader": reader_postgres})
 
 # Route to handler function mapping

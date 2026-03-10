@@ -29,7 +29,6 @@ from src.writers.writer import Writer
 logger = logging.getLogger(__name__)
 
 
-
 class WriterEventBridge(Writer):
     """EventBridge writer for publishing events to AWS EventBridge.
     The boto3 EventBridge client is created on the first write() call.
