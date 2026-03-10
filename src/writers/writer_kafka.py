@@ -27,8 +27,6 @@ from src.utils.trace_logging import log_payload_at_trace
 from src.writers.writer import Writer
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 # Configurable flush timeouts and retries via env variables to avoid hanging indefinitely
 _KAFKA_FLUSH_TIMEOUT_SEC = float(os.environ.get("KAFKA_FLUSH_TIMEOUT", "7"))

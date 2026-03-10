@@ -18,7 +18,6 @@
 
 import base64
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -36,8 +35,6 @@ from src.utils.constants import (
 )
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 
 class HandlerToken:

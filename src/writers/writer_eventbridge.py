@@ -18,7 +18,6 @@
 
 import json
 import logging
-import os
 from typing import Any, Optional
 
 import boto3
@@ -28,8 +27,7 @@ from src.utils.trace_logging import log_payload_at_trace
 from src.writers.writer import Writer
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
+
 
 
 class WriterEventBridge(Writer):

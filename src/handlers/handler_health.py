@@ -18,14 +18,11 @@
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from collections.abc import Mapping
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 
 class HealthCheckable(Protocol):

@@ -24,8 +24,8 @@ from typing import Any
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.constants import TOPIC_TABLE_MAP
-from src.utils.secrets import load_postgres_config
 from src.utils.trace_logging import log_payload_at_trace
+from src.utils.utils import load_postgres_config
 from src.writers.writer import Writer
 
 try:
@@ -39,8 +39,7 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
+
 
 
 class WriterPostgres(Writer):
