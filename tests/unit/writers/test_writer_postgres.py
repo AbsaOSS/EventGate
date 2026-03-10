@@ -22,6 +22,7 @@ import pytest
 
 from src.writers.writer_postgres import WriterPostgres
 import src.writers.writer_postgres as wp
+import src.utils.utils as secrets_mod
 
 
 class MockCursor:
@@ -262,7 +263,7 @@ def test_init_with_secret(monkeypatch, reset_env):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(wp.boto3, "Session", lambda: MockSession())
+    monkeypatch.setattr(secrets_mod.boto3, "Session", lambda: MockSession())
     writer = WriterPostgres({})
     assert writer._db_config is None
     # Trigger lazy load via check_health
@@ -330,7 +331,7 @@ def test_check_health_success(reset_env, monkeypatch):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(wp.boto3, "Session", MockSession)
+    monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
     healthy, msg = writer.check_health()
     assert healthy and msg == "ok"
@@ -346,7 +347,7 @@ def test_check_health_missing_host(reset_env, monkeypatch):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(wp.boto3, "Session", MockSession)
+    monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
     healthy, msg = writer.check_health()
     assert not healthy and "host not configured" in msg

@@ -45,7 +45,8 @@ High-level flow:
 5. Aggregated response returned: `202 Accepted` if all succeed; `500` with per-writer error list otherwise.
 
 Key files:
-- `src/event_gate_lambda.py` – main Lambda handler and routing
+- `src/event_gate_lambda.py` – main Lambda handler and routing (event ingestion)
+- `src/event_stats_lambda.py` – stats Lambda handler and routing (read-only queries)
 - `conf/*.json` – configuration files
 - `conf/topic_schemas/` – JSON topic schemas
 - `api.yaml` – OpenAPI 3 definition served at `/api`
@@ -62,6 +63,7 @@ All responses are JSON unless otherwise noted. The POST endpoint requires a vali
 | GET | `/topics` | none | Lists available topic names |
 | GET | `/topics/{topicName}` | none | Returns JSON Schema for the topic |
 | POST | `/topics/{topicName}` | JWT | Validates + forwards message to configured sinks |
+| POST | `/stats/{topicName}` | JWT | Queries ingested events with filtering, sorting, and cursor pagination |
 | POST | `/terminate` | (internal) | Forces Lambda process exit (used to trigger cold start & config reload) |
 
 Status codes:
@@ -107,6 +109,9 @@ Supporting configs:
 
 Environment variables:
 - `LOG_LEVEL` (optional) – defaults to `INFO`.
+- `CONF_DIR` (optional) – directory containing `config.json` and `access.json`. Defaults to `conf`.
+- `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, dbname, username, password). Required for Postgres writer and stats reader.
+- `POSTGRES_SECRET_REGION` (optional) – AWS region of the Secrets Manager secret. Must be set together with `POSTGRES_SECRET_NAME`.
 
 ## Deployment
 Infrastructure-as-Code examples are provided in `terraform_examples/`. These are reference implementations that you can adapt to your environment. Variables are supplied via a `*.tfvars` file or CLI.
@@ -168,7 +173,7 @@ Configured via `kafka_bootstrap_server`. (Future: support auth properties / TLS 
 Publishes events to the configured `event_bus_arn` using put events API.
 
 ### Postgres Writer
-Example writer (currently a placeholder if no DSN present) demonstrating extensibility pattern.
+Writes enriched event data (runs + jobs) into PostgreSQL tables. Connection credentials are loaded from AWS Secrets Manager using the `POSTGRES_SECRET_NAME` and `POSTGRES_SECRET_REGION` environment variables. The writer auto-creates the target tables if they do not exist.
 
 ## Troubleshooting
 | Symptom | Possible Cause | Action |

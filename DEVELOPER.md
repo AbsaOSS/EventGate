@@ -18,6 +18,11 @@ git clone https://github.com/AbsaOSS/EventGate.git
 cd EventGate
 ```
 
+### Project Structure
+EventGate ships two Lambda functions:
+- **Event Gate Lambda** (`src/event_gate_lambda.py`) — the main API surface. Serves the OpenAPI spec, token provider redirect, health check, topic schema catalogue, and event ingestion (`POST /topics/{topicName}`). Ingestion includes JWT authorization, JSON Schema validation, and parallel fanout to Kafka, EventBridge, and PostgreSQL.
+- **Event Stats Lambda** (`src/event_stats_lambda.py`) — serves read-only queries via `POST /stats/{topicName}` with filtering, sorting, and cursor-based pagination backed by PostgreSQL.
+
 ## Prerequisites
 - Python 3.13 (current required runtime)
 - PostgreSQL client dev package

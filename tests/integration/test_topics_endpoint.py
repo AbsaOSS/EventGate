@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-"""Integration tests for /topics endpoints."""
 
 import json
 import time

@@ -19,7 +19,7 @@
 import logging
 import os
 import sys
-from typing import Any, Dict
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError
@@ -77,7 +77,7 @@ handler_health = HandlerHealth(writers)
 handler_api = HandlerApi().with_api_definition_loaded()
 
 # Route to handler function mapping
-ROUTE_MAP: Dict[str, Any] = {
+ROUTE_MAP: dict[str, Any] = {
     "/api": lambda _: handler_api.get_api(),
     "/token": lambda _: handler_token.get_token_provider_info(),
     "/health": lambda _: handler_health.get_health(),
@@ -87,7 +87,7 @@ ROUTE_MAP: Dict[str, Any] = {
 }
 
 
-def lambda_handler(event: Dict[str, Any], _context: Any = None) -> Dict[str, Any]:
+def lambda_handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     """AWS Lambda entry point for EventGate. Dispatches based on API Gateway proxy resource field.
     Args:
         event: The event data from API Gateway.

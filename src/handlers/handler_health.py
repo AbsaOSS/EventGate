@@ -20,7 +20,8 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, Mapping, Protocol, Tuple
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -30,7 +31,7 @@ logger.setLevel(log_level)
 class HealthCheckable(Protocol):
     """Protocol for dependencies that support health checks."""
 
-    def check_health(self) -> Tuple[bool, str]:
+    def check_health(self) -> tuple[bool, str]:
         """Check dependency health.
         Returns:
             Tuple of (is_healthy, message).
@@ -44,7 +45,7 @@ class HandlerHealth:
         self.start_time: datetime = datetime.now(timezone.utc)
         self.dependencies = dependencies
 
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> dict[str, Any]:
         """Check service health and return status.
         Returns:
             API Gateway response with health status.
@@ -52,7 +53,7 @@ class HandlerHealth:
         """
         logger.debug("Handling GET Health.")
 
-        failures: Dict[str, str] = {}
+        failures: dict[str, str] = {}
 
         for name, dependency in self.dependencies.items():
             healthy, msg = dependency.check_health()

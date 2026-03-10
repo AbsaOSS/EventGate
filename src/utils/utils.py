@@ -18,14 +18,15 @@
 
 import json
 import logging
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 
-def build_error_response(status: int, err_type: str, message: str) -> Dict[str, Any]:
+def build_error_response(status: int, err_type: str, message: str) -> dict[str, Any]:
     """Build a standardized JSON error response body.
     Args:
         status: HTTP status code.
-        err_type: A short error classifier (e.g. ``auth``, ``validation``).
+        err_type: A short error classifier (e.g. `auth`, `validation`).
         message: Human readable error description.
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
@@ -44,10 +45,10 @@ def build_error_response(status: int, err_type: str, message: str) -> Dict[str, 
 
 
 def dispatch_request(
-    event: Dict[str, Any],
-    route_map: Dict[str, Callable[..., Dict[str, Any]]],
+    event: dict[str, Any],
+    route_map: dict[str, Callable[..., dict[str, Any]]],
     request_logger: logging.Logger,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Dispatch an API Gateway event to the matching route handler.
     Args:
         event: API Gateway proxy event.

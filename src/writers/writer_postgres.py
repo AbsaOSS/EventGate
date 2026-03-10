@@ -19,12 +19,12 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.constants import TOPIC_TABLE_MAP
+from src.utils.secrets import load_postgres_config
 from src.utils.trace_logging import log_payload_at_trace
 from src.writers.writer import Writer
 
@@ -48,31 +48,24 @@ class WriterPostgres(Writer):
     Database credentials are loaded from AWS Secrets Manager at initialization.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
         self._secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
         self._secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
-        self._db_config: Optional[Dict[str, Any]] = None
+        self._db_config: dict[str, Any | None] | None = None
         logger.debug("Initialized PostgreSQL writer.")
 
     def _load_db_config(self) -> None:
         """Load database config from AWS Secrets Manager."""
-        if not self._secret_name or not self._secret_region:
-            self._db_config = {"database": ""}
-            return
+        self._db_config = load_postgres_config(self._secret_name, self._secret_region)
 
-        aws_secrets = boto3.Session().client(service_name="secretsmanager", region_name=self._secret_region)
-        postgres_secret = aws_secrets.get_secret_value(SecretId=self._secret_name)["SecretString"]
-        self._db_config = json.loads(postgres_secret)
-        logger.debug("Loaded PostgreSQL config from Secrets Manager.")
-
-    def _ensure_db_config(self) -> Dict[str, Any]:
+    def _ensure_db_config(self) -> dict[str, Any]:
         """Ensure database config is loaded and return it."""
         if self._db_config is None:
             self._load_db_config()
         return self._db_config  # type: ignore[return-value]
 
-    def _postgres_edla_write(self, cursor: Any, table: str, message: Dict[str, Any]) -> None:
+    def _postgres_edla_write(self, cursor: Any, table: str, message: dict[str, Any]) -> None:
         """Insert a dlchange style event row.
         Args:
             cursor: Database cursor.
@@ -131,7 +124,7 @@ class WriterPostgres(Writer):
             ),
         )
 
-    def _postgres_run_write(self, cursor: Any, table_runs: str, table_jobs: str, message: Dict[str, Any]) -> None:
+    def _postgres_run_write(self, cursor: Any, table_runs: str, table_jobs: str, message: dict[str, Any]) -> None:
         """Insert a run event row plus related job rows.
         Args:
             cursor: Database cursor.
@@ -213,7 +206,7 @@ class WriterPostgres(Writer):
                 ),
             )
 
-    def _postgres_test_write(self, cursor: Any, table: str, message: Dict[str, Any]) -> None:
+    def _postgres_test_write(self, cursor: Any, table: str, message: dict[str, Any]) -> None:
         """Insert a test topic row.
         Args:
             cursor: Database cursor.
@@ -251,13 +244,13 @@ class WriterPostgres(Writer):
             ),
         )
 
-    def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
         """Dispatch insertion for a topic into the correct Postgres table(s).
         Args:
             topic_name: Incoming topic identifier.
             message: JSON-serializable payload.
         Returns:
-            Tuple of (success: bool, error_message: Optional[str]).
+            Tuple of (success: bool, error_message: str | None).
         """
         try:
             db_config = self._ensure_db_config()
@@ -301,7 +294,7 @@ class WriterPostgres(Writer):
 
         return True, None
 
-    def check_health(self) -> Tuple[bool, str]:
+    def check_health(self) -> tuple[bool, str]:
         """Check PostgreSQL writer health.
         Returns:
             Tuple of (is_healthy: bool, message: str).

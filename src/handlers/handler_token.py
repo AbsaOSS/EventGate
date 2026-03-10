@@ -20,7 +20,7 @@ import base64
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, cast
+from typing import Any, cast
 
 import jwt
 import requests
@@ -103,7 +103,7 @@ class HandlerToken:
             logger.exception("Failed to fetch or deserialize token public key from %s.", self.public_keys_url)
             raise RuntimeError("Token public key initialization failed") from exc
 
-    def decode_jwt(self, token_encoded: str) -> Dict[str, Any]:
+    def decode_jwt(self, token_encoded: str) -> dict[str, Any]:
         """Decode and verify a JWT using the loaded public keys.
         Args:
             token_encoded: The encoded JWT token.
@@ -122,13 +122,13 @@ class HandlerToken:
                 continue
         raise jwt.PyJWTError("Verification failed for all public keys")
 
-    def get_token_provider_info(self) -> Dict[str, Any]:
+    def get_token_provider_info(self) -> dict[str, Any]:
         """Return a 303 redirect response to the token provider URL."""
         logger.debug("Handling GET Token.")
         return {"statusCode": 303, "headers": {"Location": self.provider_url}}
 
     @staticmethod
-    def extract_token(event_headers: Dict[str, str]) -> str:
+    def extract_token(event_headers: dict[str, str]) -> str:
         """Extract the bearer (custom/standard) token from event headers.
         Args:
             event_headers: The event headers.

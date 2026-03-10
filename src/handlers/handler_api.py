@@ -18,7 +18,7 @@
 
 import logging
 import os
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class HandlerApi:
             logger.exception("Failed to load or read API specification from %s.", api_path)
             raise RuntimeError("API specification initialization failed") from exc
 
-    def get_api(self) -> Dict[str, Any]:
+    def get_api(self) -> dict[str, Any]:
         """Return the OpenAPI specification.
         Returns:
             API Gateway response with OpenAPI spec.

@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 from confluent_kafka import Producer, KafkaException
 
 from src.utils.trace_logging import log_payload_at_trace
@@ -41,12 +41,12 @@ class WriterKafka(Writer):
     The Kafka producer is created on the first write() call.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
         self._producer: Optional["Producer"] = None
         logger.debug("Initialized Kafka writer.")
 
-    def _create_producer(self) -> Optional[Producer]:
+    def _create_producer(self) -> Producer | None:
         """Create Kafka producer from config.
         Returns:
             None if bootstrap server not configured else Producer instance.
@@ -55,7 +55,7 @@ class WriterKafka(Writer):
             return None
 
         bootstrap = self.config["kafka_bootstrap_server"]
-        producer_config: Dict[str, Any] = {"bootstrap.servers": bootstrap}
+        producer_config: dict[str, Any] = {"bootstrap.servers": bootstrap}
 
         if "kafka_sasl_kerberos_principal" in self.config and "kafka_ssl_key_path" in self.config:
             producer_config.update(
@@ -75,7 +75,7 @@ class WriterKafka(Writer):
 
         return Producer(producer_config)
 
-    def _flush_with_timeout(self, timeout: float) -> Optional[int]:
+    def _flush_with_timeout(self, timeout: float) -> int | None:
         """Flush the Kafka producer with a timeout.
         Args:
             timeout: Timeout in seconds.
@@ -90,13 +90,13 @@ class WriterKafka(Writer):
         except TypeError:
             return self._producer.flush()
 
-    def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
         """Publish a message to Kafka.
         Args:
             topic_name: Kafka topic to publish to.
             message: JSON-serializable payload.
         Returns:
-            Tuple of (success: bool, error_message: Optional[str]).
+            Tuple of (success: bool, error_message: str | None).
         """
         # Lazy initialization of Kafka producer
         if self._producer is None:
@@ -109,7 +109,7 @@ class WriterKafka(Writer):
 
         log_payload_at_trace(logger, "Kafka", topic_name, message)
 
-        errors: List[str] = []
+        errors: list[str] = []
         has_exception = False
 
         # Produce step
@@ -126,7 +126,7 @@ class WriterKafka(Writer):
             has_exception = True
 
         # Flush step (always attempted)
-        remaining: Optional[int] = None
+        remaining: int | None = None
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
                 remaining = self._flush_with_timeout(_KAFKA_FLUSH_TIMEOUT_SEC)
@@ -156,7 +156,7 @@ class WriterKafka(Writer):
 
         return True, None
 
-    def check_health(self) -> Tuple[bool, str]:
+    def check_health(self) -> tuple[bool, str]:
         """Check Kafka writer health.
         Returns:
             Tuple of (is_healthy: bool, message: str).

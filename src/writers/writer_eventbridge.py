@@ -19,7 +19,7 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Optional
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -37,10 +37,10 @@ class WriterEventBridge(Writer):
     The boto3 EventBridge client is created on the first write() call.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
         self._client: Optional["boto3.client"] = None
-        self._entries: List[Dict[str, Any]] = []
+        self._entries: list[dict[str, Any]] = []
         self.event_bus_arn: str = config.get("event_bus_arn", "")
         logger.debug("Initialized EventBridge writer.")
 
@@ -52,13 +52,13 @@ class WriterEventBridge(Writer):
         failed = [e for e in self._entries if "ErrorCode" in e or "ErrorMessage" in e]
         return json.dumps(failed) if failed else "[]"
 
-    def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
         """Publish a message to EventBridge.
         Args:
             topic_name: Target EventBridge writer topic (destination) name.
             message: JSON-serializable payload to publish.
         Returns:
-            Tuple of (success: bool, error_message: Optional[str]).
+            Tuple of (success: bool, error_message: str | None).
         """
         if not self.event_bus_arn:
             logger.debug("No EventBus Arn - skipping EventBridge writer.")
@@ -95,7 +95,7 @@ class WriterEventBridge(Writer):
 
         return True, None
 
-    def check_health(self) -> Tuple[bool, str]:
+    def check_health(self) -> tuple[bool, str]:
         """Check EventBridge writer health.
         Returns:
             Tuple of (is_healthy: bool, message: str).

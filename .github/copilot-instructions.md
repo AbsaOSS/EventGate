@@ -16,6 +16,7 @@ Structure
 Python style
 - Python 3.13
 - Type hints for public functions and classes
+- Use built-in generics for type hints: `dict[str, Any]`, `list[int]`, `tuple[bool, str | None]` (not `Dict`, `List`, `Tuple`, `Optional`)
 - Use `logging.getLogger(__name__)`, not print
 - Lazy % formatting in logging: `logger.info("msg %s", var)`
 - F-strings in exceptions: `raise ValueError(f"Error {var}")`
@@ -23,6 +24,8 @@ Python style
 - Apache 2.0 license header in every .py file (including `__init__.py`)
 - Docstrings must start with a short summary line
 - No blank lines between docstring sections (summary, Args, Returns, Raises)
+- Use single backticks in docstrings (`value`), never double backticks (`` ``value`` ``)
+- Do not use `# -----------` separator comments to divide sections
 - End all log messages with a period: `logger.info("Message.")`
 
 Patterns
@@ -37,6 +40,7 @@ Patterns
 
 Testing
 - Mirror src structure: `src/handlers/` -> `tests/unit/handlers/`
+- Test modules (`test_*.py`) must not have module-level docstrings
 - Unit tests: mock external services via `conftest.py` (Kafka, EventBridge, PostgreSQL, S3)
 - Integration tests: call `lambda_handler` directly with real containers (testcontainers-python for Kafka, PostgreSQL, LocalStack)
 - No real API/DB calls in unit tests

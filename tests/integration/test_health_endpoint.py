@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-"""Integration tests for GET /health endpoint."""
 
 import json
 

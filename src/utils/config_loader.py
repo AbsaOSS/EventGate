@@ -19,14 +19,14 @@
 import json
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 from boto3.resources.base import ServiceResource
 
 logger = logging.getLogger(__name__)
 
 
-def load_config(conf_dir: str) -> Dict[str, Any]:
+def load_config(conf_dir: str) -> dict[str, Any]:
     """Load the main configuration from config.json.
     Args:
         conf_dir: Path to the configuration directory.
@@ -35,15 +35,15 @@ def load_config(conf_dir: str) -> Dict[str, Any]:
     """
     config_path = os.path.join(conf_dir, "config.json")
     with open(config_path, "r", encoding="utf-8") as file:
-        config: Dict[str, Any] = json.load(file)
+        config: dict[str, Any] = json.load(file)
     logger.debug("Loaded main configuration from %s.", config_path)
     return config
 
 
-def load_access_config(config: Dict[str, Any], aws_s3: ServiceResource) -> Dict[str, List[str]]:
+def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> dict[str, list[str]]:
     """Load access control configuration from S3 or a local file.
     Args:
-        config: Main configuration dict (must contain ``access_config`` key).
+        config: Main configuration dict (must contain `access_config` key).
         aws_s3: Boto3 S3 resource for loading from S3 paths.
     Returns:
         Dictionary mapping topic names to lists of authorised users.
@@ -51,7 +51,7 @@ def load_access_config(config: Dict[str, Any], aws_s3: ServiceResource) -> Dict[
     access_path: str = config["access_config"]
     logger.debug("Loading access configuration from %s.", access_path)
 
-    access_config: Dict[str, List[str]] = {}
+    access_config: dict[str, list[str]] = {}
 
     if access_path.startswith("s3://"):
         name_parts = access_path.split("/")
@@ -68,7 +68,7 @@ def load_access_config(config: Dict[str, Any], aws_s3: ServiceResource) -> Dict[
     return access_config
 
 
-def load_topic_names(conf_dir: str) -> List[str]:
+def load_topic_names(conf_dir: str) -> list[str]:
     """Discover topic names from the topic_schemas directory.
     Args:
         conf_dir: Path to the configuration directory.
@@ -81,7 +81,7 @@ def load_topic_names(conf_dir: str) -> List[str]:
         "test.json": "public.cps.za.test",
     }
     schemas_dir = os.path.join(conf_dir, "topic_schemas")
-    topics: List[str] = []
+    topics: list[str] = []
 
     for filename, topic_name in filename_to_topic.items():
         schema_path = os.path.join(schemas_dir, filename)

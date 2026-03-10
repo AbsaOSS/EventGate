@@ -18,7 +18,7 @@
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError
@@ -61,7 +61,7 @@ except (BotoCoreError, NoCredentialsError) as exc:
 
 # Load topic names and access control.
 topic_names = load_topic_names(CONF_DIR)
-topics: Dict[str, Dict[str, Any]] = {name: {} for name in topic_names}
+topics: dict[str, dict[str, Any]] = {name: {} for name in topic_names}
 access_config = load_access_config(config, aws_s3)
 
 # Initialize EventStats readers
@@ -73,13 +73,13 @@ handler_stats = HandlerStats(config, handler_token, reader_postgres, topics, acc
 handler_health = HandlerHealth({"postgres_reader": reader_postgres})
 
 # Route to handler function mapping
-ROUTE_MAP: Dict[str, Any] = {
+ROUTE_MAP: dict[str, Any] = {
     "/stats/{topic_name}": handler_stats.handle_request,
     "/health": lambda _: handler_health.get_health(),
 }
 
 
-def lambda_handler(event: Dict[str, Any], _context: Any = None) -> Dict[str, Any]:
+def lambda_handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     """AWS Lambda entry point for EventGate. Dispatches based on API Gateway proxy resource field.
     Args:
         event: The event data from API Gateway.

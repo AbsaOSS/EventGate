@@ -17,7 +17,7 @@
 """Abstract base class for all EventGate writers."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 
 class Writer(ABC):
@@ -26,23 +26,23 @@ class Writer(ABC):
     Writers use lazy initialization.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
 
     @abstractmethod
-    def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
         """Publish a message to the target system.
         Args:
             topic_name: Target writer topic (destination) name.
             message: JSON-serializable payload to publish.
         Returns:
-            Tuple of (success: bool, error_message: Optional[str]).
+            Tuple of (success: bool, error_message: str | None).
             - (True, None) on success or when writer is disabled/skipped.
             - (False, "error description") on failure.
         """
 
     @abstractmethod
-    def check_health(self) -> Tuple[bool, str]:
+    def check_health(self) -> tuple[bool, str]:
         """Check writer health and connectivity.
         Returns:
             Tuple of (is_healthy: bool, message: str).

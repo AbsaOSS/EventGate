@@ -18,7 +18,7 @@
 import json
 import logging
 import os
-from typing import Dict, Any
+from typing import Any
 
 import jwt
 from boto3.resources.base import ServiceResource
@@ -39,17 +39,17 @@ class HandlerTopic:
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         aws_s3: ServiceResource,
         handler_token: HandlerToken,
-        writers: Dict[str, Writer],
+        writers: dict[str, Writer],
     ):
         self.config = config
         self.aws_s3 = aws_s3
         self.handler_token = handler_token
         self.writers = writers
-        self.access_config: Dict[str, list[str]] = {}
-        self.topics: Dict[str, Dict[str, Any]] = {}
+        self.access_config: dict[str, list[str]] = {}
+        self.topics: dict[str, dict[str, Any]] = {}
 
     def with_load_access_config(self) -> "HandlerTopic":
         """Load access control configuration from S3 or local file.
@@ -77,7 +77,7 @@ class HandlerTopic:
         logger.debug("Loaded topic schemas successfully.")
         return self
 
-    def get_topics_list(self) -> Dict[str, Any]:
+    def get_topics_list(self) -> dict[str, Any]:
         """Return the list of available topics.
         Returns:
             API Gateway response with topic list.
@@ -89,7 +89,7 @@ class HandlerTopic:
             "body": json.dumps(list(self.topics)),
         }
 
-    def handle_request(self, event: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_request(self, event: dict[str, Any]) -> dict[str, Any]:
         """Handle GET/POST requests for /topics/{topic_name} resource.
         Args:
             event: The API Gateway event containing path parameters, method, body, and headers.
@@ -109,7 +109,7 @@ class HandlerTopic:
             )
         return build_error_response(404, "route", "Resource not found")
 
-    def _get_topic_schema(self, topic_name: str) -> Dict[str, Any]:
+    def _get_topic_schema(self, topic_name: str) -> dict[str, Any]:
         """Return the JSON schema for a specific topic.
         Args:
             topic_name: The topic whose schema is requested.
@@ -127,7 +127,7 @@ class HandlerTopic:
             "body": json.dumps(self.topics[topic_name]),
         }
 
-    def _post_topic_message(self, topic_name: str, topic_message: Dict[str, Any], token_encoded: str) -> Dict[str, Any]:
+    def _post_topic_message(self, topic_name: str, topic_message: dict[str, Any], token_encoded: str) -> dict[str, Any]:
         """Validate auth and schema; dispatch message to all writers.
         Args:
             topic_name: Target topic name.
@@ -147,7 +147,7 @@ class HandlerTopic:
             raise RuntimeError("Access configuration not loaded")
 
         try:
-            token: Dict[str, Any] = self.handler_token.decode_jwt(token_encoded)
+            token: dict[str, Any] = self.handler_token.decode_jwt(token_encoded)
         except jwt.PyJWTError:  # type: ignore[attr-defined]
             return build_error_response(401, "auth", "Invalid or missing token")
 
