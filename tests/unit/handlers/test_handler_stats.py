@@ -169,6 +169,26 @@ class TestHandlerStatsValidation:
 
         assert 404 == response["statusCode"]
 
+    def test_missing_path_parameter_returns_400(self, handler: HandlerStats) -> None:
+        """Test that missing topic_name path parameter returns 400."""
+        event = _make_event()
+        event["pathParameters"] = {}
+
+        response = handler.handle_request(event)
+
+        assert 400 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert "topic_name" in body["errors"][0]["message"]
+
+    def test_missing_path_parameters_returns_400(self, handler: HandlerStats) -> None:
+        """Test that missing pathParameters dict returns 400."""
+        event = _make_event()
+        event["pathParameters"] = None
+
+        response = handler.handle_request(event)
+
+        assert 400 == response["statusCode"]
+
     def test_unsupported_topic_returns_400(self, handler: HandlerStats) -> None:
         """Test that a known but unsupported topic returns 400."""
         response = handler.handle_request(_make_event(topic="public.cps.za.test"))

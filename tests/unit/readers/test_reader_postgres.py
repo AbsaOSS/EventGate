@@ -230,7 +230,22 @@ class TestReadStats:
         monkeypatch.setenv("POSTGRES_SECRET_REGION", "")
         reader = ReaderPostgres()
 
-        with pytest.raises(RuntimeError, match="not configured"):
+        with pytest.raises(RuntimeError, match="config missing"):
+            reader.read_stats()
+
+    def test_missing_connection_field_raises_runtime_error(
+        self, reader: ReaderPostgres, pg_secret: dict[str, Any]
+    ) -> None:
+        """Test that a secret missing host raises RuntimeError."""
+        incomplete_secret = {"database": "db", "port": 5432}
+        mock_client = MagicMock()
+        mock_client.get_secret_value.return_value = {"SecretString": json.dumps(incomplete_secret)}
+
+        with (
+            patch("boto3.Session") as mock_session,
+            pytest.raises(RuntimeError, match="host, user, password"),
+        ):
+            mock_session.return_value.client.return_value = mock_client
             reader.read_stats()
 
     def test_cursor_filters_by_internal_id(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:

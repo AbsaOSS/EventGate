@@ -52,7 +52,11 @@ class HandlerStats:
         Returns:
             API Gateway response dict.
         """
-        topic_name = event["pathParameters"]["topic_name"].lower()
+        path_params = event.get("pathParameters") or {}
+        topic_name = path_params.get("topic_name", "")
+        if not topic_name:
+            return build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
+        topic_name = topic_name.lower()
 
         if topic_name not in self.topics:
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found.")

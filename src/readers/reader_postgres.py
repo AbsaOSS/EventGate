@@ -99,8 +99,10 @@ class ReaderPostgres:
             RuntimeError: On database connectivity or query errors.
         """
         db_config = self._load_db_config()
-        if not db_config.get("database"):
-            raise RuntimeError("PostgreSQL is not configured.")
+        required_keys = ("database", "host", "user", "password", "port")
+        missing_keys = [key for key in required_keys if not db_config.get(key)]
+        if missing_keys:
+            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing_keys)}.")
         if psycopg2 is None:
             raise RuntimeError("psycopg2 is not available.")
 
@@ -221,7 +223,7 @@ class ReaderPostgres:
 
         try:
             db_config = self._load_db_config()
-        except (BotoCoreError, ClientError, RuntimeError) as err:
+        except (BotoCoreError, ClientError, RuntimeError, ValueError, KeyError) as err:
             return False, str(err)
 
         if not db_config.get("database"):

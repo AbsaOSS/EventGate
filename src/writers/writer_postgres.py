@@ -288,7 +288,7 @@ class WriterPostgres(Writer):
                         self._postgres_test_write(cursor, table_info["main"], message)
 
                 connection.commit()
-        except (RuntimeError, PsycopgError, BotoCoreError, ClientError) as e:
+        except (RuntimeError, PsycopgError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {str(e)}"
             logger.exception(err_msg)
             return False, err_msg
@@ -307,7 +307,7 @@ class WriterPostgres(Writer):
         try:
             db_config = self._load_db_config()
             logger.debug("PostgreSQL config loaded during health check.")
-        except (BotoCoreError, ClientError) as err:
+        except (BotoCoreError, ClientError, ValueError, KeyError) as err:
             return False, str(err)
 
         # Validate database configuration fields
