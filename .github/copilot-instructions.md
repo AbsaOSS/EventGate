@@ -16,7 +16,7 @@ Structure
 Python style
 - Python 3.13
 - Type hints for public functions and classes
-- Use built-in generics for type hints: `dict[str, Any]`, `list[int]`, `tuple[bool, str | None]` (not `Dict`, `List`, `Tuple`, `Optional`)
+- Use built-in generics for type hints
 - Use `logging.getLogger(__name__)`, not print
 - Lazy % formatting in logging: `logger.info("msg %s", var)`
 - F-strings in exceptions: `raise ValueError(f"Error {var}")`

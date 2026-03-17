@@ -173,7 +173,7 @@ Configured via `kafka_bootstrap_server`. (Future: support auth properties / TLS 
 Publishes events to the configured `event_bus_arn` using put events API.
 
 ### Postgres Writer
-Writes enriched event data (runs + jobs) into PostgreSQL tables. Connection credentials are loaded from AWS Secrets Manager using the `POSTGRES_SECRET_NAME` and `POSTGRES_SECRET_REGION` environment variables. The writer auto-creates the target tables if they do not exist.
+Writes enriched event data (runs + jobs) into PostgreSQL tables. Connection credentials are loaded from AWS Secrets Manager using the `POSTGRES_SECRET_NAME` and `POSTGRES_SECRET_REGION` environment variables.
 
 ## Troubleshooting
 | Symptom | Possible Cause | Action |
