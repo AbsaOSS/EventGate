@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_runs (
 
 -- Table matching WriterPostgres._postgres_run_write job rows
 CREATE TABLE IF NOT EXISTS public_cps_za_runs_jobs (
+    internal_id SERIAL PRIMARY KEY,
     event_id VARCHAR(255) NOT NULL,
     country VARCHAR(255),
     catalog_id VARCHAR(255) NOT NULL,
@@ -38,6 +39,33 @@ CREATE TABLE IF NOT EXISTS public_cps_za_runs_jobs (
     timestamp_start BIGINT,
     timestamp_end BIGINT,
     message TEXT,
+    additional_info JSONB
+);
+
+-- Table matching WriterPostgres._postgres_edla_write columns
+CREATE TABLE IF NOT EXISTS public_cps_za_dlchange (
+    event_id VARCHAR(255) NOT NULL,
+    tenant_id VARCHAR(255) NOT NULL,
+    source_app VARCHAR(255) NOT NULL,
+    source_app_version VARCHAR(255) NOT NULL,
+    environment VARCHAR(255) NOT NULL,
+    timestamp_event BIGINT,
+    country VARCHAR(255),
+    catalog_id VARCHAR(255) NOT NULL,
+    operation VARCHAR(255),
+    "location" TEXT,
+    "format" VARCHAR(255),
+    format_options JSONB,
+    additional_info JSONB
+);
+
+-- Table matching WriterPostgres._postgres_test_write columns
+CREATE TABLE IF NOT EXISTS public_cps_za_test (
+    event_id VARCHAR(255) NOT NULL,
+    tenant_id VARCHAR(255) NOT NULL,
+    source_app VARCHAR(255) NOT NULL,
+    environment VARCHAR(255) NOT NULL,
+    timestamp_event BIGINT,
     additional_info JSONB
 );
 """
