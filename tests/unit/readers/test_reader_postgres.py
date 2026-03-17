@@ -343,16 +343,16 @@ class TestFormatRow:
 class TestCheckHealth:
     """Tests for reader health check."""
 
-    def test_healthy_when_not_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test returns healthy when no secret env vars set."""
+    def test_unhealthy_when_not_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test returns unhealthy when no secret env vars set."""
         monkeypatch.setenv("POSTGRES_SECRET_NAME", "")
         monkeypatch.setenv("POSTGRES_SECRET_REGION", "")
         reader = ReaderPostgres()
 
         healthy, message = reader.check_health()
 
-        assert True is healthy
-        assert "not configured" == message
+        assert False is healthy
+        assert "postgres secret not configured" == message
 
     def test_healthy_when_config_valid(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
         """Test returns healthy when config is valid."""

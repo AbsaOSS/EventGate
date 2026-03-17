@@ -217,7 +217,7 @@ class ReaderPostgres:
             Tuple of (is_healthy, message).
         """
         if not self._secret_name or not self._secret_region:
-            return True, "not configured"
+            return False, "postgres secret not configured"
 
         try:
             db_config = self._load_db_config()
@@ -225,7 +225,7 @@ class ReaderPostgres:
             return False, str(err)
 
         if not db_config.get("database"):
-            return True, "database not configured"
+            return False, "database not configured"
 
         missing = [f for f in ("host", "user", "password", "port") if not db_config.get(f)]
         if missing:
