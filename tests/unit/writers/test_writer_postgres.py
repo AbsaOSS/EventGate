@@ -214,6 +214,14 @@ def test_write_skips_when_no_database(reset_env):
     assert ok and err is None
 
 
+def test_write_fails_when_connection_field_missing(reset_env):
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}
+    ok, err = writer.write("public.cps.za.test", {})
+    assert not ok
+    assert "host" in err and "not configured" in err
+
+
 def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
     writer = WriterPostgres({})
     writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}

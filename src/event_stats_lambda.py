@@ -80,7 +80,7 @@ ROUTE_MAP: dict[str, Any] = {
 
 
 def lambda_handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
-    """AWS Lambda entry point for EventGate. Dispatches based on API Gateway proxy resource field.
+    """AWS Lambda entry point for EventStats. Dispatches based on API Gateway proxy resource field.
     Args:
         event: The event data from API Gateway.
         _context: The mandatory context argument for AWS Lambda invocation (unused).

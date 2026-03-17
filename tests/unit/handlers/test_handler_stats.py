@@ -186,6 +186,17 @@ class TestHandlerStatsValidation:
 
         assert 400 == response["statusCode"]
 
+    def test_non_dict_json_body_returns_400(self, handler: HandlerStats) -> None:
+        """Test that a JSON array body returns 400."""
+        event = _make_event()
+        event["body"] = "[1, 2, 3]"
+
+        response = handler.handle_request(event)
+
+        assert 400 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert "JSON object" in body["errors"][0]["message"]
+
     def test_invalid_timestamp_start_returns_400(self, handler: HandlerStats) -> None:
         """Test that non-integer timestamp_start returns 400."""
         response = handler.handle_request(_make_event(body={"timestamp_start": "bad"}))

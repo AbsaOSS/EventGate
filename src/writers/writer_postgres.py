@@ -252,6 +252,13 @@ class WriterPostgres(Writer):
             if not db_config.get("database"):
                 logger.debug("No Postgres - skipping Postgres writer.")
                 return True, None
+
+            missing = [f for f in ("host", "user", "password", "port") if not db_config.get(f)]
+            if missing:
+                msg = f"PostgreSQL connection field '{missing[0]}' not configured."
+                logger.error(msg)
+                return False, msg
+
             if psycopg2 is None:
                 logger.debug("psycopg2 not available - skipping actual Postgres write.")
                 return True, None

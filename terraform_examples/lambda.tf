@@ -78,7 +78,9 @@ resource "aws_lambda_function" "event_stats_lambda" {
 
   environment {
     variables = {
-      LOG_LEVEL = "INFO"
+      LOG_LEVEL              = "INFO"
+      POSTGRES_SECRET_NAME   = var.postgres_secret_name
+      POSTGRES_SECRET_REGION = var.postgres_secret_region
     }
   }
 }

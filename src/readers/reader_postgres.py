@@ -125,6 +125,7 @@ class ReaderPostgres:
                 user=db_config["user"],
                 password=db_config["password"],
                 port=db_config["port"],
+                options="-c statement_timeout=30000 -c default_transaction_read_only=on",
             ) as connection:
                 with connection.cursor() as db_cursor:
                     db_cursor.execute(sql, params)
@@ -133,7 +134,7 @@ class ReaderPostgres:
         except PsycopgError as exc:
             raise RuntimeError(f"Database query failed: {exc}") from exc
 
-        rows = [dict(zip(col_names, row)) for row in raw_rows]
+        rows = [dict(zip(col_names, row, strict=True)) for row in raw_rows]
 
         has_more = len(rows) > limit
         if has_more:
@@ -220,7 +221,7 @@ class ReaderPostgres:
 
         try:
             db_config = self._load_db_config()
-        except (BotoCoreError, ClientError) as err:
+        except (BotoCoreError, ClientError, RuntimeError) as err:
             return False, str(err)
 
         if not db_config.get("database"):

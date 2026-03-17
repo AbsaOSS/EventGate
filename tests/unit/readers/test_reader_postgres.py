@@ -365,3 +365,11 @@ class TestCheckHealth:
 
         assert True is healthy
         assert "ok" == message
+
+    def test_unhealthy_when_load_raises_runtime_error(self, reader: ReaderPostgres) -> None:
+        """Test returns unhealthy when _load_db_config raises RuntimeError."""
+        with patch.object(reader, "_load_db_config", side_effect=RuntimeError("Failed to load.")):
+            healthy, message = reader.check_health()
+
+        assert False is healthy
+        assert "Failed to load." == message

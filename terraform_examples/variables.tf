@@ -9,3 +9,5 @@ variable "lambda_package_type" {}
 variable "lambda_src_s3_bucket" {}
 variable "lambda_src_s3_key" {}
 variable "lambda_src_ecr_image" {}
+variable "postgres_secret_name" {}
+variable "postgres_secret_region" {}

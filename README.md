@@ -110,7 +110,7 @@ Supporting configs:
 Environment variables:
 - `LOG_LEVEL` (optional) – defaults to `INFO`.
 - `CONF_DIR` (optional) – directory containing `config.json` and `access.json`. Defaults to `conf`.
-- `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, dbname, username, password). Required for Postgres writer and stats reader.
+- `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, database, user, password). Required for Postgres writer and stats reader.
 - `POSTGRES_SECRET_REGION` (optional) – AWS region of the Secrets Manager secret. Must be set together with `POSTGRES_SECRET_NAME`.
 
 ## Deployment

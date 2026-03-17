@@ -80,6 +80,9 @@ class HandlerStats:
         except (json.JSONDecodeError, TypeError):
             return build_error_response(400, "validation", "Request body must be valid JSON.")
 
+        if not isinstance(body, dict):
+            return build_error_response(400, "validation", "Request body must be a JSON object.")
+
         timestamp_start = body.get("timestamp_start")
         timestamp_end = body.get("timestamp_end")
         cursor = body.get("cursor")
