@@ -89,12 +89,12 @@ paths:
                 items:
                   type: string
 
-  /topics/{topicName}:
+  /topics/{topic_name}:
     get:
       summary: Get schema for a specific topic
       description: Returns the schema for a specified topic using [JSON Schema](https://json-schema.org/).
       parameters:
-        - name: topicName
+        - name: topic_name
           in: path
           required: true
           schema:
@@ -125,7 +125,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: topicName
+        - name: topic_name
           in: path
           required: true
           schema:
@@ -179,7 +179,7 @@ paths:
                   error:
                     type: string
                     
-  /stats/{topicName}:
+  /stats/{topic_name}:
     post:
       summary: Query run/job statistics
       description: >
@@ -189,7 +189,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: topicName
+        - name: topic_name
           in: path
           required: true
           schema:

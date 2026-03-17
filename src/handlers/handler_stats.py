@@ -88,13 +88,13 @@ class HandlerStats:
         cursor = body.get("cursor")
         limit: int = body.get("limit", POSTGRES_DEFAULT_LIMIT)
 
-        if timestamp_start is not None and not isinstance(timestamp_start, int):
+        if timestamp_start is not None and (isinstance(timestamp_start, bool) or not isinstance(timestamp_start, int)):
             return build_error_response(400, "validation", "Field 'timestamp_start' must be an integer (epoch ms).")
-        if timestamp_end is not None and not isinstance(timestamp_end, int):
+        if timestamp_end is not None and (isinstance(timestamp_end, bool) or not isinstance(timestamp_end, int)):
             return build_error_response(400, "validation", "Field 'timestamp_end' must be an integer (epoch ms).")
-        if cursor is not None and not isinstance(cursor, int):
+        if cursor is not None and (isinstance(cursor, bool) or not isinstance(cursor, int)):
             return build_error_response(400, "validation", "Field 'cursor' must be an integer (internal_id).")
-        if not isinstance(limit, int) or limit < 1:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             return build_error_response(400, "validation", "Field 'limit' must be a positive integer.")
 
         # Execute query
@@ -107,7 +107,7 @@ class HandlerStats:
             )
         except RuntimeError as exc:
             logger.exception("Stats query failed for topic %s.", topic_name)
-            return build_error_response(500, "database", str(exc))
+            return build_error_response(500, "database", "Stats query failed.")
 
         return {
             "statusCode": 200,

@@ -221,6 +221,24 @@ class TestHandlerStatsValidation:
 
         assert 400 == response["statusCode"]
 
+    def test_boolean_timestamp_start_returns_400(self, handler: HandlerStats) -> None:
+        """Test that boolean timestamp_start is rejected."""
+        response = handler.handle_request(_make_event(body={"timestamp_start": True}))
+
+        assert 400 == response["statusCode"]
+
+    def test_boolean_cursor_returns_400(self, handler: HandlerStats) -> None:
+        """Test that boolean cursor is rejected."""
+        response = handler.handle_request(_make_event(body={"cursor": False}))
+
+        assert 400 == response["statusCode"]
+
+    def test_boolean_limit_returns_400(self, handler: HandlerStats) -> None:
+        """Test that boolean limit is rejected."""
+        response = handler.handle_request(_make_event(body={"limit": True}))
+
+        assert 400 == response["statusCode"]
+
 
 class TestHandlerStatsErrors:
     """Tests for error handling."""
@@ -235,3 +253,4 @@ class TestHandlerStatsErrors:
         body = json.loads(response["body"])
         assert False is body["success"]
         assert "database" == body["errors"][0]["type"]
+        assert "Stats query failed." == body["errors"][0]["message"]

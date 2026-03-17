@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 class WriterPostgres(Writer):
     """Postgres writer for storing events in PostgreSQL database.
-    Database credentials are loaded from AWS Secrets Manager at initialization.
+    Database credentials are loaded lazily from AWS Secrets Manager on first use.
     """
 
     def __init__(self, config: dict[str, Any]) -> None:
