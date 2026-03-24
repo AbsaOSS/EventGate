@@ -20,16 +20,11 @@ import logging
 import os
 from typing import Any
 
-import boto3
-from botocore.exceptions import BotoCoreError, NoCredentialsError
-
 from src.handlers.handler_health import HandlerHealth
 from src.handlers.handler_stats import HandlerStats
-from src.handlers.handler_token import HandlerToken
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
-from src.utils.config_loader import load_access_config, load_config, load_topic_names
-from src.utils.constants import SSL_CA_BUNDLE_KEY
+from src.utils.config_loader import load_topic_names
 from src.utils.utils import dispatch_request
 
 
@@ -48,28 +43,15 @@ logger.debug("Using CONF_DIR=%s.", CONF_DIR)
 if INVALID_CONF_ENV:
     logger.warning("CONF_DIR env var set to non-existent path: %s; fell back to %s.", INVALID_CONF_ENV, CONF_DIR)
 
-config = load_config(CONF_DIR)
-
-# Initialize S3 client with SSL verification
-try:
-    ssl_verify = config.get(SSL_CA_BUNDLE_KEY, True)
-    aws_s3 = boto3.Session().resource("s3", verify=ssl_verify)
-    logger.debug("Initialized AWS S3 client.")
-except (BotoCoreError, NoCredentialsError) as exc:
-    logger.exception("Failed to initialize AWS S3 client.")
-    raise RuntimeError("AWS S3 client initialization failed.") from exc
-
-# Load topic names and access control.
+# Load topic names.
 topic_names = load_topic_names(CONF_DIR)
 topics: dict[str, dict[str, Any]] = {name: {} for name in topic_names}
-access_config = load_access_config(config, aws_s3)
 
 # Initialize EventStats readers
 reader_postgres = ReaderPostgres()
 
 # Initialize EventStats handlers
-handler_token = HandlerToken(config).with_public_keys_queried()
-handler_stats = HandlerStats(handler_token, access_config, topics, reader_postgres)
+handler_stats = HandlerStats(topics, reader_postgres)
 handler_health = HandlerHealth({"postgres_reader": reader_postgres})
 
 # Route to handler function mapping

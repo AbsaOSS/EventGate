@@ -20,9 +20,6 @@ import json
 import logging
 from typing import Any
 
-from jwt.exceptions import PyJWTError
-
-from src.handlers.handler_token import HandlerToken
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_TOPICS
 from src.utils.utils import build_error_response
@@ -35,13 +32,9 @@ class HandlerStats:
 
     def __init__(
         self,
-        handler_token: HandlerToken,
-        access_config: dict[str, list[str]],
         topics: dict[str, dict[str, Any]],
         reader_postgres: ReaderPostgres,
     ) -> None:
-        self.handler_token = handler_token
-        self.access_config = access_config
         self.topics = topics
         self.reader_postgres = reader_postgres
 
@@ -65,18 +58,6 @@ class HandlerStats:
             return build_error_response(
                 400, "validation", f"Stats are only supported for topics '{', '.join(SUPPORTED_TOPICS)}'."
             )
-
-        # Authentication
-        try:
-            token_encoded = self.handler_token.extract_token(event.get("headers", {}))
-            token: dict[str, Any] = self.handler_token.decode_jwt(token_encoded)
-        except (PyJWTError, ValueError, KeyError):
-            return build_error_response(401, "auth", "Invalid or missing token.")
-
-        # Authorisation
-        user = token.get("sub")
-        if topic_name not in self.access_config or user not in self.access_config[topic_name]:
-            return build_error_response(403, "auth", "User not authorized for topic.")
 
         # Parse request body
         try:

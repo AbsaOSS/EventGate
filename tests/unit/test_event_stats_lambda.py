@@ -15,14 +15,13 @@
 #
 
 
-import base64
 import importlib
 import importlib.util
 import json
 import sys
 import types
 from contextlib import ExitStack
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -57,37 +56,6 @@ def event_stats_module():
     if importlib.util.find_spec("psycopg2") is None:
         dummy_pg = types.ModuleType("psycopg2")
         exit_stack.enter_context(patch.dict(sys.modules, {"psycopg2": dummy_pg}))
-
-    mock_requests_get = start_patch("requests.get")
-    mock_requests_get.return_value.json.return_value = {"keys": [{"key": base64.b64encode(b"dummy_der").decode()}]}
-
-    mock_load_key = start_patch("cryptography.hazmat.primitives.serialization.load_der_public_key")
-    mock_load_key.return_value = object()
-
-    class MockS3ObjectBody:
-        def read(self):
-            return json.dumps(
-                {
-                    "public.cps.za.runs": ["FooBarUser"],
-                    "public.cps.za.dlchange": ["FooUser", "BarUser"],
-                    "public.cps.za.test": ["TestUser"],
-                }
-            ).encode("utf-8")
-
-    class MockS3Object:
-        def get(self):
-            return {"Body": MockS3ObjectBody()}
-
-    class MockS3Bucket:
-        def Object(self, _key):
-            return MockS3Object()
-
-    class MockS3Resource:
-        def Bucket(self, _name):
-            return MockS3Bucket()
-
-    mock_session = start_patch("boto3.Session")
-    mock_session.return_value.resource.return_value = MockS3Resource()
 
     module = importlib.import_module("src.event_stats_lambda")
 

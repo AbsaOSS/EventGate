@@ -23,7 +23,6 @@ from typing import Any, Dict
 import pytest
 
 from tests.integration.conftest import EventGateTestClient, EventStatsTestClient
-from tests.integration.utils.jwt_helper import generate_token
 
 
 def _post_seed_events(
@@ -63,27 +62,11 @@ def _post_seed_events(
 
 
 class TestStatsEndpointAuth:
-    """Authentication and authorization tests for /stats."""
+    """Topic validation tests for /stats."""
 
-    def test_missing_token_returns_401(self, stats_client: EventStatsTestClient) -> None:
-        """Test POST /stats without token returns 401."""
-        response = stats_client.post_stats("public.cps.za.runs", {})
-
-        assert 401 == response["statusCode"]
-
-    def test_unauthorized_user_returns_403(
-        self, stats_client: EventStatsTestClient, jwt_keypair: Dict[str, Any]
-    ) -> None:
-        """Test POST /stats from unauthorized user returns 403."""
-        bad_token = generate_token(jwt_keypair["private_key_pem"], "UnauthorizedStatsUser")
-
-        response = stats_client.post_stats("public.cps.za.runs", {}, token=bad_token)
-
-        assert 403 == response["statusCode"]
-
-    def test_nonexistent_topic_returns_404(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_nonexistent_topic_returns_404(self, stats_client: EventStatsTestClient) -> None:
         """Test POST /stats for unknown topic returns 404."""
-        response = stats_client.post_stats("nonexistent.topic", {}, token=valid_token)
+        response = stats_client.post_stats("nonexistent.topic", {})
 
         assert 404 == response["statusCode"]
 
@@ -102,9 +85,9 @@ class TestStatsEndpointBasicQuery:
             statuses=["succeeded", "failed", "succeeded"],
         )
 
-    def test_default_query_returns_200(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_default_query_returns_200(self, stats_client: EventStatsTestClient) -> None:
         """Test default stats query returns 200 with data."""
-        response = stats_client.post_stats("public.cps.za.runs", {}, token=valid_token)
+        response = stats_client.post_stats("public.cps.za.runs", {})
 
         assert 200 == response["statusCode"]
         body = json.loads(response["body"])
@@ -114,10 +97,11 @@ class TestStatsEndpointBasicQuery:
         assert "pagination" in body
 
     def test_joined_data_contains_run_and_job_fields(
-        self, stats_client: EventStatsTestClient, valid_token: str
+        self,
+        stats_client: EventStatsTestClient,
     ) -> None:
         """Test that response rows contain both run-level and job-level fields."""
-        response = stats_client.post_stats("public.cps.za.runs", {}, token=valid_token)
+        response = stats_client.post_stats("public.cps.za.runs", {})
         body = json.loads(response["body"])
         row = body["data"][0]
 
@@ -132,9 +116,9 @@ class TestStatsEndpointBasicQuery:
         assert "catalog_id" in row
         assert "status" in row
 
-    def test_computed_columns_present(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_computed_columns_present(self, stats_client: EventStatsTestClient) -> None:
         """Test that computed columns are present in the response."""
-        response = stats_client.post_stats("public.cps.za.runs", {}, token=valid_token)
+        response = stats_client.post_stats("public.cps.za.runs", {})
         body = json.loads(response["body"])
         row = body["data"][0]
 
@@ -145,9 +129,9 @@ class TestStatsEndpointBasicQuery:
         assert "start_time" in row
         assert "end_time" in row
 
-    def test_results_sorted_by_internal_id_desc(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_results_sorted_by_internal_id_desc(self, stats_client: EventStatsTestClient) -> None:
         """Test that results are sorted by internal_id descending."""
-        response = stats_client.post_stats("public.cps.za.runs", {}, token=valid_token)
+        response = stats_client.post_stats("public.cps.za.runs", {})
         body = json.loads(response["body"])
 
         ids = [row["internal_id"] for row in body["data"]]
@@ -167,7 +151,7 @@ class TestStatsEndpointTimestampFilter:
             source_app="ts-filter-test",
         )
 
-    def test_timestamp_range_returns_data(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_timestamp_range_returns_data(self, stats_client: EventStatsTestClient) -> None:
         """Test that timestamp_start/timestamp_end narrows results."""
         now_ms = int(time.time() * 1000)
         one_hour_ago = now_ms - 3600000
@@ -175,16 +159,15 @@ class TestStatsEndpointTimestampFilter:
         response = stats_client.post_stats(
             "public.cps.za.runs",
             {"timestamp_start": one_hour_ago, "timestamp_end": now_ms},
-            token=valid_token,
         )
         body = json.loads(response["body"])
 
         assert 200 == response["statusCode"]
         assert len(body["data"]) > 0
 
-    def test_unsupported_topic_returns_400(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_unsupported_topic_returns_400(self, stats_client: EventStatsTestClient) -> None:
         """Test that a known but unsupported topic returns 400."""
-        response = stats_client.post_stats("public.cps.za.test", {}, token=valid_token)
+        response = stats_client.post_stats("public.cps.za.test", {})
 
         assert 400 == response["statusCode"]
 
@@ -197,25 +180,23 @@ class TestStatsEndpointPagination:
         """Seed enough events to test pagination."""
         return _post_seed_events(eventgate_client, valid_token, count=5, source_app="pagination-test")
 
-    def test_limit_controls_page_size(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_limit_controls_page_size(self, stats_client: EventStatsTestClient) -> None:
         """Test that limit controls number of returned rows."""
         response = stats_client.post_stats(
             "public.cps.za.runs",
             {"limit": 2},
-            token=valid_token,
         )
         body = json.loads(response["body"])
 
         assert 200 == response["statusCode"]
         assert len(body["data"]) <= 2
 
-    def test_cursor_pagination_returns_next_page(self, stats_client: EventStatsTestClient, valid_token: str) -> None:
+    def test_cursor_pagination_returns_next_page(self, stats_client: EventStatsTestClient) -> None:
         """Test that cursor from first page fetches the next page."""
         # First page.
         resp1 = stats_client.post_stats(
             "public.cps.za.runs",
             {"limit": 2},
-            token=valid_token,
         )
         body1 = json.loads(resp1["body"])
 
@@ -228,7 +209,6 @@ class TestStatsEndpointPagination:
         resp2 = stats_client.post_stats(
             "public.cps.za.runs",
             {"limit": 2, "cursor": cursor},
-            token=valid_token,
         )
         body2 = json.loads(resp2["body"])
 

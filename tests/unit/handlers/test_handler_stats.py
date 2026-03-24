@@ -19,7 +19,6 @@ import json
 from typing import Any
 from unittest.mock import MagicMock
 
-import jwt as pyjwt
 import pytest
 
 from src.handlers.handler_stats import HandlerStats
@@ -32,24 +31,6 @@ def topics() -> dict[str, dict[str, Any]]:
         "public.cps.za.runs": {"type": "object", "properties": {}},
         "public.cps.za.test": {"type": "object", "properties": {}},
     }
-
-
-@pytest.fixture
-def access_config() -> dict[str, list[str]]:
-    """Access config with one authorised user per topic."""
-    return {
-        "public.cps.za.runs": ["AllowedUser"],
-        "public.cps.za.test": ["TestUser"],
-    }
-
-
-@pytest.fixture
-def mock_handler_token() -> MagicMock:
-    """Mock HandlerToken with extract_token and decode_jwt."""
-    mock = MagicMock()
-    mock.extract_token.return_value = "fake.jwt.token"
-    mock.decode_jwt.return_value = {"sub": "AllowedUser"}
-    return mock
 
 
 @pytest.fixture
@@ -66,14 +47,10 @@ def mock_reader() -> MagicMock:
 @pytest.fixture
 def handler(
     topics: dict[str, dict[str, Any]],
-    access_config: dict[str, list[str]],
-    mock_handler_token: MagicMock,
     mock_reader: MagicMock,
 ) -> HandlerStats:
     """Create HandlerStats with mocked dependencies."""
     return HandlerStats(
-        handler_token=mock_handler_token,
-        access_config=access_config,
         topics=topics,
         reader_postgres=mock_reader,
     )
@@ -90,7 +67,7 @@ def _make_event(
     return {
         "resource": "/stats/{topic_name}",
         "httpMethod": "POST",
-        "headers": headers or {"Authorization": "Bearer fake.jwt.token"},
+        "headers": headers or {},
         "body": json.dumps(body) if isinstance(body, dict) else body,
         "pathParameters": {"topic_name": topic},
     }
@@ -130,34 +107,6 @@ class TestHandlerStatsSuccess:
 
         call_kwargs = mock_reader.read_stats.call_args.kwargs
         assert 42 == call_kwargs["cursor"]
-
-
-class TestHandlerStatsAuth:
-    """Tests for authentication and authorisation."""
-
-    def test_missing_token_returns_401(self, handler: HandlerStats, mock_handler_token: MagicMock) -> None:
-        """Test that missing/invalid token returns 401."""
-        mock_handler_token.extract_token.side_effect = ValueError("No token")
-
-        response = handler.handle_request(_make_event())
-
-        assert 401 == response["statusCode"]
-
-    def test_invalid_jwt_returns_401(self, handler: HandlerStats, mock_handler_token: MagicMock) -> None:
-        """Test that invalid JWT returns 401."""
-        mock_handler_token.decode_jwt.side_effect = pyjwt.PyJWTError("bad token")
-
-        response = handler.handle_request(_make_event())
-
-        assert 401 == response["statusCode"]
-
-    def test_unauthorized_user_returns_403(self, handler: HandlerStats, mock_handler_token: MagicMock) -> None:
-        """Test that user not in ACL returns 403."""
-        mock_handler_token.decode_jwt.return_value = {"sub": "UnauthorizedUser"}
-
-        response = handler.handle_request(_make_event())
-
-        assert 403 == response["statusCode"]
 
 
 class TestHandlerStatsValidation:
