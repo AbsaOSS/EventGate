@@ -214,7 +214,7 @@ pytest tests/integration/ -v --log-cli-level=DEBUG
 Run Black, Pylint, mypy, unit tests (with coverage), and integration tests in a single command:
 
 ```shell
-make quality-gates
+make qa
 ```
 
 The command executes each gate in order and stops on first failure. Individual targets are also available (e.g., `make black`, `make pylint`, `make pytest-unit`).

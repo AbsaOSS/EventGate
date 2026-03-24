@@ -48,5 +48,5 @@ Testing
 - Assert pattern: `assert expected == actual`
 
 Quality gates (run after changes, fix only if below threshold)
-- Run all quality gates at once: `make quality-gates`
+- Run all quality gates at once: `make qa`
 - Once a quality gate passes, do not re-run it in different scenarios

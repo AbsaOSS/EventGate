@@ -1,4 +1,4 @@
-.PHONY: black pylint mypy pytest-unit pytest-integration quality-gates
+.PHONY: black pylint mypy pytest-unit pytest-integration qa
 
 PYTHON   := .venv/bin/python
 PY_FILES := $(shell git ls-files '*.py')
@@ -20,4 +20,4 @@ pytest-unit: ## Run unit tests with coverage (threshold >= 80%)
 pytest-integration: ## Run integration tests
 	$(PYTHON) -m pytest tests/integration/
 
-quality-gates: black pylint mypy pytest-unit pytest-integration
+qa: black pylint mypy pytest-unit pytest-integration
