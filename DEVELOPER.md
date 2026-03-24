@@ -8,6 +8,7 @@
 - [Run Unit Test Locally](#run-unit-test-locally)
 - [Code Coverage](#code-coverage)
 - [Run Integration Test Locally](#run-integration-test-locally)
+- [Run All Quality Gates](#run-all-quality-gates)
 
 ## Get Started
 
@@ -207,3 +208,13 @@ View container logs in pytest output by increasing log level:
 ```shell
 pytest tests/integration/ -v --log-cli-level=DEBUG
 ```
+
+## Run All Quality Gates
+
+Run Black, Pylint, mypy, unit tests (with coverage), and integration tests in a single command:
+
+```shell
+make quality-gates
+```
+
+The command executes each gate in order and stops on first failure. Individual targets are also available (e.g., `make black`, `make pylint`, `make pytest-unit`).

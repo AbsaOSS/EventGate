@@ -48,9 +48,5 @@ Testing
 - Assert pattern: `assert expected == actual`
 
 Quality gates (run after changes, fix only if below threshold)
-- Always run quality gates using the project virtual environment: `.venv/bin/python -m <tool>`
+- Run all quality gates at once: `make quality-gates`
 - Once a quality gate passes, do not re-run it in different scenarios
-- black .
-- mypy .
-- pylint $(git ls-files '*.py') >= 9.5
-- pytest tests/ >= 80% coverage
