@@ -33,8 +33,8 @@ import docker
 import psycopg2
 import pytest
 import requests as req_lib
+from moto import mock_aws
 from testcontainers.kafka import KafkaContainer
-from testcontainers.localstack import LocalStackContainer
 from testcontainers.postgres import PostgresContainer
 
 from tests.integration.schemas.postgres_schema import SCHEMA_SQL
@@ -97,7 +97,6 @@ CONTAINER_IMAGES: List[str] = [
     "testcontainers/ryuk:0.8.1",
     "postgres:16",
     "confluentinc/cp-kafka:7.6.0",
-    "localstack/localstack:latest",
 ]
 
 _PULL_MAX_ATTEMPTS = 2
@@ -206,20 +205,13 @@ def kafka_container() -> Generator[str, None, None]:
 
 
 @pytest.fixture(scope="session")
-def localstack_container() -> Generator[dict, None, None]:
-    """LocalStack container for EventBridge and Secrets Manager."""
-    logger.debug("Starting LocalStack container.")
-    container = LocalStackContainer("localstack/localstack:latest")
-    container.with_services("events,secretsmanager")
-
-    container.start()
-    url = container.get_url()
-    logger.debug("LocalStack started at %s.", url)
-
-    yield {"url": url, "region": "us-east-1"}
-
-    container.stop()
-    logger.debug("LocalStack container stopped.")
+def mock_aws_services() -> Generator[dict, None, None]:
+    """Mock AWS services (S3, Secrets Manager, EventBridge) via moto."""
+    with mock_aws():
+        region = "us-east-1"
+        logger.debug("Moto mock_aws started for S3, Secrets Manager, EventBridge.")
+        yield {"region": region}
+        logger.debug("Moto mock_aws stopped.")
 
 
 @pytest.fixture(scope="session")
@@ -260,18 +252,15 @@ def mock_jwt_server(jwt_keypair: Dict[str, Any]) -> Generator[str, None, None]:
 def lambda_handler_factory(
     kafka_container: str,
     postgres_container: str,
-    localstack_container: dict,
+    mock_aws_services: dict,
     mock_jwt_server: str,
 ) -> Generator[Callable[[Dict[str, Any]], Dict[str, Any]], None, None]:
     """Create lambda_handler with real container backends."""
     # Set environment variables for the Lambda.
     os.environ["LOG_LEVEL"] = "DEBUG"
-    os.environ["AWS_ENDPOINT_URL"] = localstack_container["url"]
-    os.environ["AWS_DEFAULT_REGION"] = localstack_container["region"]
-    os.environ["AWS_ACCESS_KEY_ID"] = "test"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
+    os.environ["AWS_DEFAULT_REGION"] = mock_aws_services["region"]
 
-    # Store PostgreSQL credentials in LocalStack Secrets Manager so WriterPostgres can find them.
+    # Store PostgreSQL credentials in mocked Secrets Manager so WriterPostgres can find them.
     parsed_dsn = urlparse(postgres_container)
     pg_secret = {
         "database": parsed_dsn.path.lstrip("/"),
@@ -282,15 +271,12 @@ def lambda_handler_factory(
     }
     sm_client = boto3.client(
         "secretsmanager",
-        endpoint_url=localstack_container["url"],
-        region_name=localstack_container["region"],
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
+        region_name=mock_aws_services["region"],
     )
     sm_client.create_secret(Name="eventgate/postgres", SecretString=json.dumps(pg_secret))
     os.environ["POSTGRES_SECRET_NAME"] = "eventgate/postgres"
-    os.environ["POSTGRES_SECRET_REGION"] = localstack_container["region"]
-    logger.debug("PostgreSQL secret stored in LocalStack Secrets Manager.")
+    os.environ["POSTGRES_SECRET_REGION"] = mock_aws_services["region"]
+    logger.debug("PostgreSQL secret stored in moto Secrets Manager.")
 
     # Create test config with container URLs.
     test_config_dir = PROJECT_ROOT / "tests" / "integration" / ".tmp_conf"
@@ -330,12 +316,10 @@ def lambda_handler_factory(
     yield lambda_handler
 
     # Cleanup environment variables.
+    # Note: AWS variables and secrets are managed by moto's mock_aws context manager.
     for key in (
         "LOG_LEVEL",
-        "AWS_ENDPOINT_URL",
         "AWS_DEFAULT_REGION",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
         "POSTGRES_SECRET_NAME",
         "POSTGRES_SECRET_REGION",
         "CONF_DIR",

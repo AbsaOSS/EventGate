@@ -198,14 +198,11 @@ class TestPostEventWriterVerification:
         finally:
             consumer.close()
 
-    def test_eventbridge_bus_reachable(self, localstack_container: dict) -> None:
+    def test_eventbridge_bus_reachable(self, mock_aws_services: dict) -> None:
         """Verify EventBridge event bus exists and is reachable after event dispatch."""
         client = boto3.client(
             "events",
-            endpoint_url=localstack_container["url"],
-            region_name=localstack_container["region"],
-            aws_access_key_id="test",
-            aws_secret_access_key="test",
+            region_name=mock_aws_services["region"],
         )
         response = client.describe_event_bus(Name="default")
         assert "Arn" in response
