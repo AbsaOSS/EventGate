@@ -61,15 +61,11 @@ def _post_seed_events(
     return events
 
 
-class TestStatsEndpointAuth:
-    """Topic validation tests for /stats."""
+def test_nonexistent_topic_returns_404(stats_client: EventStatsTestClient) -> None:
+    """Test POST /stats for unknown topic returns 404."""
+    response = stats_client.post_stats("nonexistent.topic", {})
 
-    def test_nonexistent_topic_returns_404(self, stats_client: EventStatsTestClient) -> None:
-        """Test POST /stats for unknown topic returns 404."""
-        response = stats_client.post_stats("nonexistent.topic", {})
-
-        assert 404 == response["statusCode"]
-
+    assert 404 == response["statusCode"]
 
 class TestStatsEndpointBasicQuery:
     """Basic query tests for /stats."""
@@ -96,10 +92,7 @@ class TestStatsEndpointBasicQuery:
         assert len(body["data"]) > 0
         assert "pagination" in body
 
-    def test_joined_data_contains_run_and_job_fields(
-        self,
-        stats_client: EventStatsTestClient,
-    ) -> None:
+    def test_joined_data_contains_run_and_job_fields(self, stats_client: EventStatsTestClient) -> None:
         """Test that response rows contain both run-level and job-level fields."""
         response = stats_client.post_stats("public.cps.za.runs", {})
         body = json.loads(response["body"])

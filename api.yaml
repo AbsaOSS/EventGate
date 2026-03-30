@@ -186,8 +186,7 @@ paths:
         Returns a paginated list of run/job records from PostgreSQL for the
         specified topic.  Currently only `public.cps.za.runs` is supported.
         Results are sorted by `internal_id DESC` with keyset cursor pagination.
-      security:
-        - bearerAuth: []
+      security: []
       parameters:
         - name: topic_name
           in: path
