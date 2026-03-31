@@ -57,7 +57,7 @@ _RUNS_SQL_BASE = (
     " WHERE r.timestamp_start >= %s AND r.timestamp_start <= %s"
 )
 
-_RUNS_SQL_TAIL = (" ORDER BY j.internal_id DESC LIMIT %s")
+_RUNS_SQL_TAIL = " ORDER BY j.internal_id DESC LIMIT %s"
 
 _RUNS_SQL = _RUNS_SQL_BASE + _RUNS_SQL_TAIL
 _RUNS_SQL_WITH_CURSOR = _RUNS_SQL_BASE + " AND j.internal_id < %s" + _RUNS_SQL_TAIL
