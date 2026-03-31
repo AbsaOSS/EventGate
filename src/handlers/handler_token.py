@@ -72,7 +72,7 @@ class HandlerToken:
         Raises:
             RuntimeError: If fetching or deserializing the public keys fails.
         """
-        logger.debug("Loading token public keys from %s.", self.public_keys_url)
+        logger.debug("Loading token public keys.")
 
         try:
             response_json = requests.get(self.public_keys_url, verify=self.ssl_ca_bundle, timeout=5).json()
@@ -97,7 +97,7 @@ class HandlerToken:
 
             return self
         except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
-            logger.exception("Failed to fetch or deserialize token public key from %s.", self.public_keys_url)
+            logger.exception("Failed to fetch or deserialize token public key.")
             raise RuntimeError("Token public key initialization failed") from exc
 
     def decode_jwt(self, token_encoded: str) -> dict[str, Any]:

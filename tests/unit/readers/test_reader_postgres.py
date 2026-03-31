@@ -284,7 +284,8 @@ class TestReadStats:
             executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][0]
             executed_params = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][1]
 
-        assert "j.internal_id < %s" in executed_sql
+        sql_str = executed_sql.as_string(None) if hasattr(executed_sql, "as_string") else executed_sql
+        assert "j.internal_id < %s" in sql_str
         assert 100 in executed_params
 
 

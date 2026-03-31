@@ -30,7 +30,8 @@ class MockCursor:
         self.executions = []
 
     def execute(self, sql, params):
-        self.executions.append((sql.strip(), params))
+        sql_str = sql.as_string(None) if hasattr(sql, "as_string") else sql
+        self.executions.append((sql_str.strip(), params))
 
 
 # --- Insert helpers ---

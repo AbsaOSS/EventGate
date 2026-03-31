@@ -31,8 +31,10 @@ from src.writers.writer import Writer
 try:
     import psycopg2
     from psycopg2 import Error as PsycopgError
+    from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None  # type: ignore
+    psycopg2_sql = None  # type: ignore
 
     class PsycopgError(Exception):  # type: ignore
         """Shim psycopg2 error base when psycopg2 is not installed."""
@@ -67,9 +69,8 @@ class WriterPostgres(Writer):
             message: Event payload.
         """
         logger.debug("Sending to Postgres - %s.", table)
-        cursor.execute(
-            f"""
-            INSERT INTO {table}
+        query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                 event_id,
                 tenant_id,
@@ -100,7 +101,9 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.SQL(table))
+        cursor.execute(
+            query,
             (
                 message["event_id"],
                 message["tenant_id"],
@@ -127,9 +130,8 @@ class WriterPostgres(Writer):
             message: Event payload (includes jobs array).
         """
         logger.debug("Sending to Postgres - %s and %s.", table_runs, table_jobs)
-        cursor.execute(
-            f"""
-            INSERT INTO {table_runs}
+        runs_query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                     event_id,
                     job_ref,
@@ -150,7 +152,9 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.SQL(table_runs))
+        cursor.execute(
+            runs_query,
             (
                 message["event_id"],
                 message["job_ref"],
@@ -163,10 +167,8 @@ class WriterPostgres(Writer):
             ),
         )
 
-        for job in message["jobs"]:
-            cursor.execute(
-                f"""
-            INSERT INTO {table_jobs}
+        jobs_query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                     event_id,
                     country,
@@ -187,7 +189,10 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.SQL(table_jobs))
+        for job in message["jobs"]:
+            cursor.execute(
+                jobs_query,
                 (
                     message["event_id"],
                     job.get("country", ""),
@@ -208,9 +213,8 @@ class WriterPostgres(Writer):
             message: Event payload.
         """
         logger.debug("Sending to Postgres - %s.", table)
-        cursor.execute(
-            f"""
-            INSERT INTO {table}
+        query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                 event_id,
                 tenant_id,
@@ -227,7 +231,9 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.SQL(table))
+        cursor.execute(
+            query,
             (
                 message["event_id"],
                 message["tenant_id"],

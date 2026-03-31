@@ -185,7 +185,9 @@ paths:
       description: >
         Returns a paginated list of run/job records from PostgreSQL for the
         specified topic.  Currently only `public.cps.za.runs` is supported.
-        Results are sorted by `internal_id DESC` with keyset cursor pagination.
+        Results are sorted by `internal_id DESC` with keyset cursor pagination. 
+        When `timestamp_start` and `timestamp_end` are omitted the default time
+        window is the last `7 days`.
       security: []
       parameters:
         - name: topic_name

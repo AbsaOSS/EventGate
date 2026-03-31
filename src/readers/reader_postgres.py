@@ -34,8 +34,10 @@ from src.utils.utils import load_postgres_config
 try:
     import psycopg2
     from psycopg2 import Error as PsycopgError
+    from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None  # type: ignore
+    psycopg2_sql = None  # type: ignore
 
     class PsycopgError(Exception):  # type: ignore
         """Shim psycopg2 error base when psycopg2 is not installed."""
@@ -43,7 +45,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_RUNS_SQL = (
+_RUNS_SQL_BASE = (
     "SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,"
     " r.source_app_version, r.environment,"
     " r.timestamp_start AS run_timestamp_start,"
@@ -53,10 +55,12 @@ _RUNS_SQL = (
     " FROM public_cps_za_runs_jobs j"
     " INNER JOIN public_cps_za_runs r ON j.event_id = r.event_id"
     " WHERE r.timestamp_start >= %s AND r.timestamp_start <= %s"
-    "{cursor_condition}"
-    " ORDER BY j.internal_id DESC"
-    " LIMIT %s"
 )
+
+_RUNS_SQL_TAIL = (" ORDER BY j.internal_id DESC LIMIT %s")
+
+_RUNS_SQL = _RUNS_SQL_BASE + _RUNS_SQL_TAIL
+_RUNS_SQL_WITH_CURSOR = _RUNS_SQL_BASE + " AND j.internal_id < %s" + _RUNS_SQL_TAIL
 
 
 class ReaderPostgres:
@@ -112,13 +116,12 @@ class ReaderPostgres:
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
         params: list[Any] = [ts_start, ts_end]
-        cursor_condition = ""
         if cursor is not None:
-            cursor_condition = " AND j.internal_id < %s"
             params.append(cursor)
+            query = psycopg2_sql.SQL(_RUNS_SQL_WITH_CURSOR)
+        else:
+            query = psycopg2_sql.SQL(_RUNS_SQL)
         params.append(limit + 1)
-
-        sql = _RUNS_SQL.format(cursor_condition=cursor_condition)
 
         try:
             with psycopg2.connect(  # type: ignore[attr-defined]
@@ -130,7 +133,7 @@ class ReaderPostgres:
                 options="-c statement_timeout=30000 -c default_transaction_read_only=on",
             ) as connection:
                 with connection.cursor() as db_cursor:
-                    db_cursor.execute(sql, params)
+                    db_cursor.execute(query, params)
                     col_names = [desc[0] for desc in db_cursor.description]  # type: ignore[union-attr]
                     raw_rows = db_cursor.fetchall()
         except PsycopgError as exc:
