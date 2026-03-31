@@ -67,6 +67,7 @@ def test_nonexistent_topic_returns_404(stats_client: EventStatsTestClient) -> No
 
     assert 404 == response["statusCode"]
 
+
 class TestStatsEndpointBasicQuery:
     """Basic query tests for /stats."""
 
