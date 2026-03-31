@@ -19,7 +19,6 @@ from botocore.exceptions import BotoCoreError
 
 from src.writers.writer_eventbridge import WriterEventBridge
 
-
 # --- write() ---
 
 

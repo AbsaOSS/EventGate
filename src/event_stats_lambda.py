@@ -27,7 +27,6 @@ from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 from src.utils.config_loader import load_topic_names
 from src.utils.utils import dispatch_request
 
-
 # Initialize logger
 root_logger = logging.getLogger()
 if not root_logger.handlers:

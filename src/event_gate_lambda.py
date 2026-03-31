@@ -36,7 +36,6 @@ from src.writers.writer_eventbridge import WriterEventBridge
 from src.writers.writer_kafka import WriterKafka
 from src.writers.writer_postgres import WriterPostgres
 
-
 # Initialize logger
 root_logger = logging.getLogger()
 if not root_logger.handlers:

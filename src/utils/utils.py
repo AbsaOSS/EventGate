@@ -23,7 +23,6 @@ from typing import Any
 
 import boto3
 
-
 logger = logging.getLogger(__name__)
 
 
