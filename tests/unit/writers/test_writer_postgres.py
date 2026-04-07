@@ -29,8 +29,20 @@ class MockCursor:
     def __init__(self):
         self.executions = []
 
+    @staticmethod
+    def _sql_to_str(sql) -> str:
+        """Render a psycopg2 SQL Composable without a real connection."""
+        if hasattr(sql, "_seq"):
+            return "".join(MockCursor._sql_to_str(part) for part in sql._seq)
+        if hasattr(sql, "_wrapped"):
+            wrapped = sql._wrapped
+            if isinstance(wrapped, str):
+                return wrapped
+            return ".".join(f'"{s}"' for s in wrapped)
+        return str(sql)
+
     def execute(self, sql, params):
-        sql_str = sql.as_string(None) if hasattr(sql, "as_string") else sql
+        sql_str = self._sql_to_str(sql) if hasattr(sql, "_seq") or hasattr(sql, "_wrapped") else str(sql)
         self.executions.append((sql_str.strip(), params))
 
 

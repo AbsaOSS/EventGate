@@ -101,7 +101,7 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""").format(psycopg2_sql.SQL(table))
+            )""").format(psycopg2_sql.Identifier(table))
         cursor.execute(
             query,
             (
@@ -152,7 +152,7 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""").format(psycopg2_sql.SQL(table_runs))
+            )""").format(psycopg2_sql.Identifier(table_runs))
         cursor.execute(
             runs_query,
             (
@@ -189,7 +189,7 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""").format(psycopg2_sql.SQL(table_jobs))
+            )""").format(psycopg2_sql.Identifier(table_jobs))
         for job in message["jobs"]:
             cursor.execute(
                 jobs_query,
@@ -231,7 +231,7 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""").format(psycopg2_sql.SQL(table))
+            )""").format(psycopg2_sql.Identifier(table))
         cursor.execute(
             query,
             (
