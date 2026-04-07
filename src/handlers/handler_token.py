@@ -14,15 +14,12 @@
 # limitations under the License.
 #
 
-"""
-This module provides the HandlerToken class for managing the token related operations.
-"""
+"""Token management and JWT verification handler."""
 
 import base64
 import logging
-import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, cast
+from typing import Any, cast
 
 import jwt
 import requests
@@ -38,14 +35,10 @@ from src.utils.constants import (
 )
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 
 class HandlerToken:
-    """
-    HandlerToken manages token provider URL and public keys for JWT verification.
-    """
+    """Manages token provider URL and public keys for JWT verification."""
 
     _REFRESH_INTERVAL = timedelta(minutes=28)
 
@@ -57,32 +50,29 @@ class HandlerToken:
         self.ssl_ca_bundle: str | bool = config.get(SSL_CA_BUNDLE_KEY, True)
 
     def _refresh_keys_if_needed(self) -> None:
-        """
-        Refresh the public keys if the refresh interval has passed.
-        """
-        logger.debug("Checking if the token public keys need refresh")
+        """Refresh the public keys if the refresh interval has passed."""
+        logger.debug("Checking if the token public keys need refresh.")
 
         if self._last_loaded_at is None:
             return
         now = datetime.now(timezone.utc)
         if now - self._last_loaded_at < self._REFRESH_INTERVAL:
-            logger.debug("Token public keys are up to date, no refresh needed")
+            logger.debug("Token public keys are up to date, no refresh needed.")
             return
         try:
-            logger.debug("Token public keys are stale, refreshing now")
+            logger.debug("Token public keys are stale, refreshing now.")
             self.with_public_keys_queried()
         except RuntimeError:
-            logger.warning("Token public key refresh failed, using existing keys")
+            logger.warning("Token public key refresh failed, using existing keys.")
 
     def with_public_keys_queried(self) -> "HandlerToken":
-        """
-        Load token public keys from the configured URL.
+        """Load token public keys from the configured URL.
         Returns:
-            HandlerToken: The current instance with loaded public keys.
+            The current instance with loaded public keys.
         Raises:
             RuntimeError: If fetching or deserializing the public keys fails.
         """
-        logger.debug("Loading token public keys from %s", self.public_keys_url)
+        logger.debug("Loading token public keys.")
 
         try:
             response_json = requests.get(self.public_keys_url, verify=self.ssl_ca_bundle, timeout=5).json()
@@ -102,27 +92,26 @@ class HandlerToken:
             self.public_keys = [
                 cast(RSAPublicKey, serialization.load_der_public_key(base64.b64decode(raw_key))) for raw_key in raw_keys
             ]
-            logger.debug("Loaded %d token public keys", len(self.public_keys))
+            logger.debug("Loaded %d token public keys.", len(self.public_keys))
             self._last_loaded_at = datetime.now(timezone.utc)
 
             return self
         except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
-            logger.exception("Failed to fetch or deserialize token public key from %s", self.public_keys_url)
+            logger.exception("Failed to fetch or deserialize token public key.")
             raise RuntimeError("Token public key initialization failed") from exc
 
-    def decode_jwt(self, token_encoded: str) -> Dict[str, Any]:
-        """
-        Decode and verify a JWT using the loaded public keys.
+    def decode_jwt(self, token_encoded: str) -> dict[str, Any]:
+        """Decode and verify a JWT using the loaded public keys.
         Args:
-            token_encoded (str): The encoded JWT token.
+            token_encoded: The encoded JWT token.
         Returns:
-            Dict[str, Any]: The decoded JWT payload.
+            The decoded JWT payload.
         Raises:
             jwt.PyJWTError: If verification fails for all public keys.
         """
         self._refresh_keys_if_needed()
 
-        logger.debug("Decoding JWT")
+        logger.debug("Decoding JWT.")
         for public_key in self.public_keys:
             try:
                 return jwt.decode(token_encoded, public_key, algorithms=["RS256"])
@@ -130,21 +119,18 @@ class HandlerToken:
                 continue
         raise jwt.PyJWTError("Verification failed for all public keys")
 
-    def get_token_provider_info(self) -> Dict[str, Any]:
-        """
-        Returns: A 303 redirect response to the token provider URL.
-        """
-        logger.debug("Handling GET Token")
+    def get_token_provider_info(self) -> dict[str, Any]:
+        """Return a 303 redirect response to the token provider URL."""
+        logger.debug("Handling GET Token.")
         return {"statusCode": 303, "headers": {"Location": self.provider_url}}
 
     @staticmethod
-    def extract_token(event_headers: Dict[str, str]) -> str:
-        """
-        Extracts the bearer (custom/standard) token from event headers.
+    def extract_token(event_headers: dict[str, str]) -> str:
+        """Extract the bearer (custom/standard) token from event headers.
         Args:
-            event_headers (Dict[str, str]): The event headers.
+            event_headers: The event headers.
         Returns:
-            str: The extracted bearer token, or an empty string if not found.
+            The extracted bearer token, or an empty string if not found.
         """
         if not event_headers:
             return ""

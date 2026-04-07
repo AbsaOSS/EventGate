@@ -22,14 +22,28 @@ import pytest
 
 from src.writers.writer_postgres import WriterPostgres
 import src.writers.writer_postgres as wp
+import src.utils.utils as secrets_mod
 
 
 class MockCursor:
     def __init__(self):
         self.executions = []
 
+    @staticmethod
+    def _sql_to_str(sql) -> str:
+        """Render a psycopg2 SQL Composable without a real connection."""
+        if hasattr(sql, "_seq"):
+            return "".join(MockCursor._sql_to_str(part) for part in sql._seq)
+        if hasattr(sql, "_wrapped"):
+            wrapped = sql._wrapped
+            if isinstance(wrapped, str):
+                return wrapped
+            return ".".join(f'"{s}"' for s in wrapped)
+        return str(sql)
+
     def execute(self, sql, params):
-        self.executions.append((sql.strip(), params))
+        sql_str = self._sql_to_str(sql) if hasattr(sql, "_seq") or hasattr(sql, "_wrapped") else str(sql)
+        self.executions.append((sql_str.strip(), params))
 
 
 # --- Insert helpers ---
@@ -213,6 +227,14 @@ def test_write_skips_when_no_database(reset_env):
     assert ok and err is None
 
 
+def test_write_fails_when_connection_field_missing(reset_env):
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}
+    ok, err = writer.write("public.cps.za.test", {})
+    assert not ok
+    assert "host" in err and "not configured" in err
+
+
 def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
     writer = WriterPostgres({})
     writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
@@ -227,7 +249,7 @@ def test_write_unknown_topic_returns_false(reset_env, monkeypatch):
     writer = WriterPostgres({})
     writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
     ok, err = writer.write("public.cps.za.unknown", {})
-    assert not ok and "unknown topic" in err
+    assert not ok and "Unknown topic" in err
 
 
 def test_write_success_known_topic(reset_env, monkeypatch):
@@ -262,7 +284,7 @@ def test_init_with_secret(monkeypatch, reset_env):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(wp.boto3, "Session", lambda: MockSession())
+    monkeypatch.setattr(secrets_mod.boto3, "Session", lambda: MockSession())
     writer = WriterPostgres({})
     assert writer._db_config is None
     # Trigger lazy load via check_health
@@ -330,7 +352,7 @@ def test_check_health_success(reset_env, monkeypatch):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(wp.boto3, "Session", MockSession)
+    monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
     healthy, msg = writer.check_health()
     assert healthy and msg == "ok"
@@ -346,7 +368,7 @@ def test_check_health_missing_host(reset_env, monkeypatch):
         def client(self, service_name, region_name):
             return mock_client
 
-    monkeypatch.setattr(wp.boto3, "Session", MockSession)
+    monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
     healthy, msg = writer.check_health()
     assert not healthy and "host not configured" in msg

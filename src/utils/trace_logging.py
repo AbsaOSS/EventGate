@@ -20,13 +20,13 @@ Provides reusable TRACE-level payload logging for writer modules.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from src.utils.logging_levels import TRACE_LEVEL
 from src.utils.safe_serialization import safe_serialize_for_log
 
 
-def log_payload_at_trace(logger: logging.Logger, writer_name: str, topic_name: str, message: Dict[str, Any]) -> None:
+def log_payload_at_trace(logger: logging.Logger, writer_name: str, topic_name: str, message: dict[str, Any]) -> None:
     """Log message payload at TRACE level with safe serialization.
 
     Args:

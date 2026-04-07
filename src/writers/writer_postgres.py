@@ -14,84 +14,63 @@
 # limitations under the License.
 #
 
-"""
-Postgres writer module.
-Provides functionality for writing events to PostgreSQL database.
-"""
+"""Postgres writer for storing events in PostgreSQL database."""
 
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from src.utils.constants import TOPIC_TABLE_MAP
 from src.utils.trace_logging import log_payload_at_trace
+from src.utils.utils import load_postgres_config
 from src.writers.writer import Writer
 
 try:
     import psycopg2
     from psycopg2 import Error as PsycopgError
+    from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None  # type: ignore
+    psycopg2_sql = None  # type: ignore
 
     class PsycopgError(Exception):  # type: ignore
         """Shim psycopg2 error base when psycopg2 is not installed."""
 
 
 logger = logging.getLogger(__name__)
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
 
 
 class WriterPostgres(Writer):
-    """
-    Postgres writer for storing events in PostgreSQL database.
-    Database credentials are loaded from AWS Secrets Manager at initialization.
+    """Postgres writer for storing events in PostgreSQL database.
+    Database credentials are loaded lazily from AWS Secrets Manager on first use.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
         self._secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
         self._secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
-        self._db_config: Optional[Dict[str, Any]] = None
-        logger.debug("Initialized PostgreSQL writer")
+        self._db_config: dict[str, Any | None] | None = None
+        logger.debug("Initialized PostgreSQL writer.")
 
-    def _load_db_config(self) -> None:
-        """
-        Load database config from AWS Secrets Manager.
-        """
-        if not self._secret_name or not self._secret_region:
-            self._db_config = {"database": ""}
-            return
-
-        aws_secrets = boto3.Session().client(service_name="secretsmanager", region_name=self._secret_region)
-        postgres_secret = aws_secrets.get_secret_value(SecretId=self._secret_name)["SecretString"]
-        self._db_config = json.loads(postgres_secret)
-        logger.debug("Loaded PostgreSQL config from Secrets Manager")
-
-    def _ensure_db_config(self) -> Dict[str, Any]:
-        """
-        Ensure database config is loaded and return it.
-        """
+    def _load_db_config(self) -> dict[str, Any]:
+        """Load database config from AWS Secrets Manager if not already loaded."""
         if self._db_config is None:
-            self._load_db_config()
+            self._db_config = load_postgres_config(self._secret_name, self._secret_region)
         return self._db_config  # type: ignore[return-value]
 
-    def _postgres_edla_write(self, cursor: Any, table: str, message: Dict[str, Any]) -> None:
-        """
-        Insert a dlchange style event row.
-
+    def _postgres_edla_write(self, cursor: Any, table: str, message: dict[str, Any]) -> None:
+        """Insert a dlchange style event row.
         Args:
             cursor: Database cursor.
             table: Target table name.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - %s", table)
-        cursor.execute(
-            f"""
-            INSERT INTO {table}
+        logger.debug("Sending to Postgres - %s.", table)
+        query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                 event_id,
                 tenant_id,
@@ -122,7 +101,9 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.Identifier(table))
+        cursor.execute(
+            query,
             (
                 message["event_id"],
                 message["tenant_id"],
@@ -140,20 +121,17 @@ class WriterPostgres(Writer):
             ),
         )
 
-    def _postgres_run_write(self, cursor: Any, table_runs: str, table_jobs: str, message: Dict[str, Any]) -> None:
-        """
-        Insert a run event row plus related job rows.
-
+    def _postgres_run_write(self, cursor: Any, table_runs: str, table_jobs: str, message: dict[str, Any]) -> None:
+        """Insert a run event row plus related job rows.
         Args:
             cursor: Database cursor.
             table_runs: Runs table name.
             table_jobs: Jobs table name.
             message: Event payload (includes jobs array).
         """
-        logger.debug("Sending to Postgres - %s and %s", table_runs, table_jobs)
-        cursor.execute(
-            f"""
-            INSERT INTO {table_runs}
+        logger.debug("Sending to Postgres - %s and %s.", table_runs, table_jobs)
+        runs_query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                     event_id,
                     job_ref,
@@ -174,7 +152,9 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.Identifier(table_runs))
+        cursor.execute(
+            runs_query,
             (
                 message["event_id"],
                 message["job_ref"],
@@ -187,10 +167,8 @@ class WriterPostgres(Writer):
             ),
         )
 
-        for job in message["jobs"]:
-            cursor.execute(
-                f"""
-            INSERT INTO {table_jobs}
+        jobs_query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                     event_id,
                     country,
@@ -211,7 +189,10 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.Identifier(table_jobs))
+        for job in message["jobs"]:
+            cursor.execute(
+                jobs_query,
                 (
                     message["event_id"],
                     job.get("country", ""),
@@ -224,19 +205,16 @@ class WriterPostgres(Writer):
                 ),
             )
 
-    def _postgres_test_write(self, cursor: Any, table: str, message: Dict[str, Any]) -> None:
-        """
-        Insert a test topic row.
-
+    def _postgres_test_write(self, cursor: Any, table: str, message: dict[str, Any]) -> None:
+        """Insert a test topic row.
         Args:
             cursor: Database cursor.
             table: Target table name.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - %s", table)
-        cursor.execute(
-            f"""
-            INSERT INTO {table}
+        logger.debug("Sending to Postgres - %s.", table)
+        query = psycopg2_sql.SQL("""
+            INSERT INTO {}
             (
                 event_id,
                 tenant_id,
@@ -253,7 +231,9 @@ class WriterPostgres(Writer):
                 %s,
                 %s,
                 %s
-            )""",
+            )""").format(psycopg2_sql.Identifier(table))
+        cursor.execute(
+            query,
             (
                 message["event_id"],
                 message["tenant_id"],
@@ -264,27 +244,39 @@ class WriterPostgres(Writer):
             ),
         )
 
-    def write(self, topic_name: str, message: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """
-        Dispatch insertion for a topic into the correct Postgres table(s).
-
+    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
+        """Dispatch insertion for a topic into the correct Postgres table(s).
         Args:
             topic_name: Incoming topic identifier.
             message: JSON-serializable payload.
         Returns:
-            Tuple of (success: bool, error_message: Optional[str]).
+            Tuple of (success: bool, error_message: str | None).
         """
         try:
-            db_config = self._ensure_db_config()
+            db_config = self._load_db_config()
 
             if not db_config.get("database"):
-                logger.debug("No Postgres - skipping Postgres writer")
+                logger.debug("No Postgres - skipping Postgres writer.")
                 return True, None
+
+            missing = [f for f in ("host", "user", "password", "port") if not db_config.get(f)]
+            if missing:
+                msg = f"PostgreSQL connection field '{missing[0]}' not configured."
+                logger.error(msg)
+                return False, msg
+
             if psycopg2 is None:
-                logger.debug("psycopg2 not available - skipping actual Postgres write")
+                logger.debug("psycopg2 not available - skipping actual Postgres write.")
                 return True, None
 
             log_payload_at_trace(logger, "Postgres", topic_name, message)
+
+            if topic_name not in TOPIC_TABLE_MAP:
+                msg = f"Unknown topic for Postgres/{topic_name}"
+                logger.error(msg)
+                return False, msg
+
+            table_info = TOPIC_TABLE_MAP[topic_name]
 
             with psycopg2.connect(  # type: ignore[attr-defined]
                 database=db_config["database"],
@@ -295,28 +287,22 @@ class WriterPostgres(Writer):
             ) as connection:
                 with connection.cursor() as cursor:
                     if topic_name == "public.cps.za.dlchange":
-                        self._postgres_edla_write(cursor, "public_cps_za_dlchange", message)
+                        self._postgres_edla_write(cursor, table_info["main"], message)
                     elif topic_name == "public.cps.za.runs":
-                        self._postgres_run_write(cursor, "public_cps_za_runs", "public_cps_za_runs_jobs", message)
+                        self._postgres_run_write(cursor, table_info["main"], table_info["jobs"], message)
                     elif topic_name == "public.cps.za.test":
-                        self._postgres_test_write(cursor, "public_cps_za_test", message)
-                    else:
-                        msg = f"unknown topic for postgres {topic_name}"
-                        logger.error(msg)
-                        return False, msg
+                        self._postgres_test_write(cursor, table_info["main"], message)
 
                 connection.commit()
-        except (RuntimeError, PsycopgError, BotoCoreError, ClientError) as e:
+        except (RuntimeError, PsycopgError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {str(e)}"
             logger.exception(err_msg)
             return False, err_msg
 
         return True, None
 
-    def check_health(self) -> Tuple[bool, str]:
-        """
-        Check PostgreSQL writer health.
-
+    def check_health(self) -> tuple[bool, str]:
+        """Check PostgreSQL writer health.
         Returns:
             Tuple of (is_healthy: bool, message: str).
         """
@@ -325,9 +311,9 @@ class WriterPostgres(Writer):
             return True, "not configured"
 
         try:
-            db_config = self._ensure_db_config()
-            logger.debug("PostgreSQL config loaded during health check")
-        except (BotoCoreError, ClientError) as err:
+            db_config = self._load_db_config()
+            logger.debug("PostgreSQL config loaded during health check.")
+        except (BotoCoreError, ClientError, ValueError, KeyError) as err:
             return False, str(err)
 
         # Validate database configuration fields

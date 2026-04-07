@@ -21,10 +21,10 @@ Provides PII-safe, size-bounded JSON serialization for TRACE logging.
 
 import json
 import os
-from typing import Any, List, Set
+from typing import Any
 
 
-def _redact_sensitive_keys(obj: Any, redact_keys: Set[str]) -> Any:
+def _redact_sensitive_keys(obj: Any, redact_keys: set[str]) -> Any:
     """Recursively redact sensitive keys from nested structures.
 
     Args:
@@ -44,7 +44,7 @@ def _redact_sensitive_keys(obj: Any, redact_keys: Set[str]) -> Any:
     return obj
 
 
-def safe_serialize_for_log(message: Any, redact_keys: List[str] | None = None, max_bytes: int | None = None) -> str:
+def safe_serialize_for_log(message: Any, redact_keys: list[str] | None = None, max_bytes: int | None = None) -> str:
     """Safely serialize a message for logging with redaction and size capping.
 
     Args:

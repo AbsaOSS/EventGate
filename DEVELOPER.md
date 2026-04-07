@@ -8,6 +8,7 @@
 - [Run Unit Test Locally](#run-unit-test-locally)
 - [Code Coverage](#code-coverage)
 - [Run Integration Test Locally](#run-integration-test-locally)
+- [Run All Quality Gates](#run-all-quality-gates)
 
 ## Get Started
 
@@ -17,6 +18,11 @@ Clone the repository and navigate to the project directory:
 git clone https://github.com/AbsaOSS/EventGate.git
 cd EventGate
 ```
+
+### Project Structure
+EventGate ships two Lambda functions:
+- **Event Gate Lambda** (`src/event_gate_lambda.py`) — the main API surface. Serves the OpenAPI spec, token provider redirect, health check, topic schema catalogue, and event ingestion (`POST /topics/{topicName}`).
+- **Event Stats Lambda** (`src/event_stats_lambda.py`) — serves read-only queries via `POST /stats/{topicName}` with filtering, sorting, and cursor-based pagination backed by PostgreSQL.
 
 ## Prerequisites
 - Python 3.13 (current required runtime)
@@ -202,3 +208,13 @@ View container logs in pytest output by increasing log level:
 ```shell
 pytest tests/integration/ -v --log-cli-level=DEBUG
 ```
+
+## Run All Quality Gates
+
+Run Black, Pylint, mypy, unit tests (with coverage), and integration tests in a single command:
+
+```shell
+make qa
+```
+
+The command executes each gate in order and stops on first failure. Individual targets are also available (e.g., `make black`, `make pylint`, `make pytest-unit`).

@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-"""Unit tests for safe_serialization module."""
 
 import json
 import os

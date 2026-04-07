@@ -35,7 +35,7 @@ def token_handler():
 def test_get_token_endpoint(event_gate_module, make_event):
     event = make_event("/token")
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 303
+    assert 303 == resp["statusCode"]
     assert "Location" in resp["headers"]
 
 
@@ -55,7 +55,7 @@ def test_post_expired_token(event_gate_module, make_event, valid_payload):
             headers={"Authorization": "Bearer expiredtoken"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 401
+        assert 401 == resp["statusCode"]
         body = json.loads(resp["body"])
         assert any(e["type"] == "auth" for e in body["errors"])
 
@@ -74,7 +74,7 @@ def test_decode_jwt_all_second_key_succeeds(event_gate_module):
 
     with patch("jwt.decode", side_effect=decode_side_effect):
         claims = event_gate_module.handler_token.decode_jwt("dummy-token")
-        assert claims["sub"] == "TestUser"
+        assert "TestUser" == claims["sub"]
 
 
 def test_decode_jwt_all_all_keys_fail(event_gate_module):
@@ -92,12 +92,12 @@ def test_decode_jwt_all_all_keys_fail(event_gate_module):
 
 
 def test_extract_token_empty():
-    assert HandlerToken.extract_token({}) == ""
+    assert "" == HandlerToken.extract_token({})
 
 
 def test_extract_token_direct_bearer_header():
     token = HandlerToken.extract_token({"Bearer": "  tok123  "})
-    assert token == "tok123"
+    assert "tok123" == token
 
 
 ## Checking the freshness of public keys
@@ -155,4 +155,4 @@ def test_handler_token_custom_ssl_ca_bundle_path():
     """HandlerToken should accept custom CA bundle path."""
     config = {"token_public_keys_url": "https://example.com/keys", "ssl_ca_bundle": "/path/to/custom/ca-bundle.pem"}
     handler = HandlerToken(config)
-    assert handler.ssl_ca_bundle == "/path/to/custom/ca-bundle.pem"
+    assert "/path/to/custom/ca-bundle.pem" == handler.ssl_ca_bundle

@@ -21,15 +21,15 @@ from unittest.mock import patch, MagicMock
 def test_unknown_resource(event_gate_module, make_event):
     event = make_event("/unknown")
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 404
+    assert 404 == resp["statusCode"]
     body = json.loads(resp["body"])
-    assert body["errors"][0]["type"] == "route"
+    assert "route" == body["errors"][0]["type"]
 
 
 def test_get_api_endpoint(event_gate_module, make_event):
     event = make_event("/api")
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 200
+    assert 200 == resp["statusCode"]
     assert "openapi" in resp["body"].lower()
 
 
@@ -37,9 +37,9 @@ def test_internal_error_path(event_gate_module, make_event):
     with patch.object(event_gate_module.handler_topic, "get_topics_list", side_effect=RuntimeError("boom")):
         event = make_event("/topics")
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 500
+        assert 500 == resp["statusCode"]
         body = json.loads(resp["body"])
-        assert body["errors"][0]["type"] == "internal"
+        assert "internal" == body["errors"][0]["type"]
 
 
 def test_post_invalid_json_body(event_gate_module, make_event):
@@ -52,7 +52,7 @@ def test_post_invalid_json_body(event_gate_module, make_event):
         headers={"Authorization": "Bearer token"},
     )
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 500
+    assert 500 == resp["statusCode"]
     body = json.loads(resp["body"])
     assert any(e["type"] == "internal" for e in body["errors"])  # internal error path
 

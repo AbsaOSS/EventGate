@@ -14,31 +14,25 @@
 # limitations under the License.
 #
 
-"""
-This module provides the HandlerApi class for serving the OpenAPI specification.
-"""
+"""OpenAPI specification endpoint handler."""
 
 import logging
 import os
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class HandlerApi:
-    """
-    HandlerApi manages the OpenAPI specification endpoint.
-    """
+    """Manages the OpenAPI specification endpoint."""
 
     def __init__(self):
         self.api_spec: str = ""
 
     def with_api_definition_loaded(self) -> "HandlerApi":
-        """
-        Load the OpenAPI specification from api.yaml file.
-
+        """Load the OpenAPI specification from api.yaml file.
         Returns:
-            HandlerApi: The current instance with loaded API definition.
+            The current instance with loaded API definition.
         Raises:
             RuntimeError: If loading or reading the API specification fails.
         """
@@ -52,20 +46,18 @@ class HandlerApi:
             if not self.api_spec:
                 raise ValueError("API specification file is empty")
 
-            logger.debug("Loaded API definition from %s", api_path)
+            logger.debug("Loaded API definition from %s.", api_path)
             return self
         except (FileNotFoundError, PermissionError, ValueError) as exc:
-            logger.exception("Failed to load or read API specification from %s", api_path)
+            logger.exception("Failed to load or read API specification from %s.", api_path)
             raise RuntimeError("API specification initialization failed") from exc
 
-    def get_api(self) -> Dict[str, Any]:
-        """
-        Return the OpenAPI specification.
-
+    def get_api(self) -> dict[str, Any]:
+        """Return the OpenAPI specification.
         Returns:
-            Dict[str, Any]: API Gateway response with OpenAPI spec.
+            API Gateway response with OpenAPI spec.
         """
-        logger.debug("Handling GET API")
+        logger.debug("Handling GET API.")
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/yaml"},

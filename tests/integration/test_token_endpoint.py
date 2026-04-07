@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-"""Integration tests for GET /token endpoint."""
 
 from tests.integration.conftest import EventGateTestClient
 

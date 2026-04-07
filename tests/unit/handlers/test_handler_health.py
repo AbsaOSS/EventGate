@@ -42,9 +42,9 @@ def test_get_health_minimal_kafka_healthy():
 
     response = handler.get_health()
 
-    assert response["statusCode"] == 200
+    assert 200 == response["statusCode"]
     body = json.loads(response["body"])
-    assert body["status"] == "ok"
+    assert "ok" == body["status"]
     assert "uptime_seconds" in body
 
 
@@ -60,9 +60,9 @@ def test_get_health_all_writers_enabled_and_healthy():
 
     response = handler.get_health()
 
-    assert response["statusCode"] == 200
+    assert 200 == response["statusCode"]
     body = json.loads(response["body"])
-    assert body["status"] == "ok"
+    assert "ok" == body["status"]
     assert "uptime_seconds" in body
 
 
@@ -78,9 +78,9 @@ def test_get_health_kafka_not_initialized():
 
     response = handler.get_health()
 
-    assert response["statusCode"] == 503
+    assert 503 == response["statusCode"]
     body = json.loads(response["body"])
-    assert body["status"] == "degraded"
+    assert "degraded" == body["status"]
     assert "kafka" in body["failures"]
     assert "eventbridge" in body["failures"]
     assert "postgres" in body["failures"]
@@ -98,7 +98,7 @@ def test_get_health_eventbridge_disabled():
 
     response = handler.get_health()
 
-    assert response["statusCode"] == 200
+    assert 200 == response["statusCode"]
 
 
 ## Healthy when postgres is disabled
@@ -113,7 +113,7 @@ def test_get_health_postgres_disabled():
 
     response = handler.get_health()
 
-    assert response["statusCode"] == 200
+    assert 200 == response["statusCode"]
 
 
 ## Degraded state - postgres host not configured
@@ -128,9 +128,9 @@ def test_get_health_postgres_host_not_configured():
 
     response = handler.get_health()
 
-    assert response["statusCode"] == 503
+    assert 503 == response["statusCode"]
     body = json.loads(response["body"])
-    assert body["failures"]["postgres"] == "host not configured"
+    assert "host not configured" == body["failures"]["postgres"]
 
 
 ## Uptime calculation
@@ -158,7 +158,7 @@ def test_health_endpoint_integration(event_gate_module, make_event):
     resp = event_gate_module.lambda_handler(event)
 
     # Should return 200 since writers are mocked as initialized in conftest
-    assert resp["statusCode"] == 200
+    assert 200 == resp["statusCode"]
     body = json.loads(resp["body"])
-    assert body["status"] == "ok"
+    assert "ok" == body["status"]
     assert "uptime_seconds" in body

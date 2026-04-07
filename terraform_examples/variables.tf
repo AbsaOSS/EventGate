@@ -3,8 +3,11 @@ variable "vpc_id" {}
 variable "vpc_endpoint" {}
 variable "resource_prefix" {}
 variable "lambda_role_arn" {}
+variable "lambda_stats_role_arn" {}
 variable "lambda_vpc_subnet_ids" {}
 variable "lambda_package_type" {}
 variable "lambda_src_s3_bucket" {}
 variable "lambda_src_s3_key" {}
 variable "lambda_src_ecr_image" {}
+variable "postgres_secret_name" {}
+variable "postgres_secret_region" {}

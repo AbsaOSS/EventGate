@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os, sys
+import os
+import sys
 import base64
 import importlib.util
 import json
@@ -22,7 +23,6 @@ from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # Ensure project root is on sys.path so 'src' package is importable during tests
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

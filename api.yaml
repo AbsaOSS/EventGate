@@ -89,12 +89,12 @@ paths:
                 items:
                   type: string
 
-  /topics/{topicName}:
+  /topics/{topic_name}:
     get:
       summary: Get schema for a specific topic
       description: Returns the schema for a specified topic using [JSON Schema](https://json-schema.org/).
       parameters:
-        - name: topicName
+        - name: topic_name
           in: path
           required: true
           schema:
@@ -125,7 +125,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: topicName
+        - name: topic_name
           in: path
           required: true
           schema:
@@ -179,6 +179,139 @@ paths:
                   error:
                     type: string
                     
+  /stats/{topic_name}:
+    post:
+      summary: Query run/job statistics
+      description: >
+        Returns a paginated list of run/job records from PostgreSQL for the
+        specified topic.  Currently only `public.cps.za.runs` is supported.
+        Results are sorted by `internal_id DESC` with keyset cursor pagination. 
+        When `timestamp_start` and `timestamp_end` are omitted the default time
+        window is the last `7 days`.
+      security: []
+      parameters:
+        - name: topic_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the topic to query statistics for
+      requestBody:
+        description: Query parameters including time window, pagination cursor, and limit
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timestamp_start:
+                  type: integer
+                  nullable: true
+                  description: Start of time window in epoch milliseconds (default now - 7 days)
+                  example: 1704067200000
+                timestamp_end:
+                  type: integer
+                  nullable: true
+                  description: End of time window in epoch milliseconds (default now)
+                  example: 1706745600000
+                cursor:
+                  type: integer
+                  nullable: true
+                  description: Last internal_id from previous page (keyset pagination)
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000
+                  default: 50
+                  description: Maximum number of records per page
+      responses:
+        '200':
+          description: Paginated list of run/job records with computed fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  statusCode:
+                    type: integer
+                    example: 200
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_id:
+                          type: string
+                        job_ref:
+                          type: string
+                        tenant_id:
+                          type: string
+                        source_app:
+                          type: string
+                        internal_id:
+                          type: integer
+                        catalog_id:
+                          type: string
+                        status:
+                          type: string
+                        run_date:
+                          type: string
+                          description: Date of run-level timestamp_start (DD-MM-YYYY)
+                        run_status:
+                          type: string
+                          description: Computed status (succeeded, failed, no data received, no data produced)
+                        formatted_tenant:
+                          type: string
+                          description: Lowercase tenant_id
+                        elapsed_time:
+                          type: integer
+                          nullable: true
+                          description: Difference in milliseconds between job end and start
+                        start_time:
+                          type: string
+                          description: Formatted job start (YYYY-MM-DD HH:MM:SS UTC)
+                        end_time:
+                          type: string
+                          description: Formatted job end (YYYY-MM-DD HH:MM:SS UTC)
+                      additionalProperties: true
+                  pagination:
+                    type: object
+                    properties:
+                      cursor:
+                        type: integer
+                        nullable: true
+                      has_more:
+                        type: boolean
+                      limit:
+                        type: integer
+        '400':
+          description: Invalid parameters or unsupported topic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User not authorized for topic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Database query error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /terminate:
     post:
       summary: Terminates lambda environment
@@ -195,6 +328,24 @@ paths:
                     type: string
 
 components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        statusCode:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              message:
+                type: string
   securitySchemes:
     bearerAuth:
       type: http

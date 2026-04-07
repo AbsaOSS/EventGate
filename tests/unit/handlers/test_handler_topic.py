@@ -96,7 +96,7 @@ def test_load_topic_schemas_success():
         result = handler.with_load_topic_schemas()
 
     assert result is handler
-    assert len(handler.topics) == 3
+    assert 3 == len(handler.topics)
     assert "public.cps.za.runs" in handler.topics
     assert "public.cps.za.dlchange" in handler.topics
     assert "public.cps.za.test" in handler.topics
@@ -106,7 +106,7 @@ def test_load_topic_schemas_success():
 def test_get_topics(event_gate_module, make_event):
     event = make_event("/topics")
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 200
+    assert 200 == resp["statusCode"]
     body = json.loads(resp["body"])
     assert "public.cps.za.test" in body
 
@@ -115,15 +115,15 @@ def test_get_topics(event_gate_module, make_event):
 def test_get_topic_schema_found(event_gate_module, make_event):
     event = make_event("/topics/{topic_name}", method="GET", topic="public.cps.za.test")
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 200
+    assert 200 == resp["statusCode"]
     schema = json.loads(resp["body"])
-    assert schema["type"] == "object"
+    assert "object" == schema["type"]
 
 
 def test_get_topic_schema_not_found(event_gate_module, make_event):
     event = make_event("/topics/{topic_name}", method="GET", topic="no.such.topic")
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 404
+    assert 404 == resp["statusCode"]
 
 
 ## post_topic_message()
@@ -133,10 +133,10 @@ def test_post_missing_token(event_gate_module, make_event, valid_payload):
         "/topics/{topic_name}", method="POST", topic="public.cps.za.test", body=valid_payload, headers={}
     )
     resp = event_gate_module.lambda_handler(event)
-    assert resp["statusCode"] == 401
+    assert 401 == resp["statusCode"]
     body = json.loads(resp["body"])
     assert not body["success"]
-    assert body["errors"][0]["type"] == "auth"
+    assert "auth" == body["errors"][0]["type"]
 
 
 def test_post_unauthorized_user(event_gate_module, make_event, valid_payload):
@@ -149,9 +149,9 @@ def test_post_unauthorized_user(event_gate_module, make_event, valid_payload):
             headers={"Authorization": "Bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 403
+        assert 403 == resp["statusCode"]
         body = json.loads(resp["body"])
-        assert body["errors"][0]["type"] == "auth"
+        assert "auth" == body["errors"][0]["type"]
 
 
 def test_post_schema_validation_error(event_gate_module, make_event):
@@ -165,9 +165,9 @@ def test_post_schema_validation_error(event_gate_module, make_event):
             headers={"Authorization": "Bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 400
+        assert 400 == resp["statusCode"]
         body = json.loads(resp["body"])
-        assert body["errors"][0]["type"] == "validation"
+        assert "validation" == body["errors"][0]["type"]
 
 
 def test_post_invalid_token_decode(event_gate_module, make_event, valid_payload):
@@ -180,9 +180,9 @@ def test_post_invalid_token_decode(event_gate_module, make_event, valid_payload)
             headers={"Authorization": "Bearer abc"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 401
+        assert 401 == resp["statusCode"]
         body = json.loads(resp["body"])
-        assert body["errors"][0]["type"] == "auth"
+        assert "auth" == body["errors"][0]["type"]
 
 
 # --- POST success & failure aggregation ---
@@ -199,10 +199,10 @@ def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
             headers={"Authorization": "Bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 202
+        assert 202 == resp["statusCode"]
         body = json.loads(resp["body"])
         assert body["success"]
-        assert body["statusCode"] == 202
+        assert 202 == body["statusCode"]
 
 
 def test_post_single_writer_failure(event_gate_module, make_event, valid_payload):
@@ -219,11 +219,11 @@ def test_post_single_writer_failure(event_gate_module, make_event, valid_payload
             headers={"Authorization": "Bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 500
+        assert 500 == resp["statusCode"]
         body = json.loads(resp["body"])
         assert not body["success"]
-        assert len(body["errors"]) == 1
-        assert body["errors"][0]["type"] == "kafka"
+        assert 1 == len(body["errors"])
+        assert "kafka" == body["errors"][0]["type"]
 
 
 def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payload):
@@ -240,9 +240,9 @@ def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payl
             headers={"Authorization": "Bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 500
+        assert 500 == resp["statusCode"]
         body = json.loads(resp["body"])
-        assert sorted(e["type"] for e in body["errors"]) == ["eventbridge", "kafka"]
+        assert ["eventbridge", "kafka"] == sorted(e["type"] for e in body["errors"])
 
 
 def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event, valid_payload):
@@ -258,4 +258,4 @@ def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event,
             headers={"authorization": "bearer token"},
         )
         resp = event_gate_module.lambda_handler(event)
-        assert resp["statusCode"] == 202
+        assert 202 == resp["statusCode"]
