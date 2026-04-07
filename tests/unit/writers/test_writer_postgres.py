@@ -385,16 +385,13 @@ def test_check_health_database_not_configured():
     assert "database not configured" == msg
 
 
-def test_check_health_load_config_exception(monkeypatch):
+def test_check_health_load_config_exception(mocker):
     """check_health returns (False, error) when _load_db_config raises."""
     writer = WriterPostgres({})
     writer._secret_name = "mysecret"
     writer._secret_region = "eu-west-1"
 
-    def raise_err():
-        raise ValueError("secret fetch failed")
-
-    monkeypatch.setattr(writer, "_load_db_config", raise_err)
+    mocker.patch.object(writer, "_load_db_config", side_effect=ValueError("secret fetch failed"))
     healthy, msg = writer.check_health()
     assert not healthy
     assert "secret fetch failed" == msg
