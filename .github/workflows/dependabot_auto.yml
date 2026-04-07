@@ -1,0 +1,35 @@
+# Auto-merge will only occur if all required status checks on the branch are successful.
+name: Dependabot Auto-Approve and Auto-Merge
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    name: Auto-approve and auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'AbsaOSS/EventGate'
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Approve a PR
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for Dependabot PRs
+        if: startsWith(steps.metadata.outputs.update-type, 'version-update') || startsWith(steps.metadata.outputs.update-type, 'security')
+        run: gh pr merge --auto --squash "$PR_URL"
+        continue-on-error: true
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
