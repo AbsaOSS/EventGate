@@ -109,8 +109,10 @@ def event_gate_module():
     mock_events_client.put_events.return_value = {"FailedEntryCount": 0}
     mock_boto_client.return_value = mock_events_client
 
-    mock_kafka_producer = start_patch("confluent_kafka.Producer")
-    mock_kafka_producer.return_value = MagicMock()
+    mock_kafka_producer = start_patch("src.writers.writer_kafka.Producer")
+    mock_producer_instance = MagicMock()
+    mock_producer_instance.flush.return_value = 0  # 0 pending → flush loop breaks immediately
+    mock_kafka_producer.return_value = mock_producer_instance
 
     module = importlib.import_module("src.event_gate_lambda")
 

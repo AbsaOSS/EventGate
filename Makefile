@@ -3,7 +3,7 @@
 PYTHON   := .venv/bin/python
 PY_FILES := $(shell git ls-files '*.py')
 MIN_PYLINT_SCORE = 9.5
-MIN_COVERAGE = 80
+MIN_COVERAGE = 90
 
 black: ## Run Black formatter
 	$(PYTHON) -m black .

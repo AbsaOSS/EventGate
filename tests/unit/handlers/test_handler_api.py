@@ -15,34 +15,42 @@
 #
 
 import pytest
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open
 
 from src.handlers.handler_api import HandlerApi
 
 
-def test_load_api_definition_success():
+def test_load_api_definition_success(mocker):
     """Test successful loading of API definition."""
     mock_content = "openapi: 3.0.0\ninfo:\n  title: Test API"
-    with patch("builtins.open", mock_open(read_data=mock_content)):
-        handler = HandlerApi().with_api_definition_loaded()
-        assert handler.api_spec == mock_content
+    mocker.patch("builtins.open", mock_open(read_data=mock_content))
+    handler = HandlerApi().with_api_definition_loaded()
+    assert handler.api_spec == mock_content
 
 
-def test_load_api_definition_file_not_found():
+def test_load_api_definition_file_not_found(mocker):
     """Test that RuntimeError is raised when api.yaml doesn't exist."""
-    with patch("builtins.open", side_effect=FileNotFoundError("api.yaml not found")):
-        handler = HandlerApi()
-        with pytest.raises(RuntimeError, match="API specification initialization failed"):
-            handler.with_api_definition_loaded()
+    mocker.patch("builtins.open", side_effect=FileNotFoundError("api.yaml not found"))
+    handler = HandlerApi()
+    with pytest.raises(RuntimeError, match="API specification initialization failed"):
+        handler.with_api_definition_loaded()
 
 
-def test_get_api_returns_correct_response():
+def test_load_api_definition_empty_file_raises(mocker):
+    """Test that RuntimeError is raised when api.yaml is empty."""
+    mocker.patch("builtins.open", mock_open(read_data=""))
+    handler = HandlerApi()
+    with pytest.raises(RuntimeError, match="API specification initialization failed"):
+        handler.with_api_definition_loaded()
+
+
+def test_get_api_returns_correct_response(mocker):
     """Test get_api returns correct response structure."""
     mock_content = "openapi: 3.0.0"
-    with patch("builtins.open", mock_open(read_data=mock_content)):
-        handler = HandlerApi().with_api_definition_loaded()
-        response = handler.get_api()
+    mocker.patch("builtins.open", mock_open(read_data=mock_content))
+    handler = HandlerApi().with_api_definition_loaded()
+    response = handler.get_api()
 
-        assert 200 == response["statusCode"]
-        assert "application/yaml" == response["headers"]["Content-Type"]
-        assert mock_content == response["body"]
+    assert 200 == response["statusCode"]
+    assert "application/yaml" == response["headers"]["Content-Type"]
+    assert mock_content == response["body"]
