@@ -17,9 +17,21 @@
 from unittest.mock import MagicMock
 
 from src.utils.logging_levels import TRACE_LEVEL
+from src.utils.trace_logging import log_payload_at_trace
 import src.writers.writer_eventbridge as writer_eventbridge
 import src.writers.writer_kafka as writer_kafka
 import src.writers.writer_postgres as writer_postgres
+
+
+def test_log_payload_skipped_when_trace_not_enabled():
+    """log_payload_at_trace should return without logging when TRACE level is not enabled."""
+    logger = MagicMock()
+    logger.isEnabledFor.return_value = False
+
+    log_payload_at_trace(logger, "TestWriter", "test.topic", {"key": "value"})
+
+    logger.isEnabledFor.assert_called_once_with(TRACE_LEVEL)
+    logger.trace.assert_not_called()
 
 
 def test_trace_eventbridge(caplog):

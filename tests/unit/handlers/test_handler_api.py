@@ -36,6 +36,14 @@ def test_load_api_definition_file_not_found():
             handler.with_api_definition_loaded()
 
 
+def test_load_api_definition_empty_file_raises():
+    """Test that RuntimeError is raised when api.yaml is empty."""
+    with patch("builtins.open", mock_open(read_data="")):
+        handler = HandlerApi()
+        with pytest.raises(RuntimeError, match="API specification initialization failed"):
+            handler.with_api_definition_loaded()
+
+
 def test_get_api_returns_correct_response():
     """Test get_api returns correct response structure."""
     mock_content = "openapi: 3.0.0"

@@ -372,3 +372,29 @@ def test_check_health_missing_host(reset_env, monkeypatch):
     writer = WriterPostgres({})
     healthy, msg = writer.check_health()
     assert not healthy and "host not configured" in msg
+
+
+def test_check_health_database_not_configured():
+    """check_health returns (True, 'database not configured') when database field is empty."""
+    writer = WriterPostgres({})
+    writer._secret_name = "mysecret"
+    writer._secret_region = "eu-west-1"
+    writer._db_config = {"database": ""}
+    healthy, msg = writer.check_health()
+    assert healthy
+    assert "database not configured" == msg
+
+
+def test_check_health_load_config_exception(monkeypatch):
+    """check_health returns (False, error) when _load_db_config raises."""
+    writer = WriterPostgres({})
+    writer._secret_name = "mysecret"
+    writer._secret_region = "eu-west-1"
+
+    def raise_err():
+        raise ValueError("secret fetch failed")
+
+    monkeypatch.setattr(writer, "_load_db_config", raise_err)
+    healthy, msg = writer.check_health()
+    assert not healthy
+    assert "secret fetch failed" == msg

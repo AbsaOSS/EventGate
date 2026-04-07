@@ -91,34 +91,22 @@ def test_decode_jwt_all_all_keys_fail(event_gate_module):
         assert "Verification failed for all public keys" in str(exc.value)
 
 
-def test_extract_token_empty():
-    assert "" == HandlerToken.extract_token({})
-
-
-def test_extract_token_direct_bearer_header():
-    token = HandlerToken.extract_token({"Bearer": "  tok123  "})
-    assert "tok123" == token
-
-
 ## Checking the freshness of public keys
-def test_refresh_keys_not_needed_when_keys_fresh(token_handler):
-    """Keys loaded less than 28 minutes ago should not trigger refresh."""
-    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+@pytest.mark.parametrize(
+    "age_minutes, expected_called",
+    [
+        (10, False),
+        (29, True),
+    ],
+)
+def test_refresh_keys_age_check(token_handler, age_minutes, expected_called):
+    """Fresh keys should not trigger refresh; stale keys should."""
+    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
     token_handler.public_keys = [Mock(spec=RSAPublicKey)]
 
     with patch.object(token_handler, "with_public_keys_queried") as mock_load:
         token_handler._refresh_keys_if_needed()
-        mock_load.assert_not_called()
-
-
-def test_refresh_keys_triggered_when_keys_stale(token_handler):
-    """Keys loaded more than 28 minutes ago should trigger refresh."""
-    token_handler._last_loaded_at = datetime.now(timezone.utc) - timedelta(minutes=29)
-    token_handler.public_keys = [Mock(spec=RSAPublicKey)]
-
-    with patch.object(token_handler, "with_public_keys_queried") as mock_load:
-        token_handler._refresh_keys_if_needed()
-        mock_load.assert_called_once()
+        assert expected_called == mock_load.called
 
 
 def test_refresh_keys_handles_load_failure_gracefully(token_handler):
@@ -156,3 +144,63 @@ def test_handler_token_custom_ssl_ca_bundle_path():
     config = {"token_public_keys_url": "https://example.com/keys", "ssl_ca_bundle": "/path/to/custom/ca-bundle.pem"}
     handler = HandlerToken(config)
     assert "/path/to/custom/ca-bundle.pem" == handler.ssl_ca_bundle
+
+
+def test_refresh_keys_skipped_when_never_loaded(token_handler):
+    """When _last_loaded_at is None, refresh should return immediately without loading."""
+    assert token_handler._last_loaded_at is None
+
+    with patch.object(token_handler, "with_public_keys_queried") as mock_load:
+        token_handler._refresh_keys_if_needed()
+        mock_load.assert_not_called()
+
+
+def test_with_public_keys_queried_multi_key_response(token_handler):
+    """Response with `keys` list should load all keys."""
+    key_b64 = "dGVzdA=="
+    mock_response = Mock()
+    mock_response.json.return_value = {"keys": [{"key": key_b64}, {"key": key_b64}]}
+
+    with patch("requests.get", return_value=mock_response):
+        with patch(
+            "cryptography.hazmat.primitives.serialization.load_der_public_key",
+            return_value=Mock(spec=RSAPublicKey),
+        ):
+            result = token_handler.with_public_keys_queried()
+            assert result is token_handler
+            assert 2 == len(token_handler.public_keys)
+
+
+def test_with_public_keys_queried_no_keys_raises(token_handler):
+    """Response without any keys should raise RuntimeError."""
+    mock_response = Mock()
+    mock_response.json.return_value = {"other": "data"}
+
+    with patch("requests.get", return_value=mock_response):
+        with pytest.raises(RuntimeError, match="Token public key initialization failed"):
+            token_handler.with_public_keys_queried()
+
+
+def test_with_public_keys_queried_request_exception_raises(token_handler):
+    """Network error during key fetch should raise RuntimeError."""
+    import requests as req
+
+    with patch("requests.get", side_effect=req.ConnectionError("timeout")):
+        with pytest.raises(RuntimeError, match="Token public key initialization failed"):
+            token_handler.with_public_keys_queried()
+
+
+@pytest.mark.parametrize(
+    "headers, expected",
+    [
+        ({}, ""),
+        ({"Authorization": 12345}, ""),
+        ({"Authorization": "   "}, ""),
+        ({"Authorization": "Basic abc123"}, ""),
+        ({"Bearer": "  tok123  "}, "tok123"),
+        ({"Authorization": "Bearer mytoken"}, "mytoken"),
+    ],
+)
+def test_extract_token(headers, expected):
+    """extract_token should return the bearer token or empty string for all header variants."""
+    assert expected == HandlerToken.extract_token(headers)

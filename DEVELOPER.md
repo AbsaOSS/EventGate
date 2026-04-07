@@ -139,10 +139,10 @@ pytest tests/unit/writers/test_writer_eventbridge.py::test_write_success
 Code coverage is collected using the pytest-cov coverage tool. To run the tests and collect coverage information, use the following command:
 
 ```shell
-pytest --cov=. -v tests/unit/ --cov-fail-under=80 --cov-report=html
+pytest --cov=. -v tests/unit/ --cov-fail-under=90 --cov-report=html
 ```
 
-This will execute all tests in the tests directory and generate a code coverage report with missing line details and enforce a minimum 80% threshold.
+This will execute all tests in the tests directory and generate a code coverage report with missing line details and enforce a minimum 90% threshold.
 
 Open the HTML coverage report:
 ```shell
