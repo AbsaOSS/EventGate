@@ -138,13 +138,13 @@ class TestEventStatsLambdaDispatch:
 
     def test_stats_route_dispatches_to_handler(self, event_stats_module, make_stats_event) -> None:
         """Test that /stats/{topic_name} dispatches to HandlerStats."""
-        mock_response = {"statusCode": 401, "body": json.dumps({"success": False, "statusCode": 401, "errors": []})}
+        mock_response = {"statusCode": 200, "body": json.dumps({"success": True, "statusCode": 200})}
         mock_fn = Mock(return_value=mock_response)
         with patch.dict(event_stats_module.ROUTE_MAP, {"/stats/{topic_name}": mock_fn}):
             event = make_stats_event("/stats/{topic_name}", topic="public.cps.za.runs")
             resp = event_stats_module.lambda_handler(event)
 
-        assert 401 == resp["statusCode"]
+        assert 200 == resp["statusCode"]
         mock_fn.assert_called_once_with(event)
 
     def test_internal_error_returns_500(self, event_stats_module, make_stats_event) -> None:

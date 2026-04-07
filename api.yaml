@@ -269,7 +269,7 @@ paths:
                         elapsed_time:
                           type: integer
                           nullable: true
-                          description: Difference in days between job end and start
+                          description: Difference in milliseconds between job end and start
                         start_time:
                           type: string
                           description: Formatted job start (YYYY-MM-DD HH:MM:SS UTC)
@@ -289,12 +289,6 @@ paths:
                         type: integer
         '400':
           description: Invalid parameters or unsupported topic
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Invalid or missing authentication token
           content:
             application/json:
               schema:

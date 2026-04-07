@@ -197,9 +197,9 @@ class ReaderPostgres:
         # formatted_tenant: lowercase tenant_id.
         row["formatted_tenant"] = str(row.get("tenant_id", "")).lower()
 
-        # elapsed_time: difference in days between job end and start.
+        # elapsed_time: difference in milliseconds between job end and start.
         if ts_start is not None and ts_end is not None:
-            row["elapsed_time"] = round((ts_end - ts_start) / 86_400_000)
+            row["elapsed_time"] = ts_end - ts_start
         else:
             row["elapsed_time"] = None
 

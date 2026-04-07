@@ -63,7 +63,7 @@ All responses are JSON unless otherwise noted. The POST endpoint requires a vali
 | GET | `/topics` | none | Lists available topic names |
 | GET | `/topics/{topicName}` | none | Returns JSON Schema for the topic |
 | POST | `/topics/{topicName}` | JWT | Validates + forwards message to configured sinks |
-| POST | `/stats/{topicName}` | JWT | Queries ingested events with filtering, sorting, and cursor pagination |
+| POST | `/stats/{topicName}` | none | Queries ingested events with filtering, sorting, and cursor pagination |
 | POST | `/terminate` | (internal) | Forces Lambda process exit (used to trigger cold start & config reload) |
 
 Status codes:

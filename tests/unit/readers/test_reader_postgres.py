@@ -307,7 +307,7 @@ class TestFormatRow:
         assert "succeeded" == result["run_status"]
         assert "abc" == result["formatted_tenant"]
         assert "01-01-2024" == result["run_date"]
-        assert 1 == result["elapsed_time"]
+        assert 86_400_000 == result["elapsed_time"]
         assert "2024-01-01 00:00:00" == result["start_time"]
         assert "2024-01-02 00:00:00" == result["end_time"]
 
