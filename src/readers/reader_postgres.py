@@ -34,6 +34,7 @@ from src.utils.utils import load_postgres_config
 try:
     import psycopg2
     from psycopg2 import Error as PsycopgError
+    from psycopg2 import OperationalError
     from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None  # type: ignore
@@ -41,6 +42,9 @@ except ImportError:
 
     class PsycopgError(Exception):  # type: ignore
         """Shim psycopg2 error base when psycopg2 is not installed."""
+
+    class OperationalError(PsycopgError):  # type: ignore
+        """Shim psycopg2 OperationalError when psycopg2 is not installed."""
 
 
 logger = logging.getLogger(__name__)
@@ -70,6 +74,7 @@ class ReaderPostgres:
         self._secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
         self._secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
         self._db_config: dict[str, Any] | None = None
+        self._connection: Any | None = None
         logger.debug("Initialized PostgreSQL reader.")
 
     def _load_db_config(self) -> dict[str, Any]:
@@ -80,6 +85,22 @@ class ReaderPostgres:
         if config is None:
             raise RuntimeError("Failed to load database configuration.")
         return config
+
+    def _get_connection(self) -> Any:
+        """Return a cached database connection, creating one if needed."""
+        if self._connection is not None and not self._connection.closed:
+            return self._connection
+        db_config = self._load_db_config()
+        self._connection = psycopg2.connect(  # type: ignore[attr-defined]
+            database=db_config["database"],
+            host=db_config["host"],
+            user=db_config["user"],
+            password=db_config["password"],
+            port=db_config["port"],
+            options="-c statement_timeout=30000 -c default_transaction_read_only=on",
+        )
+        logger.debug("New PostgreSQL reader connection established.")
+        return self._connection
 
     def read_stats(
         self,
@@ -124,20 +145,23 @@ class ReaderPostgres:
         params.append(limit + 1)
 
         try:
-            with psycopg2.connect(  # type: ignore[attr-defined]
-                database=db_config["database"],
-                host=db_config["host"],
-                user=db_config["user"],
-                password=db_config["password"],
-                port=db_config["port"],
-                options="-c statement_timeout=30000 -c default_transaction_read_only=on",
-            ) as connection:
-                with connection.cursor() as db_cursor:
-                    db_cursor.execute(query, params)
-                    col_names = [desc[0] for desc in db_cursor.description]  # type: ignore[union-attr]
-                    raw_rows = db_cursor.fetchall()
+            for attempt in range(2):
+                try:
+                    connection = self._get_connection()
+                    with connection.cursor() as db_cursor:
+                        db_cursor.execute(query, params)
+                        col_names = [desc[0] for desc in db_cursor.description]  # type: ignore[union-attr]
+                        raw_rows = db_cursor.fetchall()
+                    connection.rollback()
+                    break
+                except OperationalError as exc:
+                    self._connection = None
+                    if attempt > 0:
+                        raise RuntimeError(f"Database connection failed after retry: {exc}") from exc
+                    logger.warning("PostgreSQL connection lost, reconnecting.")
         except PsycopgError as exc:
-            raise RuntimeError(f"Database query failed: {exc}") from exc
+            self._connection = None
+            raise RuntimeError(f"Database query error: {exc}") from exc
 
         rows = [dict(zip(col_names, row, strict=True)) for row in raw_rows]
 

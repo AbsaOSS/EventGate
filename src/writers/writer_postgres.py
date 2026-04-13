@@ -31,6 +31,7 @@ from src.writers.writer import Writer
 try:
     import psycopg2
     from psycopg2 import Error as PsycopgError
+    from psycopg2 import OperationalError
     from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None  # type: ignore
@@ -38,6 +39,9 @@ except ImportError:
 
     class PsycopgError(Exception):  # type: ignore
         """Shim psycopg2 error base when psycopg2 is not installed."""
+
+    class OperationalError(PsycopgError):  # type: ignore
+        """Shim psycopg2 OperationalError when psycopg2 is not installed."""
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +57,7 @@ class WriterPostgres(Writer):
         self._secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
         self._secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
         self._db_config: dict[str, Any | None] | None = None
+        self._connection: Any | None = None
         logger.debug("Initialized PostgreSQL writer.")
 
     def _load_db_config(self) -> dict[str, Any]:
@@ -60,6 +65,21 @@ class WriterPostgres(Writer):
         if self._db_config is None:
             self._db_config = load_postgres_config(self._secret_name, self._secret_region)
         return self._db_config  # type: ignore[return-value]
+
+    def _get_connection(self) -> Any:
+        """Return a cached database connection, creating one if needed."""
+        if self._connection is not None and not self._connection.closed:
+            return self._connection
+        db_config = self._load_db_config()
+        self._connection = psycopg2.connect(  # type: ignore[attr-defined]
+            database=db_config["database"],
+            host=db_config["host"],
+            user=db_config["user"],
+            password=db_config["password"],
+            port=db_config["port"],
+        )
+        logger.debug("New PostgreSQL writer connection established.")
+        return self._connection
 
     def _postgres_edla_write(self, cursor: Any, table: str, message: dict[str, Any]) -> None:
         """Insert a dlchange style event row.
@@ -278,23 +298,25 @@ class WriterPostgres(Writer):
 
             table_info = TOPIC_TABLE_MAP[topic_name]
 
-            with psycopg2.connect(  # type: ignore[attr-defined]
-                database=db_config["database"],
-                host=db_config["host"],
-                user=db_config["user"],
-                password=db_config["password"],
-                port=db_config["port"],
-            ) as connection:
-                with connection.cursor() as cursor:
-                    if topic_name == "public.cps.za.dlchange":
-                        self._postgres_edla_write(cursor, table_info["main"], message)
-                    elif topic_name == "public.cps.za.runs":
-                        self._postgres_run_write(cursor, table_info["main"], table_info["jobs"], message)
-                    elif topic_name == "public.cps.za.test":
-                        self._postgres_test_write(cursor, table_info["main"], message)
-
-                connection.commit()
+            for attempt in range(2):
+                try:
+                    connection = self._get_connection()
+                    with connection.cursor() as cursor:
+                        if topic_name == "public.cps.za.dlchange":
+                            self._postgres_edla_write(cursor, table_info["main"], message)
+                        elif topic_name == "public.cps.za.runs":
+                            self._postgres_run_write(cursor, table_info["main"], table_info["jobs"], message)
+                        elif topic_name == "public.cps.za.test":
+                            self._postgres_test_write(cursor, table_info["main"], message)
+                    connection.commit()
+                    break
+                except OperationalError:
+                    self._connection = None
+                    if attempt > 0:
+                        raise
+                    logger.warning("PostgreSQL connection lost, reconnecting.")
         except (RuntimeError, PsycopgError, BotoCoreError, ClientError, ValueError, KeyError) as e:
+            self._connection = None
             err_msg = f"The Postgres writer failed with unknown error: {str(e)}"
             logger.exception(err_msg)
             return False, err_msg

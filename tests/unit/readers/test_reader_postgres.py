@@ -22,6 +22,26 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.readers.reader_postgres import ReaderPostgres
+import src.readers.reader_postgres as rp
+
+_STATS_DESCRIPTION = [
+    ("event_id",),
+    ("job_ref",),
+    ("tenant_id",),
+    ("source_app",),
+    ("source_app_version",),
+    ("environment",),
+    ("run_timestamp_start",),
+    ("run_timestamp_end",),
+    ("internal_id",),
+    ("country",),
+    ("catalog_id",),
+    ("status",),
+    ("timestamp_start",),
+    ("timestamp_end",),
+    ("message",),
+    ("additional_info",),
+]
 
 
 @pytest.fixture
@@ -94,6 +114,7 @@ def _make_mock_connection(description: list[tuple[str, ...]], rows: list[tuple[A
     mock_cursor.fetchall.return_value = rows
 
     mock_conn = MagicMock()
+    mock_conn.closed = 0
     mock_conn.__enter__ = MagicMock(return_value=mock_conn)
     mock_conn.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
@@ -106,24 +127,6 @@ class TestReadStats:
 
     def test_returns_rows_and_pagination(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
         """Test that read_stats returns rows and pagination info."""
-        description = [
-            ("event_id",),
-            ("job_ref",),
-            ("tenant_id",),
-            ("source_app",),
-            ("source_app_version",),
-            ("environment",),
-            ("run_timestamp_start",),
-            ("run_timestamp_end",),
-            ("internal_id",),
-            ("country",),
-            ("catalog_id",),
-            ("status",),
-            ("timestamp_start",),
-            ("timestamp_end",),
-            ("message",),
-            ("additional_info",),
-        ]
         rows = [
             (
                 "ev1",
@@ -162,7 +165,7 @@ class TestReadStats:
                 None,
             ),
         ]
-        mock_conn = _make_mock_connection(description, rows)
+        mock_conn = _make_mock_connection(_STATS_DESCRIPTION, rows)
 
         with (
             patch("boto3.Session") as mock_session,
@@ -184,30 +187,12 @@ class TestReadStats:
 
     def test_has_more_when_extra_row_returned(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
         """Test that has_more is True when more rows than limit exist."""
-        description = [
-            ("event_id",),
-            ("job_ref",),
-            ("tenant_id",),
-            ("source_app",),
-            ("source_app_version",),
-            ("environment",),
-            ("run_timestamp_start",),
-            ("run_timestamp_end",),
-            ("internal_id",),
-            ("country",),
-            ("catalog_id",),
-            ("status",),
-            ("timestamp_start",),
-            ("timestamp_end",),
-            ("message",),
-            ("additional_info",),
-        ]
         rows = [
             ("ev1", "r", "T", "a", "1", "t", 0, 0, 3, "ZA", "c", "s", 0, 0, None, None),
             ("ev2", "r", "T", "a", "1", "t", 0, 0, 2, "ZA", "c", "s", 0, 0, None, None),
             ("ev3", "r", "T", "a", "1", "t", 0, 0, 1, "ZA", "c", "s", 0, 0, None, None),
         ]
-        mock_conn = _make_mock_connection(description, rows)
+        mock_conn = _make_mock_connection(_STATS_DESCRIPTION, rows)
 
         with (
             patch("boto3.Session") as mock_session,
@@ -250,25 +235,7 @@ class TestReadStats:
 
     def test_cursor_filters_by_internal_id(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
         """Test that passing cursor appends internal_id condition."""
-        description = [
-            ("event_id",),
-            ("job_ref",),
-            ("tenant_id",),
-            ("source_app",),
-            ("source_app_version",),
-            ("environment",),
-            ("run_timestamp_start",),
-            ("run_timestamp_end",),
-            ("internal_id",),
-            ("country",),
-            ("catalog_id",),
-            ("status",),
-            ("timestamp_start",),
-            ("timestamp_end",),
-            ("message",),
-            ("additional_info",),
-        ]
-        mock_conn = _make_mock_connection(description, [])
+        mock_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
 
         with (
             patch("boto3.Session") as mock_session,
@@ -389,3 +356,96 @@ class TestCheckHealth:
 
         assert False is healthy
         assert "Failed to load." == message
+
+
+class TestConnectionReuse:
+    """Tests for PostgreSQL connection reuse error handling."""
+
+    def test_reconnects_on_closed_connection(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
+        """Test that a closed connection triggers reconnection."""
+        mock_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
+
+        with (
+            patch("boto3.Session") as mock_session,
+            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+        ):
+            mock_client = MagicMock()
+            mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
+            mock_session.return_value.client.return_value = mock_client
+            mock_pg.connect.return_value = mock_conn
+
+            reader.read_stats(limit=10)
+            assert 1 == mock_pg.connect.call_count
+
+            mock_conn.closed = 2
+
+            reader.read_stats(limit=10)
+            assert 2 == mock_pg.connect.call_count
+
+    def test_retries_on_operational_error(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
+        """Test that OperationalError triggers retry with fresh connection."""
+        fail_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
+        fail_cursor = fail_conn.cursor.return_value.__enter__.return_value
+        fail_cursor.execute.side_effect = rp.OperationalError("connection reset")
+
+        ok_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
+
+        with (
+            patch("boto3.Session") as mock_session,
+            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+        ):
+            mock_client = MagicMock()
+            mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
+            mock_session.return_value.client.return_value = mock_client
+            mock_pg.connect.side_effect = [fail_conn, ok_conn]
+
+            rows, pagination = reader.read_stats(limit=10)
+
+        assert 2 == mock_pg.connect.call_count
+        assert [] == rows
+
+    def test_raises_after_retry_exhausted(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
+        """Test that OperationalError on both attempts raises RuntimeError."""
+        fail_conn = MagicMock()
+        fail_conn.closed = 0
+        fail_cursor = MagicMock()
+        fail_cursor.execute.side_effect = rp.OperationalError("connection reset")
+        fail_conn.cursor.return_value.__enter__ = MagicMock(return_value=fail_cursor)
+        fail_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("boto3.Session") as mock_session,
+            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+        ):
+            mock_client = MagicMock()
+            mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
+            mock_session.return_value.client.return_value = mock_client
+            mock_pg.connect.return_value = fail_conn
+
+            with pytest.raises(RuntimeError, match="Database connection failed after retry"):
+                reader.read_stats(limit=10)
+
+    def test_discards_connection_on_non_operational_error(
+        self, reader: ReaderPostgres, pg_secret: dict[str, Any]
+    ) -> None:
+        """Test that a non-OperationalError PsycopgError discards the connection."""
+        fail_conn = MagicMock()
+        fail_conn.closed = 0
+        fail_cursor = MagicMock()
+        fail_cursor.execute.side_effect = rp.PsycopgError("integrity error")
+        fail_conn.cursor.return_value.__enter__ = MagicMock(return_value=fail_cursor)
+        fail_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("boto3.Session") as mock_session,
+            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+        ):
+            mock_client = MagicMock()
+            mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
+            mock_session.return_value.client.return_value = mock_client
+            mock_pg.connect.return_value = fail_conn
+
+            with pytest.raises(RuntimeError, match="Database query error"):
+                reader.read_stats(limit=10)
+
+        assert reader._connection is None

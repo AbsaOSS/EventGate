@@ -195,6 +195,7 @@ class DummyConnection:
     def __init__(self, store):
         self.commit_called = False
         self.store = store
+        self.closed = 0
 
     def cursor(self):
         return DummyCursor(self.store)
@@ -212,8 +213,10 @@ class DummyConnection:
 class DummyPsycopg:
     def __init__(self, store):
         self.store = store
+        self.connect_count = 0
 
     def connect(self, **kwargs):
+        self.connect_count += 1
         return DummyConnection(self.store)
 
 
@@ -395,3 +398,146 @@ def test_check_health_load_config_exception(mocker):
     healthy, msg = writer.check_health()
     assert not healthy
     assert "secret fetch failed" == msg
+
+
+# --- connection reuse ---
+
+
+def test_write_reconnects_on_closed_connection(reset_env, monkeypatch):
+    store = []
+    psycopg = DummyPsycopg(store)
+    monkeypatch.setattr(wp, "psycopg2", psycopg)
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
+
+    writer.write("public.cps.za.test", message)
+    assert 1 == psycopg.connect_count
+
+    writer._connection.closed = 2
+
+    writer.write("public.cps.za.test", message)
+    assert 2 == psycopg.connect_count
+
+
+def test_write_retries_on_operational_error(reset_env, monkeypatch):
+    store = []
+    fail_flag = [True]
+
+    class RetryCursor:
+        def __init__(self):
+            pass
+
+        def execute(self, sql, params):
+            if fail_flag[0]:
+                fail_flag[0] = False
+                raise wp.OperationalError("connection reset")
+            store.append((sql, params))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class RetryConnection:
+        def __init__(self):
+            self.closed = 0
+
+        def cursor(self):
+            return RetryCursor()
+
+        def commit(self):
+            pass
+
+    class RetryPsycopg:
+        def __init__(self):
+            self.connect_count = 0
+
+        def connect(self, **kwargs):
+            self.connect_count += 1
+            return RetryConnection()
+
+    psycopg = RetryPsycopg()
+    monkeypatch.setattr(wp, "psycopg2", psycopg)
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
+
+    ok, err = writer.write("public.cps.za.test", message)
+
+    assert ok and err is None
+    assert 2 == psycopg.connect_count
+    assert 1 == len(store)
+
+
+def test_write_fails_after_retry_exhausted(reset_env, monkeypatch):
+    class AlwaysFailCursor:
+        def execute(self, sql, params):
+            raise wp.OperationalError("connection reset")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class AlwaysFailConnection:
+        def __init__(self):
+            self.closed = 0
+
+        def cursor(self):
+            return AlwaysFailCursor()
+
+        def commit(self):
+            pass
+
+    class AlwaysFailPsycopg:
+        def connect(self, **kwargs):
+            return AlwaysFailConnection()
+
+    monkeypatch.setattr(wp, "psycopg2", AlwaysFailPsycopg())
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
+
+    ok, err = writer.write("public.cps.za.test", message)
+
+    assert not ok
+    assert "failed with unknown error" in err
+
+
+def test_write_discards_connection_on_non_operational_error(reset_env, monkeypatch):
+    class FailCursor:
+        def execute(self, sql, params):
+            raise wp.PsycopgError("integrity error")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FailConnection:
+        def __init__(self):
+            self.closed = 0
+
+        def cursor(self):
+            return FailCursor()
+
+        def commit(self):
+            pass
+
+    class FailPsycopg:
+        def connect(self, **kwargs):
+            return FailConnection()
+
+    monkeypatch.setattr(wp, "psycopg2", FailPsycopg())
+    writer = WriterPostgres({})
+    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
+
+    ok, _ = writer.write("public.cps.za.test", message)
+
+    assert not ok
+    assert writer._connection is None
