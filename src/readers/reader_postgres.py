@@ -130,6 +130,8 @@ class ReaderPostgres:
                 user=db_config["user"],
                 password=db_config["password"],
                 port=db_config["port"],
+                connect_timeout=10,
+                gssencmode="disable",
                 options="-c statement_timeout=30000 -c default_transaction_read_only=on",
             ) as connection:
                 with connection.cursor() as db_cursor:
