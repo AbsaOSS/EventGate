@@ -25,6 +25,9 @@ from boto3.resources.base import ServiceResource
 
 logger = logging.getLogger(__name__)
 
+# {topic: {user: {restricted_field: [allowed_values]}}}
+TopicAccessMap = dict[str, dict[str, dict[str, list[str]]]]
+
 
 def load_config(conf_dir: str) -> dict[str, Any]:
     """Load the main configuration from config.json.
@@ -40,32 +43,53 @@ def load_config(conf_dir: str) -> dict[str, Any]:
     return config
 
 
-def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> dict[str, list[str]]:
+def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
+    """Normalize access config to unified internal format.
+    Converts the legacy list format (`["user1", "user2"]`) to the dict
+    format (`{"user1": {}, "user2": {}}`) so that all downstream code
+    can rely on a single structure.
+    Args:
+        access_data: Parsed JSON from access config file (mixed list/dict values).
+    Returns:
+        Normalized mapping: `{topic: {user: {restricted_field: [allowed_values]}}}` .
+    """
+    result: TopicAccessMap = {}
+    for topic, value in access_data.items():
+        if isinstance(value, list):
+            # Legacy format: plain user list with no field restrictions
+            result[topic] = {user: {} for user in value}
+        else:
+            # New format: per-user field constraints already in the expected structure
+            result[topic] = value
+    return result
+
+
+def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> TopicAccessMap:
     """Load access control configuration from S3 or a local file.
     Args:
         config: Main configuration dict (must contain `access_config` key).
         aws_s3: Boto3 S3 resource for loading from S3 paths.
     Returns:
-        Dictionary mapping topic names to lists of authorised users.
+        Normalized mapping of topic names to per-user permission constraints.
     """
     access_path: str = config["access_config"]
     logger.debug("Loading access configuration from %s.", access_path)
 
-    access_config: dict[str, list[str]] = {}
+    access_data: dict[str, Any] = {}
 
     if access_path.startswith("s3://"):
         name_parts = access_path.split("/")
         bucket_name = name_parts[2]
         bucket_object_key = "/".join(name_parts[3:])
-        access_config = json.loads(
+        access_data = json.loads(
             aws_s3.Bucket(bucket_name).Object(bucket_object_key).get()["Body"].read().decode("utf-8")
         )
     else:
         with open(access_path, "r", encoding="utf-8") as file:
-            access_config = json.load(file)
+            access_data = json.load(file)
 
     logger.debug("Loaded access configuration.")
-    return access_config
+    return _normalize_access_config(access_data)
 
 
 def load_topic_names(conf_dir: str) -> list[str]:

@@ -18,6 +18,7 @@ import json
 from unittest.mock import patch, mock_open, MagicMock
 
 import jwt
+import pytest
 
 from src.handlers.handler_topic import HandlerTopic
 
@@ -40,7 +41,7 @@ def test_load_access_config_from_local_file():
         result = handler.with_load_access_config()
 
     assert result is handler
-    assert handler.access_config == access_data
+    assert {"TestUser": {}} == handler.access_config["public.cps.za.test"]
 
 
 def test_load_access_config_from_s3():
@@ -63,7 +64,7 @@ def test_load_access_config_from_s3():
     result = handler.with_load_access_config()
 
     assert result is handler
-    assert handler.access_config == access_data
+    assert {"TestUser": {}} == handler.access_config["public.cps.za.test"]
     mock_aws_s3.Bucket.assert_called_once_with("my-bucket")
     mock_aws_s3.Bucket.return_value.Object.assert_called_once_with("path/to/access.json")
 
@@ -259,3 +260,64 @@ def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event,
         )
         resp = event_gate_module.lambda_handler(event)
         assert 202 == resp["statusCode"]
+
+
+## _validate_user_permissions()
+@pytest.mark.parametrize(
+    "user_perms,payload_updates",
+    [
+        ({}, {}),
+        ({"source_app": ["app"]}, {}),
+        ({"tenant_id": ["avms|avm"]}, {"tenant_id": "avms"}),
+        ({"source_app": ["app"], "environment": ["dev"]}, {}),
+    ],
+    ids=["no-restrictions", "exact-match", "regex-match", "multiple-fields"],
+)
+def test_post_permission_allowed(event_gate_module, make_event, valid_payload, user_perms, payload_updates):
+    """User with matching permissions can post successfully."""
+    valid_payload.update(payload_updates)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": user_perms}
+        for writer in event_gate_module.handler_topic.writers.values():
+            writer.write = MagicMock(return_value=(True, None))
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+        assert 202 == resp["statusCode"]
+
+
+@pytest.mark.parametrize(
+    "user_perms,payload_updates,expected_fragment",
+    [
+        ({"environment": ["prod"]}, {}, "environment"),
+        ({"nonexistent_field": ["val"]}, {}, "nonexistent_field"),
+        ({"tenant_id": ["avms|avm"]}, {"tenant_id": "xxxx"}, "tenant_id"),
+        ({"source_app": ["other"], "environment": ["prod"]}, {}, "source_app"),
+    ],
+    ids=["value-mismatch", "missing-field", "regex-no-match", "first-constraint-fails"],
+)
+def test_post_permission_denied(
+    event_gate_module, make_event, valid_payload, user_perms, payload_updates, expected_fragment
+):
+    """User with non-matching permissions gets 403."""
+    valid_payload.update(payload_updates)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": user_perms}
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+        assert 403 == resp["statusCode"]
+        body = json.loads(resp["body"])
+        assert "permission" == body["errors"][0]["type"]
+        assert expected_fragment in body["errors"][0]["message"]
