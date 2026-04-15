@@ -58,9 +58,21 @@ def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
         if isinstance(value, list):
             # Legacy format: plain user list with no field restrictions
             result[topic] = {user: {} for user in value}
-        else:
+        elif isinstance(value, dict):
             # New format: per-user field constraints already in the expected structure
+            for user, constraints in value.items():
+                if not isinstance(constraints, dict):
+                    raise ValueError(
+                        f"Topic '{topic}', user '{user}': constraints must be a dict, got {type(constraints).__name__}."
+                    )
+                for field, patterns in constraints.items():
+                    if not isinstance(patterns, list):
+                        raise ValueError(
+                            f"Topic '{topic}', user '{user}', field '{field}': patterns must be a list, got {type(patterns).__name__}."
+                        )
             result[topic] = value
+        else:
+            raise ValueError(f"Topic '{topic}': expected list or dict, got {type(value).__name__}.")
     return result
 
 

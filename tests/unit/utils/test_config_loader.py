@@ -18,7 +18,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -157,3 +157,17 @@ class TestNormalizeAccessConfig:
 
         assert {"userA": {}} == result["list.topic"]
         assert {"environment": ["prod"]} == result["dict.topic"]["userB"]
+
+    @pytest.mark.parametrize(
+        "raw,error_fragment",
+        [
+            ({"t": "bad"}, "expected list or dict"),
+            ({"t": {"u": "not-a-dict"}}, "constraints must be a dict"),
+            ({"t": {"u": {"field": "not-a-list"}}}, "patterns must be a list"),
+        ],
+        ids=["invalid-topic-value", "invalid-constraints", "invalid-patterns"],
+    )
+    def test_normalize_rejects_malformed_config(self, raw: dict, error_fragment: str) -> None:
+        """Test that malformed access config raises ValueError."""
+        with pytest.raises(ValueError, match=error_fragment):
+            _normalize_access_config(raw)
