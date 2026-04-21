@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.readers.reader_postgres import ReaderPostgres
-import src.readers.reader_postgres as rp
+import src.utils.postgres_base as pb
 
 _STATS_DESCRIPTION = [
     ("event_id",),
@@ -69,17 +69,17 @@ def reader(mock_env: None) -> ReaderPostgres:
     return ReaderPostgres()
 
 
-class TestLoadDbConfig:
-    """Tests for lazy database configuration loading."""
+class TestDbConfig:
+    """Tests for lazy database configuration loading via cached_property."""
 
     def test_loads_config_from_secrets_manager(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
-        """Test that _load_db_config loads from Secrets Manager."""
+        """Test that _pg_config loads from Secrets Manager."""
         mock_client = MagicMock()
         mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
 
         with patch("boto3.Session") as mock_session:
             mock_session.return_value.client.return_value = mock_client
-            result = reader._load_db_config()
+            result = reader._pg_config
 
         assert "eventgate" == result["database"]
         assert "localhost" == result["host"]
@@ -91,8 +91,8 @@ class TestLoadDbConfig:
 
         with patch("boto3.Session") as mock_session:
             mock_session.return_value.client.return_value = mock_client
-            reader._load_db_config()
-            reader._load_db_config()
+            _ = reader._pg_config
+            _ = reader._pg_config
 
         assert 1 == mock_client.get_secret_value.call_count
 
@@ -102,7 +102,7 @@ class TestLoadDbConfig:
         monkeypatch.setenv("POSTGRES_SECRET_REGION", "")
         reader = ReaderPostgres()
 
-        result = reader._load_db_config()
+        result = reader._pg_config
 
         assert "" == result["database"]
 
@@ -169,7 +169,7 @@ class TestReadStats:
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
@@ -196,7 +196,7 @@ class TestReadStats:
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
@@ -234,12 +234,12 @@ class TestReadStats:
             reader.read_stats()
 
     def test_cursor_filters_by_internal_id(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
-        """Test that passing cursor appends internal_id condition."""
+        """Test that passing cursor uses the cursor query variant."""
         mock_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
@@ -251,9 +251,8 @@ class TestReadStats:
             executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][0]
             executed_params = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][1]
 
-        sql_str = executed_sql.as_string(None) if hasattr(executed_sql, "as_string") else executed_sql
-        assert "j.internal_id < %s" in sql_str
-        assert 100 in executed_params
+        assert "j.internal_id <" in executed_sql
+        assert 100 == executed_params["cursor_id"]
 
 
 class TestFormatRow:
@@ -350,8 +349,12 @@ class TestCheckHealth:
         assert "ok" == message
 
     def test_unhealthy_when_load_raises_runtime_error(self, reader: ReaderPostgres) -> None:
-        """Test returns unhealthy when _load_db_config raises RuntimeError."""
-        with patch.object(reader, "_load_db_config", side_effect=RuntimeError("Failed to load.")):
+        """Test returns unhealthy when _pg_config raises RuntimeError."""
+        with patch.object(
+            type(reader),
+            "_pg_config",
+            new_callable=lambda: property(lambda self: (_ for _ in ()).throw(RuntimeError("Failed to load."))),
+        ):
             healthy, message = reader.check_health()
 
         assert False is healthy
@@ -367,7 +370,7 @@ class TestConnectionReuse:
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
@@ -386,13 +389,13 @@ class TestConnectionReuse:
         """Test that OperationalError triggers retry with fresh connection."""
         fail_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
         fail_cursor = fail_conn.cursor.return_value.__enter__.return_value
-        fail_cursor.execute.side_effect = rp.OperationalError("connection reset")
+        fail_cursor.execute.side_effect = pb.OperationalError("connection reset")
 
         ok_conn = _make_mock_connection(_STATS_DESCRIPTION, [])
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
@@ -409,20 +412,20 @@ class TestConnectionReuse:
         fail_conn = MagicMock()
         fail_conn.closed = 0
         fail_cursor = MagicMock()
-        fail_cursor.execute.side_effect = rp.OperationalError("connection reset")
+        fail_cursor.execute.side_effect = pb.OperationalError("connection reset")
         fail_conn.cursor.return_value.__enter__ = MagicMock(return_value=fail_cursor)
         fail_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
             mock_session.return_value.client.return_value = mock_client
             mock_pg.connect.return_value = fail_conn
 
-            with pytest.raises(RuntimeError, match="Database connection failed after retry"):
+            with pytest.raises(RuntimeError, match="Database connection failed after"):
                 reader.read_stats(limit=10)
 
     def test_discards_connection_on_non_operational_error(
@@ -432,13 +435,13 @@ class TestConnectionReuse:
         fail_conn = MagicMock()
         fail_conn.closed = 0
         fail_cursor = MagicMock()
-        fail_cursor.execute.side_effect = rp.PsycopgError("integrity error")
+        fail_cursor.execute.side_effect = pb.PsycopgError("integrity error")
         fail_conn.cursor.return_value.__enter__ = MagicMock(return_value=fail_cursor)
         fail_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("boto3.Session") as mock_session,
-            patch("src.readers.reader_postgres.psycopg2") as mock_pg,
+            patch.object(pb, "psycopg2") as mock_pg,
         ):
             mock_client = MagicMock()
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}

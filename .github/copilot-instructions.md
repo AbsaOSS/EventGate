@@ -54,4 +54,3 @@ Quality gates (run after changes, fix only if below threshold)
 
 Git workflow
 - Do NOT create git commits; committing is the developer's responsibility
-
