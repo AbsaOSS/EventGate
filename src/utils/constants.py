@@ -16,7 +16,7 @@
 
 """Constants and enums used across the project."""
 
-from typing import Any
+from typing import TypedDict
 
 # Configuration keys
 TOKEN_PROVIDER_URL_KEY = "token_provider_url"
@@ -24,16 +24,32 @@ TOKEN_PUBLIC_KEY_URL_KEY = "token_public_key_url"
 TOKEN_PUBLIC_KEYS_URL_KEY = "token_public_keys_url"
 SSL_CA_BUNDLE_KEY = "ssl_ca_bundle"
 
+# Postgres connection
+POSTGRES_STATEMENT_TIMEOUT_MS = 30000
+POSTGRES_MAX_RETRIES = 2
+
 # Postgres stats defaults
 POSTGRES_DEFAULT_LIMIT = 50
 POSTGRES_MAX_LIMIT = 1000
 POSTGRES_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000  # 7 days in milliseconds
 
-SUPPORTED_TOPICS: list[str] = ["public.cps.za.runs"]
+# Topic name constants
+TOPIC_RUNS = "public.cps.za.runs"
+TOPIC_DLCHANGE = "public.cps.za.dlchange"
+TOPIC_TEST = "public.cps.za.test"
 
-# Maps topic names to their PostgreSQL table(s)
-TOPIC_TABLE_MAP: dict[str, dict[str, Any]] = {
-    "public.cps.za.runs": {
+SUPPORTED_TOPICS: list[str] = [TOPIC_RUNS]
+
+
+class TopicTableConfig(TypedDict, total=False):
+    """Structure describing a topic's PostgreSQL table mapping."""
+    main: str
+    jobs: str
+    columns: dict[str, list[str]]
+
+
+TOPIC_TABLE_MAP: dict[str, TopicTableConfig] = {
+    TOPIC_RUNS: {
         "main": "public_cps_za_runs",
         "jobs": "public_cps_za_runs_jobs",
         "columns": {
@@ -60,7 +76,7 @@ TOPIC_TABLE_MAP: dict[str, dict[str, Any]] = {
             ],
         },
     },
-    "public.cps.za.dlchange": {
+    TOPIC_DLCHANGE: {
         "main": "public_cps_za_dlchange",
         "columns": {
             "main": [
@@ -80,7 +96,7 @@ TOPIC_TABLE_MAP: dict[str, dict[str, Any]] = {
             ],
         },
     },
-    "public.cps.za.test": {
+    TOPIC_TEST: {
         "main": "public_cps_za_test",
         "columns": {
             "main": [
