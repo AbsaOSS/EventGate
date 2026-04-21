@@ -1,9 +1,9 @@
-pytest==9.0.2
+pytest==9.0.3
 pytest-cov==7.1.0
 pytest-mock==3.15.1
 pylint==4.0.5
 black==26.3.1
-mypy==1.20.0
+mypy==1.20.1
 mypy-extensions==1.1.0
 urllib3==2.6.3
 cryptography==46.0.7
@@ -11,11 +11,11 @@ jsonschema==4.25.1
 PyJWT==2.12.1
 requests==2.32.5
 aiosql==15.0
-boto3==1.42.88
+boto3==1.42.91
 botocore==1.40.76
 confluent-kafka==2.14.0
 moto[s3,secretsmanager,events]==5.1.22
-testcontainers==4.14.1
+testcontainers==4.14.2
 docker==7.1.0
 # psycopg2-binary==2.9.10 # Ideal for local development, but not for long-term production use
-psycopg2==2.9.10
+psycopg2==2.9.11
