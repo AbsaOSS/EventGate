@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 
 from src.utils.logging_levels import TRACE_LEVEL
 from src.utils.trace_logging import log_payload_at_trace
+import src.utils.postgres_base as postgres_base
 import src.writers.writer_eventbridge as writer_eventbridge
 import src.writers.writer_kafka as writer_kafka
 import src.writers.writer_postgres as writer_postgres
@@ -93,6 +94,9 @@ def test_trace_postgres(caplog, monkeypatch):
         def commit(self):
             pass
 
+        def close(self):
+            pass
+
         def __enter__(self):
             return self
 
@@ -103,14 +107,14 @@ def test_trace_postgres(caplog, monkeypatch):
         def connect(self, **kwargs):
             return DummyConnection()
 
-    monkeypatch.setattr(writer_postgres, "psycopg2", DummyPsycopg2())
+    monkeypatch.setattr(postgres_base, "psycopg2", DummyPsycopg2())
 
     # Set trace level on the module's logger
     writer_postgres.logger.setLevel(TRACE_LEVEL)
     caplog.set_level(TRACE_LEVEL)
 
     writer = writer_postgres.WriterPostgres({})
-    writer._db_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    writer._pg_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
 
     message = {"event_id": "e", "tenant_id": "t", "source_app": "a", "environment": "dev", "timestamp": 1}
     ok, err = writer.write("public.cps.za.test", message)

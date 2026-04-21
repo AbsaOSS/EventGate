@@ -51,3 +51,7 @@ Testing
 Quality gates (run after changes, fix only if below threshold)
 - Run all quality gates at once: `make qa`
 - Once a quality gate passes, do not re-run it in different scenarios
+
+Git workflow
+- Do NOT create git commits; committing is the developer's responsibility
+

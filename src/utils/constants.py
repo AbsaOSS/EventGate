@@ -27,6 +27,7 @@ SSL_CA_BUNDLE_KEY = "ssl_ca_bundle"
 # Postgres connection
 POSTGRES_STATEMENT_TIMEOUT_MS = 30000
 POSTGRES_MAX_RETRIES = 2
+REQUIRED_CONNECTION_FIELDS = ("host", "user", "password", "port")
 
 # Postgres stats defaults
 POSTGRES_DEFAULT_LIMIT = 50
@@ -43,6 +44,7 @@ SUPPORTED_TOPICS: list[str] = [TOPIC_RUNS]
 
 class TopicTableConfig(TypedDict, total=False):
     """Structure describing a topic's PostgreSQL table mapping."""
+
     main: str
     jobs: str
     columns: dict[str, list[str]]
