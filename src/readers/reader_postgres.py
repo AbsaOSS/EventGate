@@ -159,7 +159,11 @@ class ReaderPostgres(PostgresBase):
         finally:
             # Rollback closes the implicit transaction opened by the SELECT,
             # leaving the cached connection in a clean idle state for reuse.
-            connection.rollback()
+            try:
+                connection.rollback()
+            except PsycopgError:
+                logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
+                self._close_connection()
         return col_names, raw_rows
 
     @staticmethod

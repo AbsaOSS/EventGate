@@ -182,11 +182,11 @@ class WriterPostgres(Writer, PostgresBase):
                 logger.error(msg)
                 return False, msg
 
-            self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message))
+            self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)
         except (RuntimeError, PsycopgError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             self._close_connection()
-            err_msg = f"The Postgres writer failed with unknown error: {str(e)}"
-            logger.exception(err_msg)
+            err_msg = f"The Postgres writer failed with unknown error: {e!s}"
+            logger.exception("The Postgres writer failed with unknown error: %s.", e)
             return False, err_msg
 
         return True, None

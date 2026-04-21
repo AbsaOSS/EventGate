@@ -38,13 +38,23 @@ def test_build_postgres_config_full():
     assert 5432 == result["port"]
 
 
-def test_build_postgres_config_defaults_for_missing_keys():
+def test_build_postgres_config_defaults_for_empty_database():
     result = _build_postgres_config({})
     assert "" == result["database"]
     assert "" == result["host"]
     assert "" == result["user"]
     assert "" == result["password"]
     assert 0 == result["port"]
+
+
+def test_build_postgres_config_rejects_missing_fields_when_database_set():
+    with pytest.raises(ValueError, match="Missing PostgreSQL secret fields"):
+        _build_postgres_config({"database": "mydb"})
+
+
+def test_build_postgres_config_rejects_invalid_port():
+    with pytest.raises(ValueError, match="Invalid PostgreSQL port"):
+        _build_postgres_config({"database": "mydb", "host": "h", "user": "u", "password": "p", "port": "abc"})
 
 
 # PostgresBase.__init__
@@ -218,3 +228,24 @@ def test_execute_with_retry_raises_after_all_attempts_fail(monkeypatch):
     with patch("src.utils.postgres_base.load_postgres_config", return_value=secret):
         with pytest.raises(RuntimeError, match="Database connection failed after"):
             base._execute_with_retry(lambda conn: (_ for _ in ()).throw(pb.OperationalError("down")))
+
+
+def test_execute_with_retry_no_retry_fails_on_first_attempt(monkeypatch):
+    calls = []
+    mock_conn = MagicMock(closed=0)
+    mock_psycopg2 = MagicMock()
+    mock_psycopg2.connect.return_value = mock_conn
+    monkeypatch.setattr(pb, "psycopg2", mock_psycopg2)
+    base = _ConcreteBase()
+    base._connection = mock_conn
+    secret = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+
+    def op(conn):
+        calls.append(1)
+        raise pb.OperationalError("timeout")
+
+    with patch("src.utils.postgres_base.load_postgres_config", return_value=secret):
+        with pytest.raises(RuntimeError, match="Database connection failed after 1 attempts"):
+            base._execute_with_retry(op, retry=False)
+
+    assert 1 == len(calls)

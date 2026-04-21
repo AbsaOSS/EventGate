@@ -22,7 +22,7 @@ from collections.abc import Callable
 from functools import cached_property
 from typing import Any, TypedDict
 
-from src.utils.constants import POSTGRES_MAX_RETRIES
+from src.utils.constants import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_MAX_RETRIES
 from src.utils.utils import load_postgres_config
 
 try:
@@ -58,13 +58,31 @@ def _build_postgres_config(aws_secret: dict[str, Any]) -> PostgresConfig:
         aws_secret: Dictionary loaded from AWS Secrets Manager.
     Returns:
         A validated `PostgresConfig`.
+    Raises:
+        ValueError: If `database` is present but other required fields are
+            missing or invalid.
     """
+    database = str(aws_secret.get("database", ""))
+
+    if database:
+        required_fields = ("host", "user", "password", "port")
+        missing_fields = [field for field in required_fields if not aws_secret.get(field)]
+        if missing_fields:
+            raise ValueError(f"Missing PostgreSQL secret fields: {', '.join(missing_fields)}")
+
+        try:
+            port = int(aws_secret["port"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid PostgreSQL port: {aws_secret.get('port')}") from exc
+    else:
+        port = int(aws_secret.get("port", 0))
+
     return PostgresConfig(
-        database=str(aws_secret.get("database", "")),
+        database=database,
         host=str(aws_secret.get("host", "")),
         user=str(aws_secret.get("user", "")),
         password=str(aws_secret.get("password", "")),
-        port=int(aws_secret.get("port", 0)),
+        port=port,
     )
 
 
@@ -102,6 +120,7 @@ class PostgresBase:
             "user": pg_config["user"],
             "password": pg_config["password"],
             "port": pg_config["port"],
+            "connect_timeout": POSTGRES_CONNECT_TIMEOUT_SECONDS,
         }
         options = self._connect_options()
         if options:
@@ -120,23 +139,26 @@ class PostgresBase:
             except (PsycopgError, OSError):
                 logger.debug("Failed to close PostgreSQL connection.")
 
-    def _execute_with_retry[T](self, operation: Callable[..., T]) -> T:
+    def _execute_with_retry[T](self, operation: Callable[..., T], *, retry: bool = True) -> T:
         """Run `operation(connection)` with one retry on `OperationalError`.
         Args:
             operation: Callable receiving a psycopg2 connection.
+            retry: Whether to retry on `OperationalError`. Disable for
+                non-idempotent operations (e.g. writes) to avoid duplicates.
         Returns:
             Whatever `operation` returns on success.
         Raises:
             RuntimeError: If the retry is also exhausted.
         """
+        max_attempts = POSTGRES_MAX_RETRIES if retry else 1
         last_exc: OperationalError | None = None
-        for attempt in range(POSTGRES_MAX_RETRIES):
+        for attempt in range(max_attempts):
             try:
                 connection = self._get_connection()
                 return operation(connection)
             except OperationalError as exc:
                 last_exc = exc
                 self._close_connection()
-                if attempt < POSTGRES_MAX_RETRIES - 1:
+                if attempt < max_attempts - 1:
                     logger.warning("PostgreSQL connection lost, reconnecting.")
-        raise RuntimeError(f"Database connection failed after {POSTGRES_MAX_RETRIES} attempts: {last_exc}")
+        raise RuntimeError(f"Database connection failed after {max_attempts} attempts: {last_exc}") from last_exc

@@ -228,7 +228,7 @@ class TestReadStats:
 
         with (
             patch("boto3.Session") as mock_session,
-            pytest.raises(RuntimeError, match="host, user, password"),
+            pytest.raises(ValueError, match="Missing PostgreSQL secret fields"),
         ):
             mock_session.return_value.client.return_value = mock_client
             reader.read_stats()
@@ -402,7 +402,7 @@ class TestConnectionReuse:
             mock_session.return_value.client.return_value = mock_client
             mock_pg.connect.side_effect = [fail_conn, ok_conn]
 
-            rows, pagination = reader.read_stats(limit=10)
+            rows, _pagination = reader.read_stats(limit=10)
 
         assert 2 == mock_pg.connect.call_count
         assert [] == rows

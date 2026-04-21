@@ -25,6 +25,7 @@ TOKEN_PUBLIC_KEYS_URL_KEY = "token_public_keys_url"
 SSL_CA_BUNDLE_KEY = "ssl_ca_bundle"
 
 # Postgres connection
+POSTGRES_CONNECT_TIMEOUT_SECONDS = 5
 POSTGRES_STATEMENT_TIMEOUT_MS = 30000
 POSTGRES_MAX_RETRIES = 2
 REQUIRED_CONNECTION_FIELDS = ("host", "user", "password", "port")

@@ -185,33 +185,34 @@ def test_insert_test():
     assert {"a": 1} == json.loads(params["additional_info"])
 
 
-def test_write_skips_when_no_database(reset_env):
+def test_write_skips_when_no_database(reset_env, monkeypatch):
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(lambda self: {"database": ""})
+    monkeypatch.setattr(type(writer), "_pg_config", property(lambda self: {"database": ""}))
     ok, err = writer.write("public.cps.za.test", {})
-    del type(writer)._pg_config
     assert ok and err is None
 
 
-def test_write_fails_when_connection_field_missing(reset_env):
+def test_write_fails_when_connection_field_missing(reset_env, monkeypatch):
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}),
     )
     ok, err = writer.write("public.cps.za.test", {})
-    del type(writer)._pg_config
     assert not ok
     assert "host" in err and "not configured" in err
 
 
 def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     monkeypatch.setattr(pb, "psycopg2", None)
     ok, err = writer.write("public.cps.za.test", {})
-    del type(writer)._pg_config
     assert ok and err is None
 
 
@@ -219,11 +220,12 @@ def test_write_unknown_topic_returns_false(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     ok, err = writer.write("public.cps.za.unknown", {})
-    del type(writer)._pg_config
     assert not ok and "Unknown topic" in err
 
 
@@ -231,12 +233,13 @@ def test_write_success_known_topic(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
     ok, err = writer.write("public.cps.za.test", message)
-    del type(writer)._pg_config
     assert ok and err is None and 1 == len(store)
 
 
@@ -247,11 +250,12 @@ def test_write_exception_returns_false(reset_env, monkeypatch):
 
     monkeypatch.setattr(pb, "psycopg2", FailingPsycopg())
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     ok, err = writer.write("public.cps.za.test", {})
-    del type(writer)._pg_config
     assert not ok and "failed with unknown error" in err
 
 
@@ -276,8 +280,10 @@ def test_write_dlchange_success(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {
         "event_id": "e1",
@@ -291,7 +297,6 @@ def test_write_dlchange_success(reset_env, monkeypatch):
         "format": "parquet",
     }
     ok, err = writer.write("public.cps.za.dlchange", message)
-    del type(writer)._pg_config
     assert ok and err is None and 1 == len(store)
 
 
@@ -299,8 +304,10 @@ def test_write_runs_success(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {
         "event_id": "r1",
@@ -314,7 +321,6 @@ def test_write_runs_success(reset_env, monkeypatch):
         "jobs": [{"catalog_id": "c", "status": "ok", "timestamp_start": 1, "timestamp_end": 2}],
     }
     ok, err = writer.write("public.cps.za.runs", message)
-    del type(writer)._pg_config
     assert ok and err is None and 2 == len(store)  # run + job insert
 
 
@@ -353,17 +359,16 @@ def test_check_health_missing_host(reset_env, monkeypatch):
     monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
     healthy, msg = writer.check_health()
-    assert not healthy and "host not configured" in msg
+    assert not healthy and "Missing PostgreSQL secret fields" in msg
 
 
-def test_check_health_database_not_configured():
+def test_check_health_database_not_configured(monkeypatch):
     """check_health returns (True, 'database not configured') when database field is empty."""
     writer = WriterPostgres({})
     writer._secret_name = "mysecret"
     writer._secret_region = "eu-west-1"
-    type(writer)._pg_config = property(lambda self: {"database": ""})
+    monkeypatch.setattr(type(writer), "_pg_config", property(lambda self: {"database": ""}))
     healthy, msg = writer.check_health()
-    del type(writer)._pg_config
     assert healthy
     assert "database not configured" == msg
 
@@ -389,8 +394,10 @@ def test_write_reconnects_on_closed_connection(reset_env, monkeypatch):
     psycopg = DummyPsycopg(store)
     monkeypatch.setattr(pb, "psycopg2", psycopg)
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
@@ -400,11 +407,10 @@ def test_write_reconnects_on_closed_connection(reset_env, monkeypatch):
     writer._connection.closed = 2
 
     writer.write("public.cps.za.test", message)
-    del type(writer)._pg_config
     assert 2 == psycopg.connect_count
 
 
-def test_write_retries_on_operational_error(reset_env, monkeypatch):
+def test_write_does_not_retry_on_operational_error(reset_env, monkeypatch):
     store = []
     fail_flag = [True]
 
@@ -445,17 +451,18 @@ def test_write_retries_on_operational_error(reset_env, monkeypatch):
     psycopg = RetryPsycopg()
     monkeypatch.setattr(pb, "psycopg2", psycopg)
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
     ok, err = writer.write("public.cps.za.test", message)
-    del type(writer)._pg_config
 
-    assert ok and err is None
-    assert 2 == psycopg.connect_count
-    assert 1 == len(store)
+    assert not ok
+    assert "failed with unknown error" in err
+    assert 1 == psycopg.connect_count
 
 
 def test_write_fails_after_retry_exhausted(reset_env, monkeypatch):
@@ -488,13 +495,14 @@ def test_write_fails_after_retry_exhausted(reset_env, monkeypatch):
 
     monkeypatch.setattr(pb, "psycopg2", AlwaysFailPsycopg())
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
     ok, err = writer.write("public.cps.za.test", message)
-    del type(writer)._pg_config
 
     assert not ok
     assert "failed with unknown error" in err
@@ -530,13 +538,14 @@ def test_write_discards_connection_on_non_operational_error(reset_env, monkeypat
 
     monkeypatch.setattr(pb, "psycopg2", FailPsycopg())
     writer = WriterPostgres({})
-    type(writer)._pg_config = property(
-        lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
     ok, _ = writer.write("public.cps.za.test", message)
-    del type(writer)._pg_config
 
     assert not ok
     assert writer._connection is None
