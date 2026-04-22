@@ -15,6 +15,7 @@
 #
 
 import json
+import re
 from unittest.mock import patch, mock_open, MagicMock
 
 import jwt
@@ -267,9 +268,9 @@ def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event,
     "user_perms,payload_updates",
     [
         ({}, {}),
-        ({"source_app": ["app"]}, {}),
-        ({"tenant_id": ["avms|avm"]}, {"tenant_id": "avms"}),
-        ({"source_app": ["app"], "environment": ["dev"]}, {}),
+        ({"source_app": [re.compile("app")]}, {}),
+        ({"tenant_id": [re.compile("avms|avm")]}, {"tenant_id": "avms"}),
+        ({"source_app": [re.compile("app")], "environment": [re.compile("dev")]}, {}),
     ],
     ids=["no-restrictions", "exact-match", "regex-match", "multiple-fields"],
 )
@@ -295,10 +296,10 @@ def test_post_permission_allowed(event_gate_module, make_event, valid_payload, u
 @pytest.mark.parametrize(
     "user_perms,payload_updates,expected_fragment",
     [
-        ({"environment": ["prod"]}, {}, "environment"),
-        ({"nonexistent_field": ["val"]}, {}, "nonexistent_field"),
-        ({"tenant_id": ["avms|avm"]}, {"tenant_id": "xxxx"}, "tenant_id"),
-        ({"source_app": ["other"], "environment": ["prod"]}, {}, "source_app"),
+        ({"environment": [re.compile("prod")]}, {}, "environment"),
+        ({"nonexistent_field": [re.compile("val")]}, {}, "nonexistent_field"),
+        ({"tenant_id": [re.compile("avms|avm")]}, {"tenant_id": "xxxx"}, "tenant_id"),
+        ({"source_app": [re.compile("other")], "environment": [re.compile("prod")]}, {}, "source_app"),
     ],
     ids=["value-mismatch", "missing-field", "regex-no-match", "first-constraint-fails"],
 )

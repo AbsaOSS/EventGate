@@ -19,14 +19,15 @@
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from boto3.resources.base import ServiceResource
 
 logger = logging.getLogger(__name__)
 
-# {topic: {user: {restricted_field: [allowed_values]}}}
-TopicAccessMap = dict[str, dict[str, dict[str, list[str]]]]
+FieldPatterns = dict[str, list[re.Pattern[str]]]
+TopicAccessMap = dict[str, dict[str, FieldPatterns]]
 
 
 def load_config(conf_dir: str) -> dict[str, Any]:
@@ -43,6 +44,37 @@ def load_config(conf_dir: str) -> dict[str, Any]:
     return config
 
 
+def _compile_topic_patterns(
+    topic: str,
+    user_constraints: dict[str, dict[str, list[str]]],
+) -> dict[str, FieldPatterns]:
+    """Compile regex pattern strings into `re.Pattern` objects.
+    Args:
+        topic: Topic name.
+        user_constraints: Per-user field constraint mapping with raw pattern strings.
+    Returns:
+        Same structure with pattern strings replaced by compiled `re.Pattern` objects.
+    Raises:
+        ValueError: If a pattern string is not a valid regular expression.
+    """
+    compiled: dict[str, FieldPatterns] = {}
+    for user, constraints in user_constraints.items():
+        compiled_fields: FieldPatterns = {}
+        for field, patterns in constraints.items():
+            compiled_patterns: list[re.Pattern[str]] = []
+            for pattern in patterns:
+                try:
+                    compiled_patterns.append(re.compile(pattern))
+                except re.error as exc:
+                    raise ValueError(
+                        f"Topic '{topic}', user '{user}', field '{field}': "
+                        f"invalid regex pattern '{pattern}': {exc}."
+                    ) from exc
+            compiled_fields[field] = compiled_patterns
+        compiled[user] = compiled_fields
+    return compiled
+
+
 def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
     """Normalize access config to unified internal format.
     Converts the legacy list format (`["user1", "user2"]`) to the dict
@@ -51,7 +83,7 @@ def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
     Args:
         access_data: Parsed JSON from access config file (mixed list/dict values).
     Returns:
-        Normalized mapping: `{topic: {user: {restricted_field: [allowed_values]}}}` .
+        Normalized mapping: `{topic: {user: {restricted_field: [compiled_patterns]}}}` .
     """
     result: TopicAccessMap = {}
     for topic, value in access_data.items():
@@ -70,7 +102,7 @@ def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
                         raise ValueError(
                             f"Topic '{topic}', user '{user}', field '{field}': patterns must be a list, got {type(patterns).__name__}."
                         )
-            result[topic] = value
+            result[topic] = _compile_topic_patterns(topic, value)
         else:
             raise ValueError(f"Topic '{topic}': expected list or dict, got {type(value).__name__}.")
     return result

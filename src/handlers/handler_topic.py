@@ -19,7 +19,6 @@
 import json
 import logging
 import os
-import re
 from typing import Any
 
 import jwt
@@ -206,11 +205,11 @@ class HandlerTopic:
         if not user_permissions:
             return True, None
 
-        for restricted_field, allowed_values in user_permissions.items():
+        for restricted_field, compiled_patterns in user_permissions.items():
             message_value = message.get(restricted_field)
             if message_value is None:
                 return False, f"Required field '{restricted_field}' missing from message"
-            if not any(re.fullmatch(allowed, str(message_value)) for allowed in allowed_values):
+            if not any(pattern.fullmatch(str(message_value)) for pattern in compiled_patterns):
                 return False, f"Field '{restricted_field}' value not permitted for user '{user}'"
 
         return True, None

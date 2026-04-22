@@ -17,6 +17,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -138,12 +139,14 @@ class TestNormalizeAccessConfig:
         assert {"user1": {}, "user2": {}} == result["topic"]
 
     def test_normalize_dict_format(self) -> None:
-        """Test that dict format with permissions is preserved as-is."""
+        """Test that dict format with permissions compiles patterns."""
         raw = {"topic": {"user1": {"source_app": ["app1"]}, "user2": {}}}
 
         result = _normalize_access_config(raw)
 
-        assert {"source_app": ["app1"]} == result["topic"]["user1"]
+        assert 1 == len(result["topic"]["user1"]["source_app"])
+        assert "app1" == result["topic"]["user1"]["source_app"][0].pattern
+        assert isinstance(result["topic"]["user1"]["source_app"][0], re.Pattern)
         assert {} == result["topic"]["user2"]
 
     def test_normalize_mixed_format(self) -> None:
@@ -156,7 +159,8 @@ class TestNormalizeAccessConfig:
         result = _normalize_access_config(raw)
 
         assert {"userA": {}} == result["list.topic"]
-        assert {"environment": ["prod"]} == result["dict.topic"]["userB"]
+        assert 1 == len(result["dict.topic"]["userB"]["environment"])
+        assert "prod" == result["dict.topic"]["userB"]["environment"][0].pattern
 
     @pytest.mark.parametrize(
         "raw,error_fragment",
@@ -164,8 +168,9 @@ class TestNormalizeAccessConfig:
             ({"t": "bad"}, "expected list or dict"),
             ({"t": {"u": "not-a-dict"}}, "constraints must be a dict"),
             ({"t": {"u": {"field": "not-a-list"}}}, "patterns must be a list"),
+            ({"t": {"u": {"field": ["[invalid"]}}}, "invalid regex pattern"),
         ],
-        ids=["invalid-topic-value", "invalid-constraints", "invalid-patterns"],
+        ids=["invalid-topic-value", "invalid-constraints", "invalid-patterns", "invalid-regex"],
     )
     def test_normalize_rejects_malformed_config(self, raw: dict, error_fragment: str) -> None:
         """Test that malformed access config raises ValueError."""
