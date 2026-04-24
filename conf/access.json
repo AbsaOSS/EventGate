@@ -1,5 +1,13 @@
 {
-    "public.cps.za.runs": ["FooBarUser", "IntegrationTestUser"],
+    "public.cps.za.runs": {
+        "FooBarUser": {},
+        "IntegrationTestUser": {},
+        "RestrictedTestUser": {
+            "source_app": ["restricted-app"],
+            "environment": ["dev"],
+            "tenant_id": ["avms"]
+        }
+    },
     "public.cps.za.dlchange": ["FooUser", "BarUser"],
     "public.cps.za.test": ["TestUser"]
 }

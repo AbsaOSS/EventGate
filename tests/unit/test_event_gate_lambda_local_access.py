@@ -72,4 +72,4 @@ def test_local_access_config_branch():
         egl_reloaded = importlib.reload(egl)
 
     assert not egl_reloaded.config["access_config"].startswith("s3://")  # type: ignore[attr-defined]
-    assert egl_reloaded.handler_topic.access_config["public.cps.za.test"] == ["User"]  # type: ignore[attr-defined]
+    assert {"User": {}} == egl_reloaded.handler_topic.access_config["public.cps.za.test"]  # type: ignore[attr-defined]

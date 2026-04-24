@@ -104,7 +104,28 @@ Configuration keys:
   - `"/path/to/ca-bundle.pem"` - custom CA bundle
 
 Supporting configs:
-- `access.json` – map: topicName -> array of authorized subjects (JWT `sub`). May reside locally or at S3 path referenced by `access_config`.
+- `access.json` – controls which users can publish to which topics, with optional message field restrictions. Loaded from the local path or S3 URI set in `access_config`.
+
+  Users can be listed with no restrictions, or with per-field constraints that limit what message content they can produce:
+
+  ```json
+  {
+    "topic.runs": {
+      "service-account-1": {},
+      "service-account-2": {
+        "source_app": ["my-app", "other-app"],
+        "environment": ["prod"],
+        "tenant_id":  ["^tenant-prod-.*$"]
+      }
+    },
+    "topic.other": ["service-account-3", "service-account-4"]
+  }
+  ```
+
+  > Note: An empty object (`{}`) means the user has no field restrictions. The list format (`["user1", "user2"]`) is a shorthand where all users are unrestricted. Both formats can coexist in the same file. 
+  > 
+  > When field constraints are configured, all fields must match. Values support regex patterns.
+
 - `topic_schemas/*.json` – each file contains a JSON Schema for a topic. In the current code these are explicitly loaded inside `event_gate_lambda.py`. (Future enhancement: auto-discover or index file.)
 
 Environment variables:

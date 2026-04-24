@@ -52,11 +52,14 @@ def test_config_files_have_required_keys(config_files, key):
 def test_access_json_structure():
     path = os.path.join(CONF_DIR, "access.json")
     data = load_json(path)
-    assert isinstance(data, dict), "access.json must contain an object mapping topic -> list[user]"
+    assert isinstance(data, dict), "access.json must contain an object mapping topic -> users"
     for topic, users in data.items():
         assert isinstance(topic, str)
-        assert isinstance(users, list), f"Topic {topic} value must be a list of users"
-        assert all(isinstance(u, str) for u in users), f"All users for topic {topic} must be strings"
+        assert isinstance(users, (list, dict)), f"Topic {topic} value must be a list or dict of users"
+        if isinstance(users, list):
+            assert all(isinstance(u, str) for u in users), f"All users for topic {topic} must be strings"
+        else:
+            assert all(isinstance(u, str) for u in users), f"All user keys for topic {topic} must be strings"
 
 
 @pytest.mark.parametrize("topic_file", glob(os.path.join(CONF_DIR, "topic_schemas", "*.json")))

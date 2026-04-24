@@ -17,13 +17,14 @@
 
 import json
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from src.utils.config_loader import load_access_config, load_config, load_topic_names
+from src.utils.config_loader import _normalize_access_config, load_access_config, load_config, load_topic_names
 
 
 @pytest.fixture
@@ -74,8 +75,8 @@ class TestLoadAccessConfig:
 
         result = load_access_config(config, aws_s3)
 
-        assert ["UserA"] == result["public.cps.za.runs"]
-        assert ["UserB"] == result["public.cps.za.test"]
+        assert {"UserA": {}} == result["public.cps.za.runs"]
+        assert {"UserB": {}} == result["public.cps.za.test"]
         aws_s3.Bucket.assert_not_called()
 
     def test_loads_from_s3(self) -> None:
@@ -91,7 +92,7 @@ class TestLoadAccessConfig:
 
         result = load_access_config(config, mock_s3)
 
-        assert ["S3User"] == result["public.cps.za.runs"]
+        assert {"S3User": {}} == result["public.cps.za.runs"]
         mock_s3.Bucket.assert_called_once_with("my-bucket")
         mock_s3.Bucket.return_value.Object.assert_called_once_with("conf/access.json")
 
@@ -124,3 +125,54 @@ class TestLoadTopicNames:
         result = load_topic_names(str(tmp_path))
 
         assert [] == result
+
+
+class TestNormalizeAccessConfig:
+    """Tests for _normalize_access_config()."""
+
+    def test_normalize_list_format(self) -> None:
+        """Test that list format is converted to dict with empty permissions."""
+        raw = {"topic": ["user1", "user2"]}
+
+        result = _normalize_access_config(raw)
+
+        assert {"user1": {}, "user2": {}} == result["topic"]
+
+    def test_normalize_dict_format(self) -> None:
+        """Test that dict format with permissions compiles patterns."""
+        raw = {"topic": {"user1": {"source_app": ["app1"]}, "user2": {}}}
+
+        result = _normalize_access_config(raw)
+
+        assert 1 == len(result["topic"]["user1"]["source_app"])
+        assert "app1" == result["topic"]["user1"]["source_app"][0].pattern
+        assert isinstance(result["topic"]["user1"]["source_app"][0], re.Pattern)
+        assert {} == result["topic"]["user2"]
+
+    def test_normalize_mixed_format(self) -> None:
+        """Test that mixed list and dict formats are handled correctly."""
+        raw = {
+            "list.topic": ["userA"],
+            "dict.topic": {"userB": {"environment": ["prod"]}},
+        }
+
+        result = _normalize_access_config(raw)
+
+        assert {"userA": {}} == result["list.topic"]
+        assert 1 == len(result["dict.topic"]["userB"]["environment"])
+        assert "prod" == result["dict.topic"]["userB"]["environment"][0].pattern
+
+    @pytest.mark.parametrize(
+        "raw,error_fragment",
+        [
+            ({"t": "bad"}, "expected list or dict"),
+            ({"t": {"u": "not-a-dict"}}, "constraints must be a dict"),
+            ({"t": {"u": {"field": "not-a-list"}}}, "patterns must be a list"),
+            ({"t": {"u": {"field": ["[invalid"]}}}, "invalid regex pattern"),
+        ],
+        ids=["invalid-topic-value", "invalid-constraints", "invalid-patterns", "invalid-regex"],
+    )
+    def test_normalize_rejects_malformed_config(self, raw: dict, error_fragment: str) -> None:
+        """Test that malformed access config raises ValueError."""
+        with pytest.raises(ValueError, match=error_fragment):
+            _normalize_access_config(raw)

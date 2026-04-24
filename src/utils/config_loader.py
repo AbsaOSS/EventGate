@@ -19,11 +19,15 @@
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from boto3.resources.base import ServiceResource
 
 logger = logging.getLogger(__name__)
+
+FieldPatterns = dict[str, list[re.Pattern[str]]]
+TopicAccessMap = dict[str, dict[str, FieldPatterns]]
 
 
 def load_config(conf_dir: str) -> dict[str, Any]:
@@ -40,32 +44,96 @@ def load_config(conf_dir: str) -> dict[str, Any]:
     return config
 
 
-def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> dict[str, list[str]]:
+def _compile_topic_patterns(
+    topic: str,
+    user_constraints: dict[str, dict[str, list[str]]],
+) -> dict[str, FieldPatterns]:
+    """Compile regex pattern strings into `re.Pattern` objects.
+    Args:
+        topic: Topic name.
+        user_constraints: Per-user field constraint mapping with raw pattern strings.
+    Returns:
+        Same structure with pattern strings replaced by compiled `re.Pattern` objects.
+    Raises:
+        ValueError: If a pattern string is not a valid regular expression.
+    """
+    compiled: dict[str, FieldPatterns] = {}
+    for user, constraints in user_constraints.items():
+        compiled_fields: FieldPatterns = {}
+        for field, patterns in constraints.items():
+            compiled_patterns: list[re.Pattern[str]] = []
+            for pattern in patterns:
+                try:
+                    compiled_patterns.append(re.compile(pattern))
+                except re.error as exc:
+                    raise ValueError(
+                        f"Topic '{topic}', user '{user}', field '{field}': "
+                        f"invalid regex pattern '{pattern}': {exc}."
+                    ) from exc
+            compiled_fields[field] = compiled_patterns
+        compiled[user] = compiled_fields
+    return compiled
+
+
+def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
+    """Normalize access config to unified internal format.
+    Converts the legacy list format (`["user1", "user2"]`) to the dict
+    format (`{"user1": {}, "user2": {}}`) so that all downstream code
+    can rely on a single structure.
+    Args:
+        access_data: Parsed JSON from access config file (mixed list/dict values).
+    Returns:
+        Normalized mapping: `{topic: {user: {restricted_field: [compiled_patterns]}}}` .
+    """
+    result: TopicAccessMap = {}
+    for topic, value in access_data.items():
+        if isinstance(value, list):
+            # Legacy format: plain user list with no field restrictions
+            result[topic] = {user: {} for user in value}
+        elif isinstance(value, dict):
+            # New format: per-user field constraints already in the expected structure
+            for user, constraints in value.items():
+                if not isinstance(constraints, dict):
+                    raise ValueError(
+                        f"Topic '{topic}', user '{user}': constraints must be a dict, got {type(constraints).__name__}."
+                    )
+                for field, patterns in constraints.items():
+                    if not isinstance(patterns, list):
+                        raise ValueError(
+                            f"Topic '{topic}', user '{user}', field '{field}': patterns must be a list, got {type(patterns).__name__}."
+                        )
+            result[topic] = _compile_topic_patterns(topic, value)
+        else:
+            raise ValueError(f"Topic '{topic}': expected list or dict, got {type(value).__name__}.")
+    return result
+
+
+def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> TopicAccessMap:
     """Load access control configuration from S3 or a local file.
     Args:
         config: Main configuration dict (must contain `access_config` key).
         aws_s3: Boto3 S3 resource for loading from S3 paths.
     Returns:
-        Dictionary mapping topic names to lists of authorised users.
+        Normalized mapping of topic names to per-user permission constraints.
     """
     access_path: str = config["access_config"]
     logger.debug("Loading access configuration from %s.", access_path)
 
-    access_config: dict[str, list[str]] = {}
+    access_data: dict[str, Any] = {}
 
     if access_path.startswith("s3://"):
         name_parts = access_path.split("/")
         bucket_name = name_parts[2]
         bucket_object_key = "/".join(name_parts[3:])
-        access_config = json.loads(
+        access_data = json.loads(
             aws_s3.Bucket(bucket_name).Object(bucket_object_key).get()["Body"].read().decode("utf-8")
         )
     else:
         with open(access_path, "r", encoding="utf-8") as file:
-            access_config = json.load(file)
+            access_data = json.load(file)
 
     logger.debug("Loaded access configuration.")
-    return access_config
+    return _normalize_access_config(access_data)
 
 
 def load_topic_names(conf_dir: str) -> list[str]:

@@ -284,6 +284,8 @@ class WriterPostgres(Writer):
                 user=db_config["user"],
                 password=db_config["password"],
                 port=db_config["port"],
+                connect_timeout=10,
+                gssencmode="disable",
             ) as connection:
                 with connection.cursor() as cursor:
                     if topic_name == "public.cps.za.dlchange":
