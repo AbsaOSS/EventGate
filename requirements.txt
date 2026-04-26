@@ -10,7 +10,7 @@ cryptography==46.0.7
 jsonschema==4.26.0
 PyJWT==2.12.1
 requests==2.33.1
-boto3==1.42.91
+boto3==1.42.96
 confluent-kafka==2.14.0
 moto[s3,secretsmanager,events]==5.1.22
 testcontainers==4.14.2
