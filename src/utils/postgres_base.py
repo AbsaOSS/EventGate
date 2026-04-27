@@ -121,6 +121,7 @@ class PostgresBase:
             "password": pg_config["password"],
             "port": pg_config["port"],
             "connect_timeout": POSTGRES_CONNECT_TIMEOUT_SECONDS,
+            "gssencmode": "disable",
         }
         options = self._connect_options()
         if options:
