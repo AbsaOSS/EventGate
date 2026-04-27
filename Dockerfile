@@ -21,7 +21,6 @@ FROM --platform=linux/arm64 public.ecr.aws/lambda/python:3.13-arm64
 ARG TRUSTED_SSL_CERTS=./trusted_certs
 # Artifacts for kerberized sasl_ssl
 ARG SASL_SSL_ARTIFACTS=./sasl_ssl_artifacts
-RUN apk add --no-cache ca-certificates
 
 # Trusted certs
 COPY $TRUSTED_SSL_CERTS /opt/certs/
@@ -32,7 +31,7 @@ RUN \
   echo "######################################################" && \
   for FILE in `ls /opt/certs/*.pem /opt/certs/*.crt`; \
     do cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt ; done && \
-      update-ca-certificates && \
+      update-ca-trust && \
   echo "###############################################" && \
   echo "### Install                                  ###" && \
   echo "### -> Basics                                 ###" && \
