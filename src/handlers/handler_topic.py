@@ -28,7 +28,7 @@ from jsonschema.exceptions import ValidationError
 
 from src.handlers.handler_token import HandlerToken
 from src.utils.conf_path import CONF_DIR
-from src.utils.config_loader import load_access_config
+from src.utils.config_loader import TopicAccessMap, load_access_config
 from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
 from src.utils.utils import build_error_response
 from src.writers.writer import Writer
@@ -50,7 +50,7 @@ class HandlerTopic:
         self.aws_s3 = aws_s3
         self.handler_token = handler_token
         self.writers = writers
-        self.access_config: dict[str, list[str]] = {}
+        self.access_config: TopicAccessMap = {}
         self.topics: dict[str, dict[str, Any]] = {}
 
     def with_load_access_config(self) -> "HandlerTopic":
@@ -160,6 +160,10 @@ class HandlerTopic:
         if topic_name not in self.access_config or user not in self.access_config[topic_name]:
             return build_error_response(403, "auth", "User not authorized for topic")
 
+        allowed, perm_error = self._validate_user_permissions(topic_name, user, topic_message)
+        if not allowed:
+            return build_error_response(403, "permission", perm_error or "Permission denied")
+
         try:
             validate(instance=topic_message, schema=self.topics[topic_name])
         except ValidationError as exc:
@@ -183,3 +187,30 @@ class HandlerTopic:
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"success": True, "statusCode": 202}),
         }
+
+    def _validate_user_permissions(
+        self,
+        topic_name: str,
+        user: str,
+        message: dict[str, Any],
+    ) -> tuple[bool, str | None]:
+        """Check message fields against the user's permission constraints.
+        Args:
+            topic_name: Target topic name.
+            user: Authenticated user.
+            message: Message payload to validate.
+        Returns:
+            Tuple of (allowed, error_message). `error_message` is `None` when allowed.
+        """
+        user_permissions = self.access_config[topic_name][user]
+        if not user_permissions:
+            return True, None
+
+        for restricted_field, compiled_patterns in user_permissions.items():
+            message_value = message.get(restricted_field)
+            if message_value is None:
+                return False, f"Required field '{restricted_field}' missing from message"
+            if not any(pattern.fullmatch(str(message_value)) for pattern in compiled_patterns):
+                return False, f"Field '{restricted_field}' value not permitted for user '{user}'"
+
+        return True, None
