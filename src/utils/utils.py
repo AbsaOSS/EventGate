@@ -95,6 +95,6 @@ def load_postgres_config(secret_name: str, secret_region: str) -> dict[str, Any]
 
     aws_secrets = boto3.Session().client(service_name="secretsmanager", region_name=secret_region)
     postgres_secret = aws_secrets.get_secret_value(SecretId=secret_name)["SecretString"]
-    config: dict[str, Any] = json.loads(postgres_secret)
+    aws_pg_secret: dict[str, Any] = json.loads(postgres_secret)
     logger.debug("Loaded PostgreSQL config from Secrets Manager.")
-    return config
+    return aws_pg_secret

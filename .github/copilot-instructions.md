@@ -31,6 +31,7 @@ Python style
 Patterns
 - `__init__` methods must not raise exceptions; defer validation and connection to first use (lazy init)
 - Writers: inherit from `Writer(ABC)`, implement `write(topic, message) -> (bool, str|None)` and `check_health() -> (bool, str)`
+- PostgreSQL: `WriterPostgres` and `ReaderPostgres` cache a single connection per instance
 - Route dispatch via `ROUTE_MAP` dict mapping routes to handler functions in `event_gate_lambda.py` and `event_stats_lambda.py`
 - Separate business logic from environment access (env vars, file I/O, network calls)
 - No duplicate validation; centralize parsing in one layer where practical
@@ -50,3 +51,6 @@ Testing
 Quality gates (run after changes, fix only if below threshold)
 - Run all quality gates at once: `make qa`
 - Once a quality gate passes, do not re-run it in different scenarios
+
+Git workflow
+- Do NOT create git commits; committing is the developer's responsibility
