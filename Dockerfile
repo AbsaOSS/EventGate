@@ -29,7 +29,7 @@ RUN \
   echo "######################################################" && \
   echo "### Import trusted certs before doing anything else ###" && \
   echo "######################################################" && \
-  for FILE in `ls /opt/certs/*.pem`; \
+  for FILE in `ls /opt/certs/*.pem /opt/certs/*.crt`; \
     do cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt ; done && \
   echo "###############################################" && \
   echo "### Install                                  ###" && \
@@ -46,7 +46,7 @@ RUN \
   echo "#################" && \
     mkdir -p /tmp/env-install-workdir/librdkafka && \
     cd /tmp/env-install-workdir/librdkafka && \
-    wget https://github.com/edenhill/librdkafka/archive/v2.4.0.tar.gz && \
+    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/edenhill/librdkafka/archive/v2.4.0.tar.gz && \
     tar -xf v2.4.0.tar.gz && \
     cd /tmp/env-install-workdir/librdkafka/librdkafka-2.4.0 && \
     ./configure && make && make install && \
@@ -59,7 +59,7 @@ RUN \
   echo "######################" && \
     mkdir -p /tmp/env-install-workdir/confluent-kafka && \
     cd /tmp/env-install-workdir/confluent-kafka && \
-    wget https://github.com/confluentinc/confluent-kafka-python/archive/v2.4.0.tar.gz && \
+    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/confluent-kafka-python/archive/v2.4.0.tar.gz && \
     tar -xf v2.4.0.tar.gz && \
     cd /tmp/env-install-workdir/confluent-kafka/confluent-kafka-python-2.4.0 && \
     CPPFLAGS="-I/usr/local/include" LDFLAGS="-L/opt" python setup.py install && \
