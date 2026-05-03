@@ -12,7 +12,7 @@ PyJWT==2.12.1
 requests==2.33.1
 boto3==1.42.96
 confluent-kafka==2.14.0
-moto[s3,secretsmanager,events]==5.1.22
+moto[s3,secretsmanager,events]==5.2.0
 testcontainers==4.14.2
 docker==7.1.0
 # psycopg2-binary==2.9.10 # Ideal for local development, but not for long-term production use
