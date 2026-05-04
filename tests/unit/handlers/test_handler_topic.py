@@ -22,6 +22,7 @@ import jwt
 import pytest
 
 from src.handlers.handler_topic import HandlerTopic
+from src.writers.writer import WriteError
 
 
 ## load_access_config()
@@ -191,7 +192,7 @@ def test_post_invalid_token_decode(event_gate_module, make_event, valid_payload)
 def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
         for writer in event_gate_module.handler_topic.writers.values():
-            writer.write = MagicMock(return_value=(True, None))
+            writer.write = MagicMock(return_value=None)
 
         event = make_event(
             "/topics/{topic_name}",
@@ -209,9 +210,9 @@ def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
 
 def test_post_single_writer_failure(event_gate_module, make_event, valid_payload):
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
-        event_gate_module.handler_topic.writers["kafka"].write = MagicMock(return_value=(False, "Kafka boom"))
-        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=(True, None))
-        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=(True, None))
+        event_gate_module.handler_topic.writers["kafka"].write = MagicMock(side_effect=WriteError("Kafka boom"))
+        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=None)
+        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=None)
 
         event = make_event(
             "/topics/{topic_name}",
@@ -230,9 +231,9 @@ def test_post_single_writer_failure(event_gate_module, make_event, valid_payload
 
 def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payload):
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
-        event_gate_module.handler_topic.writers["kafka"].write = MagicMock(return_value=(False, "Kafka A"))
-        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=(False, "EB B"))
-        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=(True, None))
+        event_gate_module.handler_topic.writers["kafka"].write = MagicMock(side_effect=WriteError("Kafka A"))
+        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(side_effect=WriteError("EB B"))
+        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=None)
 
         event = make_event(
             "/topics/{topic_name}",
@@ -250,7 +251,7 @@ def test_post_multiple_writer_failures(event_gate_module, make_event, valid_payl
 def test_token_extraction_lowercase_bearer_header(event_gate_module, make_event, valid_payload):
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
         for writer in event_gate_module.handler_topic.writers.values():
-            writer.write = MagicMock(return_value=(True, None))
+            writer.write = MagicMock(return_value=None)
 
         event = make_event(
             "/topics/{topic_name}",
@@ -280,7 +281,7 @@ def test_post_permission_allowed(event_gate_module, make_event, valid_payload, u
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
         event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": user_perms}
         for writer in event_gate_module.handler_topic.writers.values():
-            writer.write = MagicMock(return_value=(True, None))
+            writer.write = MagicMock(return_value=None)
 
         event = make_event(
             "/topics/{topic_name}",

@@ -90,7 +90,7 @@ class HandlerStats:
                 cursor=cursor,
                 limit=limit,
             )
-        except RuntimeError as exc:
+        except RuntimeError:
             logger.exception("Stats query failed for topic %s.", topic_name)
             return build_error_response(500, "database", "Stats query failed.")
 

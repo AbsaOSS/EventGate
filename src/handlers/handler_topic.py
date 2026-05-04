@@ -31,7 +31,7 @@ from src.utils.conf_path import CONF_DIR
 from src.utils.config_loader import TopicAccessMap, load_access_config
 from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
 from src.utils.utils import build_error_response
-from src.writers.writer import Writer
+from src.writers.writer import WriteError, Writer
 
 logger = logging.getLogger(__name__)
 
@@ -171,9 +171,10 @@ class HandlerTopic:
 
         errors = []
         for writer_name, writer in self.writers.items():
-            ok, err = writer.write(topic_name, topic_message)
-            if not ok:
-                errors.append({"type": writer_name, "message": err})
+            try:
+                writer.write(topic_name, topic_message)
+            except WriteError as exc:
+                errors.append({"type": writer_name, "message": str(exc)})
 
         if errors:
             return {

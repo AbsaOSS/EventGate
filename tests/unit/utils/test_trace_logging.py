@@ -45,9 +45,8 @@ def test_trace_eventbridge(caplog):
     mock_client.put_events.return_value = {"FailedEntryCount": 0, "Entries": []}
     writer._client = mock_client
 
-    ok, err = writer.write("topic.eb", {"k": 1})
+    writer.write("topic.eb", {"k": 1})
 
-    assert ok and err is None
     assert any("EventBridge payload" in rec.message for rec in caplog.records)
 
 
@@ -68,9 +67,8 @@ def test_trace_kafka(caplog):
     writer = writer_kafka.WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = FakeProducer()
 
-    ok, err = writer.write("topic.kf", {"k": 2})
+    writer.write("topic.kf", {"k": 2})
 
-    assert ok and err is None
     assert any("Kafka payload" in rec.message for rec in caplog.records)
 
 
@@ -117,7 +115,6 @@ def test_trace_postgres(caplog, monkeypatch):
     writer._pg_config = {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}
 
     message = {"event_id": "e", "tenant_id": "t", "source_app": "a", "environment": "dev", "timestamp": 1}
-    ok, err = writer.write("public.cps.za.test", message)
+    writer.write("public.cps.za.test", message)
 
-    assert ok and err is None
     assert any("Postgres payload" in rec.message for rec in caplog.records)

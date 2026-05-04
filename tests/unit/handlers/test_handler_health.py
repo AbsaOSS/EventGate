@@ -18,12 +18,21 @@ import json
 from unittest.mock import MagicMock
 
 from src.handlers.handler_health import HandlerHealth
+from src.writers.writer import HealthCheckError
 
 
-def _create_mock_writer(check_health_return):
-    """Create a mock writer with check_health returning the specified value."""
+def _create_mock_writer(healthy=True, error_msg=None, status=None):
+    """Create a mock writer.
+    Args:
+        healthy: If False, check_health raises HealthCheckError.
+        error_msg: Error message for HealthCheckError.
+        status: Return value for check_health (e.g. "not configured"). Defaults to None (healthy).
+    """
     mock = MagicMock()
-    mock.check_health.return_value = check_health_return
+    if healthy:
+        mock.check_health.return_value = status
+    else:
+        mock.check_health.side_effect = HealthCheckError(error_msg)
     return mock
 
 
@@ -34,9 +43,9 @@ def _create_mock_writer(check_health_return):
 def test_get_health_minimal_kafka_healthy():
     """Health check returns 200 when Kafka is initialized and optional writers are disabled."""
     writers = {
-        "kafka": _create_mock_writer((True, "ok")),
-        "eventbridge": _create_mock_writer((True, "not configured")),
-        "postgres": _create_mock_writer((True, "not configured")),
+        "kafka": _create_mock_writer(),
+        "eventbridge": _create_mock_writer(status="not configured"),
+        "postgres": _create_mock_writer(status="not configured"),
     }
     handler = HandlerHealth(writers)
 
@@ -46,15 +55,18 @@ def test_get_health_minimal_kafka_healthy():
     body = json.loads(response["body"])
     assert "ok" == body["status"]
     assert "uptime_seconds" in body
+    assert "ok" == body["dependencies"]["kafka"]
+    assert "not configured" == body["dependencies"]["eventbridge"]
+    assert "not configured" == body["dependencies"]["postgres"]
 
 
 ## Healthy state with all writers enabled
 def test_get_health_all_writers_enabled_and_healthy():
     """Health check returns 200 when all writers are enabled and properly configured."""
     writers = {
-        "kafka": _create_mock_writer((True, "ok")),
-        "eventbridge": _create_mock_writer((True, "ok")),
-        "postgres": _create_mock_writer((True, "ok")),
+        "kafka": _create_mock_writer(),
+        "eventbridge": _create_mock_writer(),
+        "postgres": _create_mock_writer(),
     }
     handler = HandlerHealth(writers)
 
@@ -64,15 +76,16 @@ def test_get_health_all_writers_enabled_and_healthy():
     body = json.loads(response["body"])
     assert "ok" == body["status"]
     assert "uptime_seconds" in body
+    assert all(v == "ok" for v in body["dependencies"].values())
 
 
 ## Degraded state with all writers failing
 def test_get_health_kafka_not_initialized():
     """Health check returns 503 when Kafka writer is not initialized."""
     writers = {
-        "kafka": _create_mock_writer((False, "producer initialization failed")),
-        "eventbridge": _create_mock_writer((False, "client initialization failed")),
-        "postgres": _create_mock_writer((False, "host not configured")),
+        "kafka": _create_mock_writer(healthy=False, error_msg="producer initialization failed"),
+        "eventbridge": _create_mock_writer(healthy=False, error_msg="client initialization failed"),
+        "postgres": _create_mock_writer(healthy=False, error_msg="host not configured"),
     }
     handler = HandlerHealth(writers)
 
@@ -90,39 +103,43 @@ def test_get_health_kafka_not_initialized():
 def test_get_health_eventbridge_disabled():
     """Health check returns 200 when EventBridge is disabled (empty event_bus_arn)."""
     writers = {
-        "kafka": _create_mock_writer((True, "ok")),
-        "eventbridge": _create_mock_writer((True, "not configured")),
-        "postgres": _create_mock_writer((True, "ok")),
+        "kafka": _create_mock_writer(),
+        "eventbridge": _create_mock_writer(status="not configured"),
+        "postgres": _create_mock_writer(),
     }
     handler = HandlerHealth(writers)
 
     response = handler.get_health()
 
     assert 200 == response["statusCode"]
+    body = json.loads(response["body"])
+    assert "not configured" == body["dependencies"]["eventbridge"]
 
 
 ## Healthy when postgres is disabled
 def test_get_health_postgres_disabled():
     """Health check returns 200 when PostgreSQL is disabled (empty database)."""
     writers = {
-        "kafka": _create_mock_writer((True, "ok")),
-        "eventbridge": _create_mock_writer((True, "ok")),
-        "postgres": _create_mock_writer((True, "not configured")),
+        "kafka": _create_mock_writer(),
+        "eventbridge": _create_mock_writer(),
+        "postgres": _create_mock_writer(status="not configured"),
     }
     handler = HandlerHealth(writers)
 
     response = handler.get_health()
 
     assert 200 == response["statusCode"]
+    body = json.loads(response["body"])
+    assert "not configured" == body["dependencies"]["postgres"]
 
 
 ## Degraded state - postgres host not configured
 def test_get_health_postgres_host_not_configured():
     """Health check returns 503 when PostgreSQL host is not configured."""
     writers = {
-        "kafka": _create_mock_writer((True, "ok")),
-        "eventbridge": _create_mock_writer((True, "ok")),
-        "postgres": _create_mock_writer((False, "host not configured")),
+        "kafka": _create_mock_writer(),
+        "eventbridge": _create_mock_writer(),
+        "postgres": _create_mock_writer(healthy=False, error_msg="host not configured"),
     }
     handler = HandlerHealth(writers)
 
@@ -137,9 +154,9 @@ def test_get_health_postgres_host_not_configured():
 def test_get_health_uptime_is_positive():
     """Verify uptime_seconds is calculated and is a positive integer."""
     writers = {
-        "kafka": _create_mock_writer((True, "ok")),
-        "eventbridge": _create_mock_writer((True, "ok")),
-        "postgres": _create_mock_writer((True, "ok")),
+        "kafka": _create_mock_writer(),
+        "eventbridge": _create_mock_writer(),
+        "postgres": _create_mock_writer(),
     }
     handler = HandlerHealth(writers)
 

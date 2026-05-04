@@ -20,6 +20,7 @@ import types
 
 import pytest
 
+from src.writers.writer import WriteError, HealthCheckError
 from src.writers.writer_postgres import WriterPostgres
 import src.utils.postgres_base as pb
 import src.utils.utils as secrets_mod
@@ -188,8 +189,7 @@ def test_insert_test():
 def test_write_skips_when_no_database(reset_env, monkeypatch):
     writer = WriterPostgres({})
     monkeypatch.setattr(type(writer), "_pg_config", property(lambda self: {"database": ""}))
-    ok, err = writer.write("public.cps.za.test", {})
-    assert ok and err is None
+    writer.write("public.cps.za.test", {})
 
 
 def test_write_fails_when_connection_field_missing(reset_env, monkeypatch):
@@ -199,9 +199,8 @@ def test_write_fails_when_connection_field_missing(reset_env, monkeypatch):
         "_pg_config",
         property(lambda self: {"database": "db", "host": "", "user": "u", "password": "p", "port": 5432}),
     )
-    ok, err = writer.write("public.cps.za.test", {})
-    assert not ok
-    assert "host" in err and "not configured" in err
+    with pytest.raises(WriteError, match="host.*not configured"):
+        writer.write("public.cps.za.test", {})
 
 
 def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
@@ -212,11 +211,10 @@ def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
         property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     monkeypatch.setattr(pb, "psycopg2", None)
-    ok, err = writer.write("public.cps.za.test", {})
-    assert ok and err is None
+    writer.write("public.cps.za.test", {})
 
 
-def test_write_unknown_topic_returns_false(reset_env, monkeypatch):
+def test_write_unknown_topic_raises(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
     writer = WriterPostgres({})
@@ -225,8 +223,8 @@ def test_write_unknown_topic_returns_false(reset_env, monkeypatch):
         "_pg_config",
         property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
-    ok, err = writer.write("public.cps.za.unknown", {})
-    assert not ok and "Unknown topic" in err
+    with pytest.raises(WriteError, match="Unknown topic"):
+        writer.write("public.cps.za.unknown", {})
 
 
 def test_write_success_known_topic(reset_env, monkeypatch):
@@ -239,11 +237,11 @@ def test_write_success_known_topic(reset_env, monkeypatch):
         property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
-    ok, err = writer.write("public.cps.za.test", message)
-    assert ok and err is None and 1 == len(store)
+    writer.write("public.cps.za.test", message)
+    assert 1 == len(store)
 
 
-def test_write_exception_returns_false(reset_env, monkeypatch):
+def test_write_exception_raises(reset_env, monkeypatch):
     class FailingPsycopg:
         def connect(self, **kwargs):
             raise RuntimeError("boom")
@@ -255,8 +253,8 @@ def test_write_exception_returns_false(reset_env, monkeypatch):
         "_pg_config",
         property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
-    ok, err = writer.write("public.cps.za.test", {})
-    assert not ok and "failed with unknown error" in err
+    with pytest.raises(WriteError, match="failed with unknown error"):
+        writer.write("public.cps.za.test", {})
 
 
 def test_init_with_secret(monkeypatch, reset_env):
@@ -296,8 +294,8 @@ def test_write_dlchange_success(reset_env, monkeypatch):
         "operation": "append",
         "format": "parquet",
     }
-    ok, err = writer.write("public.cps.za.dlchange", message)
-    assert ok and err is None and 1 == len(store)
+    writer.write("public.cps.za.dlchange", message)
+    assert 1 == len(store)
 
 
 def test_write_runs_success(reset_env, monkeypatch):
@@ -320,14 +318,13 @@ def test_write_runs_success(reset_env, monkeypatch):
         "timestamp_end": 2,
         "jobs": [{"catalog_id": "c", "status": "ok", "timestamp_start": 1, "timestamp_end": 2}],
     }
-    ok, err = writer.write("public.cps.za.runs", message)
-    assert ok and err is None and 2 == len(store)  # run + job insert
+    writer.write("public.cps.za.runs", message)
+    assert 2 == len(store)  # run + job insert
 
 
 def test_check_health_not_configured():
     writer = WriterPostgres({})
-    healthy, msg = writer.check_health()
-    assert healthy and "not configured" == msg
+    assert "not configured" == writer.check_health()
 
 
 def test_check_health_success(reset_env, monkeypatch):
@@ -342,8 +339,7 @@ def test_check_health_success(reset_env, monkeypatch):
 
     monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
-    healthy, msg = writer.check_health()
-    assert healthy and "ok" == msg
+    assert writer.check_health() is None
 
 
 def test_check_health_missing_host(reset_env, monkeypatch):
@@ -358,23 +354,21 @@ def test_check_health_missing_host(reset_env, monkeypatch):
 
     monkeypatch.setattr(secrets_mod.boto3, "Session", MockSession)
     writer = WriterPostgres({})
-    healthy, msg = writer.check_health()
-    assert not healthy and "Missing PostgreSQL secret fields" in msg
+    with pytest.raises(HealthCheckError, match="Missing PostgreSQL secret fields"):
+        writer.check_health()
 
 
 def test_check_health_database_not_configured(monkeypatch):
-    """check_health returns (True, 'database not configured') when database field is empty."""
+    """check_health returns 'not configured' when database field is empty."""
     writer = WriterPostgres({})
     writer._secret_name = "mysecret"
     writer._secret_region = "eu-west-1"
     monkeypatch.setattr(type(writer), "_pg_config", property(lambda self: {"database": ""}))
-    healthy, msg = writer.check_health()
-    assert healthy
-    assert "database not configured" == msg
+    assert "not configured" == writer.check_health()
 
 
 def test_check_health_load_config_exception(mocker):
-    """check_health returns (False, error) when _pg_config raises."""
+    """check_health raises HealthCheckError when _pg_config raises."""
     writer = WriterPostgres({})
     writer._secret_name = "mysecret"
     writer._secret_region = "eu-west-1"
@@ -384,9 +378,8 @@ def test_check_health_load_config_exception(mocker):
         "_pg_config",
         new_callable=lambda: property(lambda self: (_ for _ in ()).throw(ValueError("secret fetch failed"))),
     )
-    healthy, msg = writer.check_health()
-    assert not healthy
-    assert "secret fetch failed" == msg
+    with pytest.raises(HealthCheckError, match="secret fetch failed"):
+        writer.check_health()
 
 
 def test_write_reconnects_on_closed_connection(reset_env, monkeypatch):
@@ -458,10 +451,9 @@ def test_write_does_not_retry_on_operational_error(reset_env, monkeypatch):
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
-    ok, err = writer.write("public.cps.za.test", message)
+    with pytest.raises(WriteError, match="failed with unknown error"):
+        writer.write("public.cps.za.test", message)
 
-    assert not ok
-    assert "failed with unknown error" in err
     assert 1 == psycopg.connect_count
 
 
@@ -502,10 +494,8 @@ def test_write_fails_after_retry_exhausted(reset_env, monkeypatch):
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
-    ok, err = writer.write("public.cps.za.test", message)
-
-    assert not ok
-    assert "failed with unknown error" in err
+    with pytest.raises(WriteError, match="failed with unknown error"):
+        writer.write("public.cps.za.test", message)
 
 
 def test_write_discards_connection_on_non_operational_error(reset_env, monkeypatch):
@@ -545,7 +535,7 @@ def test_write_discards_connection_on_non_operational_error(reset_env, monkeypat
     )
     message = {"event_id": "id", "tenant_id": "ten", "source_app": "app", "environment": "dev", "timestamp": 123}
 
-    ok, _ = writer.write("public.cps.za.test", message)
+    with pytest.raises(WriteError):
+        writer.write("public.cps.za.test", message)
 
-    assert not ok
     assert writer._connection is None

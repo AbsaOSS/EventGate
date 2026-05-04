@@ -24,7 +24,7 @@ from typing import Any, Optional
 from confluent_kafka import Producer, KafkaException
 
 from src.utils.trace_logging import log_payload_at_trace
-from src.writers.writer import Writer
+from src.writers.writer import HealthCheckError, WriteError, Writer
 
 logger = logging.getLogger(__name__)
 
@@ -88,13 +88,13 @@ class WriterKafka(Writer):
         except TypeError:
             return self._producer.flush()
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> None:
         """Publish a message to Kafka.
         Args:
             topic_name: Kafka topic to publish to.
             message: JSON-serializable payload.
-        Returns:
-            Tuple of (success: bool, error_message: str | None).
+        Raises:
+            WriteError: If publishing fails.
         """
         # Lazy initialization of Kafka producer
         if self._producer is None:
@@ -103,7 +103,7 @@ class WriterKafka(Writer):
             # If no bootstrap server configured, skipping Kafka writer
             if self._producer is None:
                 logger.debug("Kafka producer not initialized - skipping Kafka writer.")
-                return True, None
+                return
 
         log_payload_at_trace(logger, "Kafka", topic_name, message)
 
@@ -150,24 +150,25 @@ class WriterKafka(Writer):
         if errors:
             failure_text = "Kafka writer failed: " + "; ".join(errors)
             (logger.exception if has_exception else logger.error)(failure_text)
-            return False, failure_text
+            raise WriteError(failure_text)
 
-        return True, None
-
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check Kafka writer health.
         Returns:
-            Tuple of (is_healthy: bool, message: str).
+            `None` when healthy, `"not configured"` when intentionally disabled.
+        Raises:
+            HealthCheckError: If the Kafka producer cannot be initialized.
         """
         if not self.config.get("kafka_bootstrap_server"):
-            return True, "not configured"
+            return "not configured"
 
         try:
             if self._producer is None:
                 self._producer = self._create_producer()
                 logger.debug("Kafka producer initialized during health check.")
             if self._producer is None:
-                return False, "producer initialization failed"
-            return True, "ok"
+                raise HealthCheckError("producer initialization failed")
         except KafkaException as err:
-            return False, str(err)
+            raise HealthCheckError(str(err)) from err
+
+        return None

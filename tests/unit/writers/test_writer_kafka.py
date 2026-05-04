@@ -17,6 +17,9 @@
 import logging
 from types import SimpleNamespace
 
+import pytest
+
+from src.writers.writer import WriteError, HealthCheckError
 from src.writers.writer_kafka import WriterKafka
 import src.writers.writer_kafka as wk
 
@@ -83,22 +86,20 @@ class FakeProducerTypeError(FakeProducerSuccess):
 
 def test_write_skips_when_producer_none():
     writer = WriterKafka({})  # No kafka_bootstrap_server
-    ok, err = writer.write("topic", {"a": 1})
-    assert ok and err is None
+    writer.write("topic", {"a": 1})
 
 
 def test_write_success():
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = FakeProducerSuccess()
-    ok, err = writer.write("topic", {"b": 2})
-    assert ok and err is None
+    writer.write("topic", {"b": 2})
 
 
 def test_write_async_error():
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = FakeProducerError()
-    ok, err = writer.write("topic", {"c": 3})
-    assert not ok and "ERR" in err
+    with pytest.raises(WriteError, match="ERR"):
+        writer.write("topic", {"c": 3})
 
 
 class DummyKafkaException(Exception):
@@ -114,8 +115,8 @@ def test_write_kafka_exception(monkeypatch):
     monkeypatch.setattr(wk, "KafkaException", DummyKafkaException, raising=False)
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = RaisingProducer()
-    ok, err = writer.write("topic", {"d": 4})
-    assert not ok and "boom" in err
+    with pytest.raises(WriteError, match="boom"):
+        writer.write("topic", {"d": 4})
 
 
 def test_write_flush_retries_until_success(monkeypatch, caplog):
@@ -125,8 +126,7 @@ def test_write_flush_retries_until_success(monkeypatch, caplog):
     producer = FakeProducerFlushSequence([5, 4, 3, 1, 0])
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = producer
-    ok, err = writer.write("topic", {"e": 5})
-    assert ok and err is None
+    writer.write("topic", {"e": 5})
     # It should break as soon as remaining == 0 (after flush call returning 0)
     assert producer.flush_calls == 5  # sequence consumed until 0
     # Warnings logged for attempts before success (flush_calls -1) because last attempt didn't warn
@@ -140,11 +140,10 @@ def test_write_timeout_warning_when_remaining_after_retries(monkeypatch, caplog)
     producer = FakeProducerTimeout(2)
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = producer
-    ok, err = writer.write("topic", {"f": 6})
+    writer.write("topic", {"f": 6})
     timeout_warnings = [
         r.message for r in caplog.records if "timeout" in r.message
     ]  # final warning should mention timeout
-    assert ok and err is None  # function returns success even if timeout warning
     assert timeout_warnings, "Expected timeout warning logged"
     assert producer.flush_calls == 3  # retried 3 times
 
@@ -154,8 +153,7 @@ def test_flush_with_timeout_typeerror_fallback(monkeypatch):
     producer = FakeProducerTypeError()
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = producer
-    ok, err = writer.write("topic", {"g": 7})
-    assert ok and err is None
+    writer.write("topic", {"g": 7})
     # Since flush returns 0 immediately, only one flush call should be needed
     assert producer.flush_calls == 1
 
@@ -165,20 +163,18 @@ def test_flush_with_timeout_typeerror_fallback(monkeypatch):
 
 def test_check_health_not_configured():
     writer = WriterKafka({})
-    healthy, msg = writer.check_health()
-    assert healthy and msg == "not configured"
+    assert "not configured" == writer.check_health()
 
 
 def test_check_health_success():
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = FakeProducerSuccess()
-    healthy, msg = writer.check_health()
-    assert healthy and msg == "ok"
+    writer.check_health()
 
 
 def test_check_health_producer_init_failed(monkeypatch):
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     # Force _create_producer to return None
     monkeypatch.setattr(writer, "_create_producer", lambda: None)
-    healthy, msg = writer.check_health()
-    assert not healthy and "initialization failed" in msg
+    with pytest.raises(HealthCheckError, match="initialization failed"):
+        writer.check_health()

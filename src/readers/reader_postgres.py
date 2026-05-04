@@ -35,6 +35,7 @@ from src.utils.constants import (
     REQUIRED_CONNECTION_FIELDS,
 )
 from src.utils.postgres_base import PsycopgError, PostgresBase
+from src.writers.writer import HealthCheckError
 
 logger = logging.getLogger(__name__)
 
@@ -226,24 +227,24 @@ class ReaderPostgres(PostgresBase):
 
         return row
 
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check PostgreSQL reader health.
-        Returns:
-            Tuple of (is_healthy, message).
+        Raises:
+            HealthCheckError: If the reader configuration is invalid or incomplete.
         """
         if not self._secret_name or not self._secret_region:
-            return False, "postgres secret not configured"
+            raise HealthCheckError("postgres secret not configured")
 
         try:
             pg_config = self._pg_config
         except (BotoCoreError, ClientError, RuntimeError, ValueError, KeyError) as err:
-            return False, str(err)
+            raise HealthCheckError(str(err)) from err
 
         if not pg_config.get("database"):
-            return False, "database not configured"
+            raise HealthCheckError("database not configured")
 
         missing = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
         if missing:
-            return False, f"{missing[0]} not configured"
+            raise HealthCheckError(f"{missing[0]} not configured")
 
-        return True, "ok"
+        return None

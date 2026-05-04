@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.readers.reader_postgres import ReaderPostgres
+from src.writers.writer import HealthCheckError
 import src.utils.postgres_base as pb
 
 _STATS_DESCRIPTION = [
@@ -326,39 +327,32 @@ class TestCheckHealth:
     """Tests for reader health check."""
 
     def test_unhealthy_when_not_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test returns unhealthy when no secret env vars set."""
+        """Test raises HealthCheckError when no secret env vars set."""
         monkeypatch.setenv("POSTGRES_SECRET_NAME", "")
         monkeypatch.setenv("POSTGRES_SECRET_REGION", "")
         reader = ReaderPostgres()
 
-        healthy, message = reader.check_health()
-
-        assert False is healthy
-        assert "postgres secret not configured" == message
+        with pytest.raises(HealthCheckError, match="postgres secret not configured"):
+            reader.check_health()
 
     def test_healthy_when_config_valid(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
-        """Test returns healthy when config is valid."""
+        """Test returns without raising when config is valid."""
         mock_client = MagicMock()
         mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
 
         with patch("boto3.Session") as mock_session:
             mock_session.return_value.client.return_value = mock_client
-            healthy, message = reader.check_health()
-
-        assert True is healthy
-        assert "ok" == message
+            reader.check_health()
 
     def test_unhealthy_when_load_raises_runtime_error(self, reader: ReaderPostgres) -> None:
-        """Test returns unhealthy when _pg_config raises RuntimeError."""
+        """Test raises HealthCheckError when _pg_config raises RuntimeError."""
         with patch.object(
             type(reader),
             "_pg_config",
             new_callable=lambda: property(lambda self: (_ for _ in ()).throw(RuntimeError("Failed to load."))),
         ):
-            healthy, message = reader.check_health()
-
-        assert False is healthy
-        assert "Failed to load." == message
+            with pytest.raises(HealthCheckError, match="Failed to load."):
+                reader.check_health()
 
 
 class TestConnectionReuse:

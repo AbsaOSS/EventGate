@@ -36,7 +36,7 @@ from src.utils.constants import (
 from src.utils.postgres_base import PsycopgError, PostgresBase
 import src.utils.postgres_base as _pb
 from src.utils.trace_logging import log_payload_at_trace
-from src.writers.writer import Writer
+from src.writers.writer import HealthCheckError, WriteError, Writer
 
 logger = logging.getLogger(__name__)
 
@@ -156,46 +156,49 @@ class WriterPostgres(Writer, PostgresBase):
             },
         )
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> None:
         """Dispatch insertion for a topic into the correct Postgres table(s).
         Args:
             topic_name: Incoming topic identifier.
             message: JSON-serializable payload.
-        Returns:
-            Tuple of (success: bool, error_message: str | None).
+        Raises:
+            WriteError: If publishing fails.
         """
         try:
             pg_config = self._pg_config
+        except (RuntimeError, BotoCoreError, ClientError) as e:
+            err_msg = f"The Postgres writer failed with unknown error: {e!s}"
+            logger.exception(err_msg)
+            raise WriteError(err_msg) from e
 
-            if not pg_config.get("database"):
-                logger.debug("No Postgres - skipping Postgres writer.")
-                return True, None
+        if not pg_config.get("database"):
+            logger.debug("No Postgres - skipping Postgres writer.")
+            return
 
-            missing = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
-            if missing:
-                msg = f"PostgreSQL connection field '{missing[0]}' not configured."
-                logger.error(msg)
-                return False, msg
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
+        if missing:
+            msg = f"PostgreSQL connection field '{missing[0]}' not configured."
+            logger.error(msg)
+            raise WriteError(msg)
 
-            if not self._is_psycopg2_available():
-                logger.info("psycopg2 not available - skipping actual Postgres write.")
-                return True, None
+        if not self._is_psycopg2_available():
+            logger.info("psycopg2 not available - skipping actual Postgres write.")
+            return
 
-            log_payload_at_trace(logger, "Postgres", topic_name, message)
+        log_payload_at_trace(logger, "Postgres", topic_name, message)
 
-            if topic_name not in SUPPORTED_WRITE_TOPICS:
-                msg = f"Unknown topic for Postgres/{topic_name}"
-                logger.error(msg)
-                return False, msg
+        if topic_name not in SUPPORTED_WRITE_TOPICS:
+            msg = f"Unknown topic for Postgres/{topic_name}"
+            logger.error(msg)
+            raise WriteError(msg)
 
+        try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)
-        except (RuntimeError, PsycopgError, BotoCoreError, ClientError, ValueError, KeyError) as e:
+        except (RuntimeError, PsycopgError, ValueError, KeyError) as e:
             self._close_connection()
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception("The Postgres writer failed with unknown error: %s.", e)
-            return False, err_msg
-
-        return True, None
+            logger.exception(err_msg)
+            raise WriteError(err_msg) from e
 
     def _write_topic(self, connection: Any, topic_name: str, message: dict[str, Any]) -> None:
         """Execute the insert for the given topic inside a transaction."""
@@ -213,25 +216,27 @@ class WriterPostgres(Writer, PostgresBase):
         """Check whether psycopg2 is importable."""
         return _pb.psycopg2 is not None
 
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check PostgreSQL writer health.
         Returns:
-            Tuple of (is_healthy: bool, message: str).
+            `None` when healthy, `"not configured"` when intentionally disabled.
+        Raises:
+            HealthCheckError: If the PostgreSQL configuration is invalid or incomplete.
         """
         if not self._secret_name or not self._secret_region:
-            return True, "not configured"
+            return "not configured"
 
         try:
             pg_config = self._pg_config
             logger.debug("PostgreSQL config loaded during health check.")
         except (BotoCoreError, ClientError, ValueError, KeyError) as err:
-            return False, str(err)
+            raise HealthCheckError(str(err)) from err
 
         if not pg_config.get("database"):
-            return True, "database not configured"
+            return "not configured"
 
         missing_fields = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
         if missing_fields:
-            return False, f"{missing_fields[0]} not configured"
+            raise HealthCheckError(f"{missing_fields[0]} not configured")
 
-        return True, "ok"
+        return None

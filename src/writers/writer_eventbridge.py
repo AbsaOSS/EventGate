@@ -24,7 +24,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.trace_logging import log_payload_at_trace
-from src.writers.writer import Writer
+from src.writers.writer import HealthCheckError, WriteError, Writer
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +49,17 @@ class WriterEventBridge(Writer):
         failed = [e for e in self._entries if "ErrorCode" in e or "ErrorMessage" in e]
         return json.dumps(failed) if failed else "[]"
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> None:
         """Publish a message to EventBridge.
         Args:
             topic_name: Target EventBridge writer topic (destination) name.
             message: JSON-serializable payload to publish.
-        Returns:
-            Tuple of (success: bool, error_message: str | None).
+        Raises:
+            WriteError: If publishing fails.
         """
         if not self.event_bus_arn:
             logger.debug("No EventBus Arn - skipping EventBridge writer.")
-            return True, None
+            return
 
         if self._client is None:
             self._client = boto3.client("events")
@@ -85,25 +85,26 @@ class WriterEventBridge(Writer):
                 failed_repr = self._format_failed_entries()
                 msg = f"{failed_count} EventBridge entries failed: {failed_repr}"
                 logger.error(msg)
-                return False, msg
+                raise WriteError(msg)
         except (BotoCoreError, ClientError) as err:  # explicit AWS client-related errors
             logger.exception("EventBridge put_events call failed.")
-            return False, str(err)
+            raise WriteError(str(err)) from err
 
-        return True, None
-
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check EventBridge writer health.
         Returns:
-            Tuple of (is_healthy: bool, message: str).
+            `None` when healthy, `"not configured"` when intentionally disabled.
+        Raises:
+            HealthCheckError: If the EventBridge client cannot be initialized.
         """
         if not self.event_bus_arn:
-            return True, "not configured"
+            return "not configured"
 
         try:
             if self._client is None:
                 self._client = boto3.client("events")
                 logger.debug("EventBridge client initialized during health check.")
-            return True, "ok"
         except (BotoCoreError, ClientError) as err:
-            return False, str(err)
+            raise HealthCheckError(str(err)) from err
+
+        return None

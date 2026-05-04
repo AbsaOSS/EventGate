@@ -25,6 +25,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.writers.writer import HealthCheckError
+
 
 @pytest.fixture(scope="module")
 def event_stats_module():
@@ -116,7 +118,7 @@ class TestEventStatsLambdaDispatch:
 
     def test_health_returns_200(self, event_stats_module, make_stats_event) -> None:
         """Test that /health route returns 200 when reader is healthy."""
-        with patch.object(event_stats_module.reader_postgres, "check_health", return_value=(True, "ok")):
+        with patch.object(event_stats_module.reader_postgres, "check_health", return_value=None):
             event = make_stats_event("/health", method="GET")
             resp = event_stats_module.lambda_handler(event)
 
@@ -127,7 +129,7 @@ class TestEventStatsLambdaDispatch:
     def test_health_returns_503_when_degraded(self, event_stats_module, make_stats_event) -> None:
         """Test that /health returns 503 when reader is unhealthy."""
         with patch.object(
-            event_stats_module.reader_postgres, "check_health", return_value=(False, "connection refused")
+            event_stats_module.reader_postgres, "check_health", side_effect=HealthCheckError("connection refused")
         ):
             event = make_stats_event("/health", method="GET")
             resp = event_stats_module.lambda_handler(event)
