@@ -16,6 +16,7 @@ Structure
 Python style
 - Python 3.13
 - Type hints for public functions and classes
+- Use type aliases for complex types
 - Use built-in generics for type hints
 - Use `logging.getLogger(__name__)`, not print
 - Lazy % formatting in logging: `logger.info("msg %s", var)`

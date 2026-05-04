@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 
 _SQL_DIR = Path(__file__).parent / "sql"
 
+type DbRow = tuple[Any, ...]
+type RawQueryResult = tuple[list[str], list[DbRow]]
+
 
 @dataclass(frozen=True)
 class ReaderQueries:
@@ -58,7 +61,7 @@ class ReaderPostgres(PostgresBase):
 
     def _connect_options(self) -> str | None:
         """Set statement timeout and read-only mode for reader connections."""
-        return f"-c statement_timeout={POSTGRES_STATEMENT_TIMEOUT_MS}" " -c default_transaction_read_only=on"
+        return f"-c statement_timeout={POSTGRES_STATEMENT_TIMEOUT_MS} -c default_transaction_read_only=on"
 
     @cached_property
     def _queries(self) -> ReaderQueries:
@@ -93,8 +96,10 @@ class ReaderPostgres(PostgresBase):
         config = self._pg_config
         if not config.get("database"):
             raise RuntimeError("PostgreSQL config missing: database.")
-        if not all(config.get(field) for field in REQUIRED_CONNECTION_FIELDS):
-            missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
+
+        config_dict: dict[str, Any] = dict(config)
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config_dict.get(field)]
+        if missing:
             raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
 
         limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
@@ -138,7 +143,7 @@ class ReaderPostgres(PostgresBase):
         ts_end: int,
         cursor: int | None,
         limit: int,
-    ) -> tuple[list[str], list[tuple[Any, ...]]]:
+    ) -> RawQueryResult:
         """Execute the stats SQL query and return column names and raw rows."""
         try:
             with connection.cursor() as db_cursor:
@@ -157,8 +162,8 @@ class ReaderPostgres(PostgresBase):
                 col_names = [desc[0] for desc in db_cursor.description]
                 raw_rows = db_cursor.fetchall()
         finally:
-            # Rollback closes the implicit transaction opened by the SELECT,
-            # leaving the cached connection in a clean idle state for reuse.
+            # PostgreSQL (psycopg2) wraps every statement, including SELECT, in an implicit transaction.
+            # Without an explicit commit or rollback, the connection stays "idle in transaction".
             try:
                 connection.rollback()
             except PsycopgError:

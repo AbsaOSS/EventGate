@@ -16,8 +16,6 @@
 
 """Constants and enums used across the project."""
 
-from typing import TypedDict
-
 # Configuration keys
 TOKEN_PROVIDER_URL_KEY = "token_provider_url"
 TOKEN_PUBLIC_KEY_URL_KEY = "token_public_key_url"
@@ -40,76 +38,5 @@ TOPIC_RUNS = "public.cps.za.runs"
 TOPIC_DLCHANGE = "public.cps.za.dlchange"
 TOPIC_TEST = "public.cps.za.test"
 
-SUPPORTED_TOPICS: list[str] = [TOPIC_RUNS]
-
-
-class TopicTableConfig(TypedDict, total=False):
-    """Structure describing a topic's PostgreSQL table mapping."""
-
-    main: str
-    jobs: str
-    columns: dict[str, list[str]]
-
-
-TOPIC_TABLE_MAP: dict[str, TopicTableConfig] = {
-    TOPIC_RUNS: {
-        "main": "public_cps_za_runs",
-        "jobs": "public_cps_za_runs_jobs",
-        "columns": {
-            "main": [
-                "event_id",
-                "job_ref",
-                "tenant_id",
-                "source_app",
-                "source_app_version",
-                "environment",
-                "timestamp_start",
-                "timestamp_end",
-            ],
-            "jobs": [
-                "internal_id",
-                "event_id",
-                "country",
-                "catalog_id",
-                "status",
-                "timestamp_start",
-                "timestamp_end",
-                "message",
-                "additional_info",
-            ],
-        },
-    },
-    TOPIC_DLCHANGE: {
-        "main": "public_cps_za_dlchange",
-        "columns": {
-            "main": [
-                "event_id",
-                "tenant_id",
-                "source_app",
-                "source_app_version",
-                "environment",
-                "timestamp_event",
-                "country",
-                "catalog_id",
-                "operation",
-                "location",
-                "format",
-                "format_options",
-                "additional_info",
-            ],
-        },
-    },
-    TOPIC_TEST: {
-        "main": "public_cps_za_test",
-        "columns": {
-            "main": [
-                "event_id",
-                "tenant_id",
-                "source_app",
-                "environment",
-                "timestamp_event",
-                "additional_info",
-            ],
-        },
-    },
-}
+SUPPORTED_WRITE_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS, TOPIC_DLCHANGE, TOPIC_TEST})
+SUPPORTED_STATS_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS})

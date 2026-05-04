@@ -26,7 +26,13 @@ from typing import Any
 import aiosql
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.utils.constants import REQUIRED_CONNECTION_FIELDS, TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TABLE_MAP, TOPIC_TEST
+from src.utils.constants import (
+    REQUIRED_CONNECTION_FIELDS,
+    TOPIC_DLCHANGE,
+    TOPIC_RUNS,
+    TOPIC_TEST,
+    SUPPORTED_WRITE_TOPICS,
+)
 from src.utils.postgres_base import PsycopgError, PostgresBase
 import src.utils.postgres_base as _pb
 from src.utils.trace_logging import log_payload_at_trace
@@ -172,12 +178,12 @@ class WriterPostgres(Writer, PostgresBase):
                 return False, msg
 
             if not self._is_psycopg2_available():
-                logger.debug("psycopg2 not available - skipping actual Postgres write.")
+                logger.info("psycopg2 not available - skipping actual Postgres write.")
                 return True, None
 
             log_payload_at_trace(logger, "Postgres", topic_name, message)
 
-            if topic_name not in TOPIC_TABLE_MAP:
+            if topic_name not in SUPPORTED_WRITE_TOPICS:
                 msg = f"Unknown topic for Postgres/{topic_name}"
                 logger.error(msg)
                 return False, msg
