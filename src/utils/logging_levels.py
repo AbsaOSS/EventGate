@@ -55,8 +55,12 @@ def init_root_logger(module_name: str) -> logging.Logger:
     if not root_logger.handlers:
         root_logger.addHandler(logging.StreamHandler())
 
-    log_level = os.environ.get("LOG_LEVEL", "INFO")
-    root_logger.setLevel(log_level)
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    try:
+        root_logger.setLevel(log_level)
+    except ValueError:
+        root_logger.setLevel("INFO")
+        root_logger.warning("Invalid LOG_LEVEL %s; defaulting to INFO.", log_level)
     return logging.getLogger(module_name)
 
 

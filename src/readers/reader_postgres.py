@@ -96,7 +96,11 @@ class ReaderPostgres(PostgresBase):
         Raises:
             RuntimeError: On database connectivity or query errors.
         """
-        config = self._pg_config
+        try:
+            config = self._pg_config
+        except (BotoCoreError, ClientError, ValueError, KeyError) as exc:
+            raise RuntimeError(f"PostgreSQL configuration error: {exc}") from exc
+
         if not config.get("database"):
             raise RuntimeError("PostgreSQL config missing: database.")
 

@@ -229,7 +229,7 @@ class TestReadStats:
 
         with (
             patch("boto3.Session") as mock_session,
-            pytest.raises(ValueError, match="Missing PostgreSQL secret fields"),
+            pytest.raises(RuntimeError, match="PostgreSQL configuration error.*Missing PostgreSQL secret fields"),
         ):
             mock_session.return_value.client.return_value = mock_client
             reader.read_stats()

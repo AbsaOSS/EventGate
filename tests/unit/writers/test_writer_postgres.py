@@ -211,7 +211,8 @@ def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
         property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
     monkeypatch.setattr(pb, "psycopg2", None)
-    writer.write("public.cps.za.test", {})
+    with pytest.raises(WriteError, match="psycopg2 is not available"):
+        writer.write("public.cps.za.test", {})
 
 
 def test_write_unknown_topic_raises(reset_env, monkeypatch):

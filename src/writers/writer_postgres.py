@@ -168,7 +168,7 @@ class WriterPostgres(Writer, PostgresBase):
         """
         try:
             pg_config = self._pg_config
-        except (RuntimeError, BotoCoreError, ClientError) as e:
+        except (RuntimeError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
             logger.exception(err_msg)
             raise WriteError(err_msg) from e
@@ -184,8 +184,7 @@ class WriterPostgres(Writer, PostgresBase):
             raise WriteError(msg)
 
         if not self._is_psycopg2_available():
-            logger.info("psycopg2 not available - skipping actual Postgres write.")
-            return
+            raise WriteError("psycopg2 is not available for the configured Postgres writer.")
 
         log_payload_at_trace(logger, "Postgres", topic_name, message)
 
@@ -231,7 +230,7 @@ class WriterPostgres(Writer, PostgresBase):
         try:
             pg_config = self._pg_config
             logger.debug("PostgreSQL config loaded during health check.")
-        except (BotoCoreError, ClientError, ValueError, KeyError) as err:
+        except (RuntimeError, BotoCoreError, ClientError, ValueError, KeyError) as err:
             raise HealthCheckError(str(err)) from err
 
         if not pg_config.get("database"):
