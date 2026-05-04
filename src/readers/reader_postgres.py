@@ -68,9 +68,11 @@ class ReaderPostgres(PostgresBase):
     def _queries(self) -> ReaderQueries:
         """Load SQL queries from the `sql/` directory via aiosql."""
         queries = aiosql.from_path(_SQL_DIR, "psycopg2")
+        # aiosql loads SQL files and attaches query functions as dynamic attributes at runtime.
+        # pylint cannot resolve these statically.
         return ReaderQueries(
-            get_stats=queries.get_stats.sql,
-            get_stats_with_cursor=queries.get_stats_with_cursor.sql,
+            get_stats=queries.get_stats.sql,  # pylint: disable=no-member
+            get_stats_with_cursor=queries.get_stats_with_cursor.sql,  # pylint: disable=no-member
         )
 
     def read_stats(

@@ -65,11 +65,13 @@ class WriterPostgres(Writer, PostgresBase):
     def _queries(self) -> WriterQueries:
         """Load SQL queries from the `sql/` directory via aiosql."""
         queries = aiosql.from_path(_SQL_DIR, "psycopg2")
+        # aiosql loads SQL files and attaches query functions as dynamic attributes at runtime.
+        # pylint cannot resolve these statically.
         return WriterQueries(
-            insert_dlchange=queries.insert_dlchange.sql,
-            insert_run=queries.insert_run.sql,
-            insert_run_job=queries.insert_run_job.sql,
-            insert_test=queries.insert_test.sql,
+            insert_dlchange=queries.insert_dlchange.sql,  # pylint: disable=no-member
+            insert_run=queries.insert_run.sql,  # pylint: disable=no-member
+            insert_run_job=queries.insert_run_job.sql,  # pylint: disable=no-member
+            insert_test=queries.insert_test.sql,  # pylint: disable=no-member
         )
 
     def _insert_dlchange(self, cursor: Any, message: dict[str, Any]) -> None:

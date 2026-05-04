@@ -102,7 +102,8 @@ def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
                 for field, patterns in constraints.items():
                     if not isinstance(patterns, list):
                         raise ValueError(
-                            f"Topic '{topic}', user '{user}', field '{field}': patterns must be a list, got {type(patterns).__name__}."
+                            f"Topic '{topic}', user '{user}', field '{field}':"
+                            f" patterns must be a list, got {type(patterns).__name__}."
                         )
             result[topic] = _compile_topic_patterns(topic, value)
         else:

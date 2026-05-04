@@ -16,7 +16,6 @@
 
 """AWS Lambda entry point for the EventGate service."""
 
-import logging
 import os
 import sys
 from typing import Any
@@ -31,20 +30,14 @@ from src.handlers.handler_topic import HandlerTopic
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 from src.utils.config_loader import load_config
 from src.utils.constants import SSL_CA_BUNDLE_KEY
+from src.utils.logging_levels import init_root_logger
 from src.utils.utils import dispatch_request
 from src.writers.writer_eventbridge import WriterEventBridge
 from src.writers.writer_kafka import WriterKafka
 from src.writers.writer_postgres import WriterPostgres
 
-# Initialize logger
-root_logger = logging.getLogger()
-if not root_logger.handlers:
-    root_logger.addHandler(logging.StreamHandler())
-
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-root_logger.setLevel(log_level)
-logger = logging.getLogger(__name__)
-logger.debug("Initialized logger with level %s.", log_level)
+logger = init_root_logger(__name__)
+logger.debug("Initialized logger with level %s.", os.environ.get("LOG_LEVEL", "INFO"))
 
 # Load main configuration
 logger.debug("Using CONF_DIR=%s.", CONF_DIR)
