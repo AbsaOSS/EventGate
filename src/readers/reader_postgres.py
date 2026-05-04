@@ -97,8 +97,7 @@ class ReaderPostgres(PostgresBase):
         if not config.get("database"):
             raise RuntimeError("PostgreSQL config missing: database.")
 
-        config_dict: dict[str, Any] = dict(config)
-        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config_dict.get(field)]
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
         if missing:
             raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
 
