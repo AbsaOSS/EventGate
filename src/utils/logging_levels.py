@@ -14,13 +14,14 @@
 # limitations under the License.
 #
 
-"""Custom logging levels.
+"""Custom logging levels and shared logging setup.
 
 Adds a TRACE level below DEBUG for very verbose payload logging.
 """
 
 from __future__ import annotations
 import logging
+import os
 
 TRACE_LEVEL = 5
 
@@ -42,4 +43,25 @@ if not hasattr(logging, "TRACE"):
 
     logging.Logger.trace = trace  # type: ignore[attr-defined]
 
-__all__ = ["TRACE_LEVEL"]
+
+def init_root_logger(module_name: str) -> logging.Logger:
+    """Initialize the root logger and return a module-level logger.
+    Args:
+        module_name: Typically `__name__` of the calling module.
+    Returns:
+        A logger instance for the calling module.
+    """
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        root_logger.addHandler(logging.StreamHandler())
+
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    try:
+        root_logger.setLevel(log_level)
+    except ValueError:
+        root_logger.setLevel("INFO")
+        root_logger.warning("Invalid LOG_LEVEL %s; defaulting to INFO.", log_level)
+    return logging.getLogger(module_name)
+
+
+__all__ = ["TRACE_LEVEL", "init_root_logger"]

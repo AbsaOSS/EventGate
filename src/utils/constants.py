@@ -16,81 +16,27 @@
 
 """Constants and enums used across the project."""
 
-from typing import Any
-
 # Configuration keys
 TOKEN_PROVIDER_URL_KEY = "token_provider_url"
 TOKEN_PUBLIC_KEY_URL_KEY = "token_public_key_url"
 TOKEN_PUBLIC_KEYS_URL_KEY = "token_public_keys_url"
 SSL_CA_BUNDLE_KEY = "ssl_ca_bundle"
 
+# Postgres connection
+POSTGRES_CONNECT_TIMEOUT_SECONDS = 5
+POSTGRES_STATEMENT_TIMEOUT_MS = 30000
+POSTGRES_MAX_RETRIES = 2
+REQUIRED_CONNECTION_FIELDS = ("host", "user", "password", "port")
+
 # Postgres stats defaults
 POSTGRES_DEFAULT_LIMIT = 50
 POSTGRES_MAX_LIMIT = 1000
 POSTGRES_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000  # 7 days in milliseconds
 
-SUPPORTED_TOPICS: list[str] = ["public.cps.za.runs"]
+# Topic name constants
+TOPIC_RUNS = "public.cps.za.runs"
+TOPIC_DLCHANGE = "public.cps.za.dlchange"
+TOPIC_TEST = "public.cps.za.test"
 
-# Maps topic names to their PostgreSQL table(s)
-TOPIC_TABLE_MAP: dict[str, dict[str, Any]] = {
-    "public.cps.za.runs": {
-        "main": "public_cps_za_runs",
-        "jobs": "public_cps_za_runs_jobs",
-        "columns": {
-            "main": [
-                "event_id",
-                "job_ref",
-                "tenant_id",
-                "source_app",
-                "source_app_version",
-                "environment",
-                "timestamp_start",
-                "timestamp_end",
-            ],
-            "jobs": [
-                "internal_id",
-                "event_id",
-                "country",
-                "catalog_id",
-                "status",
-                "timestamp_start",
-                "timestamp_end",
-                "message",
-                "additional_info",
-            ],
-        },
-    },
-    "public.cps.za.dlchange": {
-        "main": "public_cps_za_dlchange",
-        "columns": {
-            "main": [
-                "event_id",
-                "tenant_id",
-                "source_app",
-                "source_app_version",
-                "environment",
-                "timestamp_event",
-                "country",
-                "catalog_id",
-                "operation",
-                "location",
-                "format",
-                "format_options",
-                "additional_info",
-            ],
-        },
-    },
-    "public.cps.za.test": {
-        "main": "public_cps_za_test",
-        "columns": {
-            "main": [
-                "event_id",
-                "tenant_id",
-                "source_app",
-                "environment",
-                "timestamp_event",
-                "additional_info",
-            ],
-        },
-    },
-}
+SUPPORTED_WRITE_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS, TOPIC_DLCHANGE, TOPIC_TEST})
+SUPPORTED_STATS_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS})

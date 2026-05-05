@@ -20,6 +20,14 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
+class WriteError(Exception):
+    """Raised when a writer fails to publish a message."""
+
+
+class HealthCheckError(Exception):
+    """Raised when a health check detects a failure."""
+
+
 class Writer(ABC):
     """Abstract base class for EventGate writers.
     All writers inherit from this class and implement the write() method.
@@ -30,23 +38,21 @@ class Writer(ABC):
         self.config = config
 
     @abstractmethod
-    def write(self, topic_name: str, message: dict[str, Any]) -> tuple[bool, str | None]:
+    def write(self, topic_name: str, message: dict[str, Any]) -> None:
         """Publish a message to the target system.
         Args:
             topic_name: Target writer topic (destination) name.
             message: JSON-serializable payload to publish.
-        Returns:
-            Tuple of (success: bool, error_message: str | None).
-            - (True, None) on success or when writer is disabled/skipped.
-            - (False, "error description") on failure.
+        Raises:
+            WriteError: If publishing fails.
         """
 
     @abstractmethod
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check writer health and connectivity.
         Returns:
-            Tuple of (is_healthy: bool, message: str).
-            - (True, "ok") - configured and working.
-            - (True, "not configured") - not configured, skipped.
-            - (False, "error message") - configured but failing.
+            `None` when the writer is configured and healthy.
+            A descriptive string (e.g. `"not configured"`) when intentionally disabled.
+        Raises:
+            HealthCheckError: If the writer is configured but failing.
         """

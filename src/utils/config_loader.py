@@ -24,6 +24,8 @@ from typing import Any
 
 from boto3.resources.base import ServiceResource
 
+from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
+
 logger = logging.getLogger(__name__)
 
 FieldPatterns = dict[str, list[re.Pattern[str]]]
@@ -100,7 +102,8 @@ def _normalize_access_config(access_data: dict[str, Any]) -> TopicAccessMap:
                 for field, patterns in constraints.items():
                     if not isinstance(patterns, list):
                         raise ValueError(
-                            f"Topic '{topic}', user '{user}', field '{field}': patterns must be a list, got {type(patterns).__name__}."
+                            f"Topic '{topic}', user '{user}', field '{field}':"
+                            f" patterns must be a list, got {type(patterns).__name__}."
                         )
             result[topic] = _compile_topic_patterns(topic, value)
         else:
@@ -144,9 +147,9 @@ def load_topic_names(conf_dir: str) -> list[str]:
         List of topic name strings.
     """
     filename_to_topic = {
-        "runs.json": "public.cps.za.runs",
-        "dlchange.json": "public.cps.za.dlchange",
-        "test.json": "public.cps.za.test",
+        "runs.json": TOPIC_RUNS,
+        "dlchange.json": TOPIC_DLCHANGE,
+        "test.json": TOPIC_TEST,
     }
     schemas_dir = os.path.join(conf_dir, "topic_schemas")
     topics: list[str] = []

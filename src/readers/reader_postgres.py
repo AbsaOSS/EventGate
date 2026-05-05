@@ -17,69 +17,63 @@
 """Postgres reader for run/job statistics."""
 
 import logging
-import os
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import cached_property
+from pathlib import Path
 from typing import Any
 
+import aiosql
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.constants import (
     POSTGRES_DEFAULT_LIMIT,
     POSTGRES_DEFAULT_WINDOW_MS,
     POSTGRES_MAX_LIMIT,
+    POSTGRES_STATEMENT_TIMEOUT_MS,
+    REQUIRED_CONNECTION_FIELDS,
 )
-from src.utils.utils import load_postgres_config
-
-try:
-    import psycopg2
-    from psycopg2 import Error as PsycopgError
-    from psycopg2 import sql as psycopg2_sql
-except ImportError:
-    psycopg2 = None  # type: ignore
-    psycopg2_sql = None  # type: ignore
-
-    class PsycopgError(Exception):  # type: ignore
-        """Shim psycopg2 error base when psycopg2 is not installed."""
-
+from src.utils.postgres_base import PsycopgError, PostgresBase
+from src.writers.writer import HealthCheckError
 
 logger = logging.getLogger(__name__)
 
-_RUNS_SQL_BASE = (
-    "SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,"
-    " r.source_app_version, r.environment,"
-    " r.timestamp_start AS run_timestamp_start,"
-    " r.timestamp_end AS run_timestamp_end,"
-    " j.internal_id, j.country, j.catalog_id, j.status,"
-    " j.timestamp_start, j.timestamp_end, j.message, j.additional_info"
-    " FROM public_cps_za_runs_jobs j"
-    " INNER JOIN public_cps_za_runs r ON j.event_id = r.event_id"
-    " WHERE r.timestamp_start >= %s AND r.timestamp_start <= %s"
-)
+_SQL_DIR = Path(__file__).parent / "sql"
 
-_RUNS_SQL_TAIL = " ORDER BY j.internal_id DESC LIMIT %s"
-
-_RUNS_SQL = _RUNS_SQL_BASE + _RUNS_SQL_TAIL
-_RUNS_SQL_WITH_CURSOR = _RUNS_SQL_BASE + " AND j.internal_id < %s" + _RUNS_SQL_TAIL
+type DbRow = tuple[Any, ...]
+type RawQueryResult = tuple[list[str], list[DbRow]]
 
 
-class ReaderPostgres:
+@dataclass(frozen=True)
+class ReaderQueries:
+    """Typed holder for reader SQL query strings loaded via aiosql."""
+
+    get_stats: str
+    get_stats_with_cursor: str
+
+
+class ReaderPostgres(PostgresBase):
     """Read-only Postgres accessor for run/job statistics."""
 
     def __init__(self) -> None:
-        self._secret_name = os.environ.get("POSTGRES_SECRET_NAME", "")
-        self._secret_region = os.environ.get("POSTGRES_SECRET_REGION", "")
-        self._db_config: dict[str, Any] | None = None
+        super().__init__()
         logger.debug("Initialized PostgreSQL reader.")
 
-    def _load_db_config(self) -> dict[str, Any]:
-        """Load database config from AWS Secrets Manager if not already loaded."""
-        if self._db_config is None:
-            self._db_config = load_postgres_config(self._secret_name, self._secret_region)
-        config = self._db_config
-        if config is None:
-            raise RuntimeError("Failed to load database configuration.")
-        return config
+    def _connect_options(self) -> str | None:
+        """Set statement timeout and read-only mode for reader connections."""
+        return f"-c statement_timeout={POSTGRES_STATEMENT_TIMEOUT_MS} -c default_transaction_read_only=on"
+
+    @cached_property
+    def _queries(self) -> ReaderQueries:
+        """Load SQL queries from the `sql/` directory via aiosql."""
+        queries = aiosql.from_path(_SQL_DIR, "psycopg2")
+        # aiosql loads SQL files and attaches query functions as dynamic attributes at runtime.
+        # pylint cannot resolve these statically.
+        return ReaderQueries(
+            get_stats=queries.get_stats.sql,  # pylint: disable=no-member
+            get_stats_with_cursor=queries.get_stats_with_cursor.sql,  # pylint: disable=no-member
+        )
 
     def read_stats(
         self,
@@ -102,44 +96,30 @@ class ReaderPostgres:
         Raises:
             RuntimeError: On database connectivity or query errors.
         """
-        db_config = self._load_db_config()
-        required_keys = ("database", "host", "user", "password", "port")
-        missing_keys = [key for key in required_keys if not db_config.get(key)]
-        if missing_keys:
-            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing_keys)}.")
-        if psycopg2 is None:
-            raise RuntimeError("psycopg2 is not available.")
+        try:
+            config = self._pg_config
+        except (BotoCoreError, ClientError, ValueError, KeyError) as exc:
+            raise RuntimeError(f"PostgreSQL configuration error: {exc}") from exc
+
+        if not config.get("database"):
+            raise RuntimeError("PostgreSQL config missing: database.")
+
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
+        if missing:
+            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
 
         limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
         now_ms = int(time.time() * 1000)
         ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
-        params: list[Any] = [ts_start, ts_end]
-        if cursor is not None:
-            params.append(cursor)
-            query = psycopg2_sql.SQL(_RUNS_SQL_WITH_CURSOR)
-        else:
-            query = psycopg2_sql.SQL(_RUNS_SQL)
-        params.append(limit + 1)
-
         try:
-            with psycopg2.connect(  # type: ignore[attr-defined]
-                database=db_config["database"],
-                host=db_config["host"],
-                user=db_config["user"],
-                password=db_config["password"],
-                port=db_config["port"],
-                connect_timeout=10,
-                gssencmode="disable",
-                options="-c statement_timeout=30000 -c default_transaction_read_only=on",
-            ) as connection:
-                with connection.cursor() as db_cursor:
-                    db_cursor.execute(query, params)
-                    col_names = [desc[0] for desc in db_cursor.description]  # type: ignore[union-attr]
-                    raw_rows = db_cursor.fetchall()
+            col_names, raw_rows = self._execute_with_retry(
+                lambda conn: self._run_stats_query(conn, ts_start, ts_end, cursor, limit)
+            )
         except PsycopgError as exc:
-            raise RuntimeError(f"Database query failed: {exc}") from exc
+            self._close_connection()
+            raise RuntimeError(f"Database query error: {exc}") from exc
 
         rows = [dict(zip(col_names, row, strict=True)) for row in raw_rows]
 
@@ -161,6 +141,41 @@ class ReaderPostgres:
 
         logger.debug("Stats query returned %d rows.", len(rows))
         return rows, pagination
+
+    def _run_stats_query(
+        self,
+        connection: Any,
+        ts_start: int,
+        ts_end: int,
+        cursor: int | None,
+        limit: int,
+    ) -> RawQueryResult:
+        """Execute the stats SQL query and return column names and raw rows."""
+        try:
+            with connection.cursor() as db_cursor:
+                if cursor is not None:
+                    db_cursor.execute(
+                        self._queries.get_stats_with_cursor,
+                        {"ts_start": ts_start, "ts_end": ts_end, "cursor_id": cursor, "lim": limit + 1},
+                    )
+                else:
+                    db_cursor.execute(
+                        self._queries.get_stats,
+                        {"ts_start": ts_start, "ts_end": ts_end, "lim": limit + 1},
+                    )
+                if db_cursor.description is None:
+                    raise RuntimeError("Stats query returned no result description.")
+                col_names = [desc[0] for desc in db_cursor.description]
+                raw_rows = db_cursor.fetchall()
+        finally:
+            # PostgreSQL (psycopg2) wraps every statement, including SELECT, in an implicit transaction.
+            # Without an explicit commit or rollback, the connection stays "idle in transaction".
+            try:
+                connection.rollback()
+            except PsycopgError:
+                logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
+                self._close_connection()
+        return col_names, raw_rows
 
     @staticmethod
     def _format_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -218,24 +233,24 @@ class ReaderPostgres:
 
         return row
 
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check PostgreSQL reader health.
-        Returns:
-            Tuple of (is_healthy, message).
+        Raises:
+            HealthCheckError: If the reader configuration is invalid or incomplete.
         """
         if not self._secret_name or not self._secret_region:
-            return False, "postgres secret not configured"
+            raise HealthCheckError("postgres secret not configured")
 
         try:
-            db_config = self._load_db_config()
+            pg_config = self._pg_config
         except (BotoCoreError, ClientError, RuntimeError, ValueError, KeyError) as err:
-            return False, str(err)
+            raise HealthCheckError(str(err)) from err
 
-        if not db_config.get("database"):
-            return False, "database not configured"
+        if not pg_config.get("database"):
+            raise HealthCheckError("database not configured")
 
-        missing = [f for f in ("host", "user", "password", "port") if not db_config.get(f)]
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
         if missing:
-            return False, f"{missing[0]} not configured"
+            raise HealthCheckError(f"{missing[0]} not configured")
 
-        return True, "ok"
+        return None

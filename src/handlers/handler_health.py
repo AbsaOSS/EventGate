@@ -22,16 +22,20 @@ from datetime import datetime, timezone
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from src.writers.writer import HealthCheckError
+
 logger = logging.getLogger(__name__)
 
 
 class HealthCheckable(Protocol):
     """Protocol for dependencies that support health checks."""
 
-    def check_health(self) -> tuple[bool, str]:
+    def check_health(self) -> str | None:
         """Check dependency health.
         Returns:
-            Tuple of (is_healthy, message).
+            `None` when healthy, a descriptive string when intentionally disabled.
+        Raises:
+            HealthCheckError: If the dependency is unhealthy.
         """
 
 
@@ -51,11 +55,15 @@ class HandlerHealth:
         logger.debug("Handling GET Health.")
 
         failures: dict[str, str] = {}
+        statuses: dict[str, str] = {}
 
         for name, dependency in self.dependencies.items():
-            healthy, msg = dependency.check_health()
-            if not healthy:
-                failures[name] = msg
+            try:
+                result = dependency.check_health()
+                statuses[name] = result if result else "ok"
+            except HealthCheckError as exc:
+                failures[name] = str(exc)
+                statuses[name] = str(exc)
 
         uptime_seconds = int((datetime.now(timezone.utc) - self.start_time).total_seconds())
 
@@ -64,12 +72,12 @@ class HandlerHealth:
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"status": "ok", "uptime_seconds": uptime_seconds}),
+                "body": json.dumps({"status": "ok", "uptime_seconds": uptime_seconds, "dependencies": statuses}),
             }
 
         logger.debug("Health check degraded: %s.", failures)
         return {
             "statusCode": 503,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"status": "degraded", "failures": failures}),
+            "body": json.dumps({"status": "degraded", "failures": failures, "dependencies": statuses}),
         }

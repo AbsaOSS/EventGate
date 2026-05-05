@@ -16,7 +16,6 @@
 
 """AWS Lambda entry point for the EventStats service."""
 
-import logging
 import os
 from typing import Any
 
@@ -25,17 +24,11 @@ from src.handlers.handler_stats import HandlerStats
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
 from src.utils.config_loader import load_topic_names
+from src.utils.logging_levels import init_root_logger
 from src.utils.utils import dispatch_request
 
-# Initialize logger
-root_logger = logging.getLogger()
-if not root_logger.handlers:
-    root_logger.addHandler(logging.StreamHandler())
-
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-root_logger.setLevel(log_level)
-logger = logging.getLogger(__name__)
-logger.debug("Initialized EventStats logger with level %s.", log_level)
+logger = init_root_logger(__name__)
+logger.debug("Initialized EventStats logger with level %s.", os.environ.get("LOG_LEVEL", "INFO"))
 
 # Load main configuration
 logger.debug("Using CONF_DIR=%s.", CONF_DIR)

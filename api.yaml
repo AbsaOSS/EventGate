@@ -56,6 +56,14 @@ paths:
                   uptime_seconds:
                     type: integer
                     example: 12345
+                  dependencies:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      kafka: ok
+                      eventbridge: not configured
+                      postgres: ok
         '503':
           description: Service is degraded
           content:
@@ -73,6 +81,14 @@ paths:
                     example:
                       eventbridge: client not initialized
                       kafka: producer not initialized
+                      postgres: host not configured
+                  dependencies:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      kafka: ok
+                      eventbridge: client not initialized
                       postgres: host not configured
 
   /topics:

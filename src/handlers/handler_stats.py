@@ -21,7 +21,7 @@ import logging
 from typing import Any
 
 from src.readers.reader_postgres import ReaderPostgres
-from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_TOPICS
+from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
 from src.utils.utils import build_error_response
 
 logger = logging.getLogger(__name__)
@@ -54,9 +54,9 @@ class HandlerStats:
         if topic_name not in self.topics:
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found.")
 
-        if topic_name not in SUPPORTED_TOPICS:
+        if topic_name not in SUPPORTED_STATS_TOPICS:
             return build_error_response(
-                400, "validation", f"Stats are only supported for topics '{', '.join(SUPPORTED_TOPICS)}'."
+                400, "validation", f"Stats are only supported for topics '{', '.join(SUPPORTED_STATS_TOPICS)}'."
             )
 
         # Parse request body
@@ -90,7 +90,7 @@ class HandlerStats:
                 cursor=cursor,
                 limit=limit,
             )
-        except RuntimeError as exc:
+        except RuntimeError:
             logger.exception("Stats query failed for topic %s.", topic_name)
             return build_error_response(500, "database", "Stats query failed.")
 

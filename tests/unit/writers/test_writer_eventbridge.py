@@ -16,7 +16,9 @@
 
 from unittest.mock import MagicMock, patch
 from botocore.exceptions import BotoCoreError
+import pytest
 
+from src.writers.writer import WriteError, HealthCheckError
 from src.writers.writer_eventbridge import WriterEventBridge
 
 # --- write() ---
@@ -24,8 +26,7 @@ from src.writers.writer_eventbridge import WriterEventBridge
 
 def test_write_skips_when_no_event_bus():
     writer = WriterEventBridge({"event_bus_arn": ""})
-    ok, err = writer.write("topic", {"k": 1})
-    assert ok and err is None
+    writer.write("topic", {"k": 1})
 
 
 def test_write_success():
@@ -33,8 +34,7 @@ def test_write_success():
     mock_client = MagicMock()
     mock_client.put_events.return_value = {"FailedEntryCount": 0, "Entries": []}
     writer._client = mock_client
-    ok, err = writer.write("topic", {"k": 2})
-    assert ok and err is None
+    writer.write("topic", {"k": 2})
     mock_client.put_events.assert_called_once()
 
 
@@ -49,8 +49,8 @@ def test_write_failed_entries():
         ],
     }
     writer._client = mock_client
-    ok, err = writer.write("topic", {"k": 3})
-    assert not ok and "EventBridge" in err
+    with pytest.raises(WriteError, match="EventBridge"):
+        writer.write("topic", {"k": 3})
 
 
 def test_write_client_error():
@@ -63,8 +63,8 @@ def test_write_client_error():
     mock_client = MagicMock()
     mock_client.put_events.side_effect = DummyError()
     writer._client = mock_client
-    ok, err = writer.write("topic", {"k": 4})
-    assert not ok and err is not None
+    with pytest.raises(WriteError):
+        writer.write("topic", {"k": 4})
 
 
 # --- check_health() ---
@@ -72,16 +72,14 @@ def test_write_client_error():
 
 def test_check_health_not_configured():
     writer = WriterEventBridge({"event_bus_arn": ""})
-    healthy, msg = writer.check_health()
-    assert healthy and msg == "not configured"
+    assert "not configured" == writer.check_health()
 
 
 def test_check_health_success():
     writer = WriterEventBridge({"event_bus_arn": "arn:aws:events:region:acct:event-bus/bus"})
     with patch("boto3.client") as mock_client:
         mock_client.return_value = MagicMock()
-        healthy, msg = writer.check_health()
-    assert healthy and msg == "ok"
+        writer.check_health()
     assert writer._client is not None
 
 
@@ -91,5 +89,5 @@ def test_check_health_client_error():
 
     writer = WriterEventBridge({"event_bus_arn": "arn:aws:events:region:acct:event-bus/bus"})
     with patch("boto3.client", side_effect=DummyError()):
-        healthy, msg = writer.check_health()
-    assert not healthy and msg is not None
+        with pytest.raises(HealthCheckError):
+            writer.check_health()
