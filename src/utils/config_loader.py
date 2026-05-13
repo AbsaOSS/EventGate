@@ -24,7 +24,7 @@ from typing import Any
 
 from boto3.resources.base import ServiceResource
 
-from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
+from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +150,7 @@ def load_topic_names(conf_dir: str) -> list[str]:
         "runs.json": TOPIC_RUNS,
         "dlchange.json": TOPIC_DLCHANGE,
         "test.json": TOPIC_TEST,
+        "status_change.json": TOPIC_STATUS_CHANGE,
     }
     schemas_dir = os.path.join(conf_dir, "topic_schemas")
     topics: list[str] = []

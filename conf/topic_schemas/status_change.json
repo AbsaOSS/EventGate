@@ -1,9 +1,20 @@
 {
     "type": "object",
     "properties": {
+        "event_type": {
+            "type": "string",
+            "enum": [
+                "ExecutionCreatedEvent",
+                "ExecutionStartedEvent",
+                "ExecutionUpdatedEvent",
+                "ExecutionFinishedEvent"
+            ],
+            "description": "Lifecycle event type for execution status changes."
+        },
         "event_id": {
             "type": "string",
-            "description": "Unique identifier for the event (GUID)"
+            "format": "uuid",
+            "description": "Unique identifier for the event (UUID)"
         },
         "tenant_id": {
             "type": "string",
@@ -27,7 +38,7 @@
         },
         "country": {
             "type": "string",
-            "description": "The country the data is related to."
+            "description": "The country the data is related to, e.g. za, ke, on-mu, nbc-tz, etc."
         },
         "execution_id": {
             "type": "string",
@@ -39,6 +50,7 @@
                 "string",
                 "null"
             ],
+            "format": "uuid",
             "description": "Optional parent execution identifier (UUID)."
         },
         "execution_group_id": {
@@ -68,10 +80,7 @@
             "description": "Definition (Pipeline, Domain, Process) identifier."
         },
         "definition_version": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Optional definition version."
         },
         "definition_name": {
@@ -84,39 +93,18 @@
                 "WAITING",
                 "RUNNING",
                 "SUCCEEDED",
-                "FAILED"
+                "FAILED",
+                "KILLED"
             ],
-            "description": "High-level status type."
+            "description": "High-level status type for the current lifecycle event."
         },
         "status_subtype": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Optional status subtype, e.g. NO_DATA or error code."
         },
         "status_detail": {
-            "type": [
-                "string",
-                "null"
-            ],
-            "description": "Optional human-readable status detail."
-        },
-        "timestamp_created_at": {
-            "type": "number",
-            "description": "Timestamp when an execution was created in epoch milliseconds"
-        },
-        "timestamp_started_at": {
-            "type": "number",
-            "description": "Timestamp when an execution was started in epoch milliseconds"
-        },
-        "timestamp_finished_at": {
-            "type": "number",
-            "description": "Timestamp when an execution was finished in epoch milliseconds"
-        },
-        "timestamp_last_updated_at": {
-            "type": "number",
-            "description": "Timestamp when an execution status was last updated in epoch milliseconds."
+            "type": "string",
+            "description": "Optional human-readable status detail, e.g. short error message."
         },
         "additional_context": {
             "type": "object",
@@ -124,18 +112,52 @@
         }
     },
     "required": [
+        "event_type",
+        "event_id",
         "execution_id",
-        "execution_group_id",
-        "attempt_number",
-        "source_app",
-        "source_app_version",
-        "environment",
-        "platform",
-        "definition_id",
-        "definition_name",
-        "status_type",
-        "created_at",
-        "started_at",
-        "last_updated_at"
+        "timestamp_event"
+    ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "ExecutionCreatedEvent"
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "source_app",
+                    "source_app_version",
+                    "environment",
+                    "platform",
+                    "input_arguments"
+                ]
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "ExecutionFinishedEvent"
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "status_type"
+                ],
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "SUCCEEDED",
+                            "FAILED",
+                            "KILLED"
+                        ]
+                    }
+                }
+            }
+        }
     ]
 }

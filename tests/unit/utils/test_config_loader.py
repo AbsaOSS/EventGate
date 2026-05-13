@@ -46,6 +46,7 @@ def conf_dir(tmp_path: Path) -> str:
     (schemas_dir / "runs.json").write_text('{"type": "object"}', encoding="utf-8")
     (schemas_dir / "dlchange.json").write_text('{"type": "object"}', encoding="utf-8")
     (schemas_dir / "test.json").write_text('{"type": "object"}', encoding="utf-8")
+    (schemas_dir / "status_change.json").write_text('{"type": "object"}', encoding="utf-8")
 
     return str(tmp_path)
 
@@ -101,13 +102,14 @@ class TestLoadTopicNames:
     """Tests for load_topic_names()."""
 
     def test_discovers_all_topics(self, conf_dir: str) -> None:
-        """Test that all three topics are discovered from schema files."""
+        """Test that all configured topics are discovered from schema files."""
         result = load_topic_names(conf_dir)
 
-        assert 3 == len(result)
+        assert 4 == len(result)
         assert "public.cps.za.runs" in result
         assert "public.cps.za.dlchange" in result
         assert "public.cps.za.test" in result
+        assert "public.cps.za.status-change" in result
 
     def test_missing_schema_file_excluded(self, conf_dir: str) -> None:
         """Test that a missing schema file excludes that topic."""
@@ -115,7 +117,7 @@ class TestLoadTopicNames:
 
         result = load_topic_names(conf_dir)
 
-        assert 2 == len(result)
+        assert 3 == len(result)
         assert "public.cps.za.test" not in result
 
     def test_empty_schemas_dir(self, tmp_path: Path) -> None:

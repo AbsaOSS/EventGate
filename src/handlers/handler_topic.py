@@ -29,7 +29,7 @@ from jsonschema.exceptions import ValidationError
 from src.handlers.handler_token import HandlerToken
 from src.utils.conf_path import CONF_DIR
 from src.utils.config_loader import TopicAccessMap, load_access_config
-from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
+from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
 from src.utils.utils import build_error_response
 from src.writers.writer import WriteError, Writer
 
@@ -75,6 +75,8 @@ class HandlerTopic:
             self.topics[TOPIC_DLCHANGE] = json.load(file)
         with open(os.path.join(topic_schemas_dir, "test.json"), "r", encoding="utf-8") as file:
             self.topics[TOPIC_TEST] = json.load(file)
+        with open(os.path.join(topic_schemas_dir, "status_change.json"), "r", encoding="utf-8") as file:
+            self.topics[TOPIC_STATUS_CHANGE] = json.load(file)
 
         logger.debug("Loaded topic schemas successfully.")
         return self

@@ -87,6 +87,7 @@ def test_load_topic_schemas_success():
         "runs.json": {"type": "object", "properties": {"run_id": {"type": "string"}}},
         "dlchange.json": {"type": "object", "properties": {"change_id": {"type": "string"}}},
         "test.json": {"type": "object", "properties": {"event_id": {"type": "string"}}},
+        "status_change.json": {"type": "object", "properties": {"execution_id": {"type": "string"}}},
     }
 
     def mock_open_side_effect(file_path, *_args, **_kwargs):
@@ -99,10 +100,11 @@ def test_load_topic_schemas_success():
         result = handler.with_load_topic_schemas()
 
     assert result is handler
-    assert 3 == len(handler.topics)
+    assert 4 == len(handler.topics)
     assert "public.cps.za.runs" in handler.topics
     assert "public.cps.za.dlchange" in handler.topics
     assert "public.cps.za.test" in handler.topics
+    assert "public.cps.za.status-change" in handler.topics
 
 
 ## get_topics_list()
@@ -112,6 +114,7 @@ def test_get_topics(event_gate_module, make_event):
     assert 200 == resp["statusCode"]
     body = json.loads(resp["body"])
     assert "public.cps.za.test" in body
+    assert "public.cps.za.status-change" in body
 
 
 ## get_topic_schema()
