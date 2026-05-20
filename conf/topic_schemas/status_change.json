@@ -4,28 +4,45 @@
         "event_type": {
             "type": "string",
             "enum": [
-                "ExecutionCreatedEvent",
-                "ExecutionStartedEvent",
-                "ExecutionUpdatedEvent",
-                "ExecutionFinishedEvent"
+                "JobCreatedEvent",
+                "JobCreatedAndStartedEvent",
+                "JobStartedEvent",
+                "JobUpdatedEvent",
+                "JobFinishedEvent"
             ],
-            "description": "Lifecycle event type for execution status changes."
+            "description": "Lifecycle event type for job status changes."
         },
         "event_id": {
             "type": "string",
             "format": "uuid",
             "description": "Unique identifier for the event (UUID)"
         },
+        "job_ref": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Identifier of the job in it's respective system (e.g. Spark Application Id, Glue Job Id, EMR Step Id, etc)."
+        },
         "tenant_id": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Application ID or ServiceNow identifier"
         },
         "source_app": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": " Standardized source application name (aqueduct, unify, lum, etc)"
         },
         "source_app_version": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Source application version (SemVer preferred)"
         },
         "environment": {
@@ -37,92 +54,144 @@
             "description": "Timestamp of the event in epoch milliseconds"
         },
         "country": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "The country the data is related to, e.g. za, ke, on-mu, nbc-tz, etc."
         },
-        "execution_id": {
+        "job_id": {
             "type": "string",
             "format": "uuid",
-            "description": "Primary execution identifier (UUID)."
+            "description": "Primary job identifier (UUID)."
         },
-        "execution_parent_id": {
+        "parent_job_id": {
             "type": [
                 "string",
                 "null"
             ],
             "format": "uuid",
-            "description": "Optional parent execution identifier (UUID)."
+            "description": "Optional parent job identifier (UUID), to represent nested job hierarchies."
         },
-        "execution_group_id": {
-            "type": "string",
+        "initial_job_id": {
+            "type": [
+                "string",
+                "null"
+            ],
             "format": "uuid",
-            "description": "Execution group identifier (UUID), may reference an execution id."
+            "description": "Optional initial job identifier (UUID), to represent retried or replayed jobs."
+        },
+        "job_group_id": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "format": "uuid",
+            "description": "Job group identifier (UUID), may or may not reference a job id."
+        },
+        "job_name": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Human-readable job name."
         },
         "attempt_number": {
-            "type": "integer",
+            "type": [
+                "integer",
+                "null"
+            ],
             "minimum": 1,
-            "description": "Attempt number for this execution."
+            "description": "Attempt number for this job."
         },
         "platform": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Platform, e.g. aws.emr, aws.glue, aws.lambda."
         },
         "platform_metadata": {
-            "type": "object",
+            "type": [
+                "object",
+                "null"
+            ],
             "description": "Platform-specific metadata (e.g. {\"cluster_id\": \"j-...\"})."
         },
         "input_arguments": {
-            "type": "object",
+            "type": [
+                "object",
+                "null"
+            ],
             "description": "Arguments passed to the job."
         },
         "definition_id": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Definition (Pipeline, Domain, Process) identifier."
         },
         "definition_version": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Optional definition version."
         },
-        "definition_name": {
-            "type": "string",
-            "description": "Human-readable definition name."
-        },
         "status_type": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "enum": [
                 "WAITING",
                 "RUNNING",
                 "SUCCEEDED",
                 "FAILED",
-                "KILLED"
+                "KILLED",
+                null
             ],
             "description": "High-level status type for the current lifecycle event."
         },
         "status_subtype": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Optional status subtype, e.g. NO_DATA or error code."
         },
         "status_detail": {
-            "type": "string",
+            "type": [
+                "string",
+                "null"
+            ],
             "description": "Optional human-readable status detail, e.g. short error message."
         },
         "additional_context": {
-            "type": "object",
+            "type": [
+                "object",
+                "null"
+            ],
             "description": "Additional context payload."
         }
     },
     "required": [
         "event_type",
         "event_id",
-        "execution_id",
-        "timestamp_event"
+        "job_id",
+        "timestamp_event",
+        "environment"
     ],
     "allOf": [
         {
             "if": {
                 "properties": {
                     "event_type": {
-                        "const": "ExecutionCreatedEvent"
+                        "enum": [
+                            "JobCreatedEvent",
+                            "JobCreatedAndStartedEvent"
+                        ]
                     }
                 }
             },
@@ -140,7 +209,7 @@
             "if": {
                 "properties": {
                     "event_type": {
-                        "const": "ExecutionFinishedEvent"
+                        "const": "JobFinishedEvent"
                     }
                 }
             },
