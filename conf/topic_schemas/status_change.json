@@ -50,7 +50,8 @@
             "description": "Environment (dev, uat, pre-prod, prod, test or others)"
         },
         "timestamp_event": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 0,
             "description": "Timestamp of the event in epoch milliseconds"
         },
         "country": {
