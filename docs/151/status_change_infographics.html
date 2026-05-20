@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Status Change - Infographics Brief</title>
+  <style>
+    :root {
+      --bg: #0f1720;
+      --panel: #17222f;
+      --panel-2: #1e2d3d;
+      --ink: #ecf3fb;
+      --muted: #a7bacd;
+      --line: #2f4256;
+      --teal: #16b7a5;
+      --amber: #ffb84d;
+      --red: #ff6b6b;
+      --blue: #5ab0ff;
+      --mint: #7ee6a9;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Avenir Next", "Futura", "Trebuchet MS", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 10% 0%, #1c344f 0%, transparent 36%),
+        radial-gradient(circle at 90% 14%, #244736 0%, transparent 30%),
+        linear-gradient(180deg, #0d151d 0%, var(--bg) 100%);
+      line-height: 1.45;
+    }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 18px auto 42px;
+      padding: 0 14px;
+    }
+
+    .hero {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px;
+      background: linear-gradient(135deg, #182738, #15212d 60%, #13202a);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      right: -40px;
+      top: -80px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(90, 176, 255, 0.35), rgba(90, 176, 255, 0));
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.6rem, 2.5vw, 2.6rem);
+      letter-spacing: 0.02em;
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      max-width: 75ch;
+      font-size: 1.02rem;
+    }
+
+    .grid {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 12px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 1.02rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #d5e7fa;
+    }
+
+    .small {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .svgbox {
+      border: 1px solid #2a3b4d;
+      background: #111a23;
+      border-radius: 12px;
+      padding: 8px;
+      overflow-x: auto;
+    }
+
+    .key {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .pill {
+      font-size: 0.82rem;
+      color: #d8e7f7;
+      background: #13202e;
+      border: 1px solid #30455b;
+      border-radius: 999px;
+      padding: 4px 9px;
+    }
+
+    @media (max-width: 980px) {
+      .span-8, .span-6, .span-4 { grid-column: span 12; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Status Change Schema: Visual Reviewer Pack</h1>
+      <p class="subtitle">Fast visual onboarding for lifecycle events, merge semantics, hierarchy/retry logic, and review hotspots. Optimized for scanning in a few minutes.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card span-12">
+        <h2>Lifecycle At A Glance</h2>
+        <p class="small">Two valid entry paths, one terminal rule set.</p>
+        <div class="svgbox">
+          <svg viewBox="0 0 1180 250" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lifecycle pathways infographic">
+            <defs>
+              <linearGradient id="gradA" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#16b7a5"/>
+                <stop offset="100%" stop-color="#5ab0ff"/>
+              </linearGradient>
+              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#9fc3e6"/>
+              </marker>
+            </defs>
+
+            <rect x="12" y="20" width="350" height="92" rx="14" fill="#102638" stroke="#2b5a86"/>
+            <text x="187" y="50" text-anchor="middle" fill="#7ee6a9" font-size="24" font-weight="700">Path A</text>
+            <text x="187" y="79" text-anchor="middle" fill="#d9ecff" font-size="18">JobCreatedEvent -> JobStartedEvent</text>
+
+            <rect x="12" y="140" width="350" height="92" rx="14" fill="#2b2516" stroke="#8b6a2f"/>
+            <text x="187" y="170" text-anchor="middle" fill="#ffd898" font-size="24" font-weight="700">Path B</text>
+            <text x="187" y="199" text-anchor="middle" fill="#fff2d3" font-size="18">JobCreatedAndStartedEvent</text>
+
+            <rect x="420" y="75" width="220" height="92" rx="14" fill="#231c39" stroke="#6758a8"/>
+            <text x="530" y="111" text-anchor="middle" fill="#cfc2ff" font-size="23" font-weight="700">JobUpdatedEvent</text>
+            <text x="530" y="138" text-anchor="middle" fill="#e6ddff" font-size="16">0..N times</text>
+
+            <rect x="700" y="75" width="468" height="92" rx="14" fill="#153228" stroke="#2e7f5a"/>
+            <text x="934" y="111" text-anchor="middle" fill="#aef2c7" font-size="23" font-weight="700">JobFinishedEvent</text>
+            <text x="934" y="138" text-anchor="middle" fill="#d8ffe6" font-size="18">status_type in {SUCCEEDED, FAILED, KILLED}</text>
+
+            <path d="M 362 66 L 417 113" stroke="url(#gradA)" stroke-width="4" marker-end="url(#arrow)" fill="none"/>
+            <path d="M 362 186 L 417 128" stroke="#f6c167" stroke-width="4" marker-end="url(#arrow)" fill="none"/>
+            <path d="M 641 121 L 698 121" stroke="#9fc3e6" stroke-width="4" marker-end="url(#arrow)" fill="none"/>
+
+            <text x="90" y="16" fill="#8eb7db" font-size="14">queue/wait visible</text>
+            <text x="83" y="136" fill="#d3b06c" font-size="14">compact immediate start</text>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card span-12">
+        <h2>Required Vs Optional Fields</h2>
+        <p class="small">Global required fields apply to every event; conditional rules tighten required fields for specific event types.</p>
+        <div class="svgbox">
+          <svg viewBox="0 0 1180 360" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Required and optional fields infographic">
+            <rect x="12" y="16" width="1156" height="48" rx="10" fill="#1b2c3c" stroke="#3f5d7b"/>
+            <text x="590" y="46" text-anchor="middle" fill="#d9ecff" font-size="20" font-weight="700">Schema Strictness Map</text>
+
+            <rect x="22" y="80" width="360" height="256" rx="12" fill="#173126" stroke="#2e7f5a"/>
+            <text x="202" y="110" text-anchor="middle" fill="#b8f5d1" font-size="18" font-weight="700">Always Required</text>
+
+            <rect x="42" y="126" width="320" height="34" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="202" y="148" text-anchor="middle" fill="#dcffe9" font-size="14">event_type</text>
+            <rect x="42" y="166" width="320" height="34" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="202" y="188" text-anchor="middle" fill="#dcffe9" font-size="14">event_id</text>
+            <rect x="42" y="206" width="320" height="34" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="202" y="228" text-anchor="middle" fill="#dcffe9" font-size="14">job_id</text>
+            <rect x="42" y="246" width="320" height="34" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="202" y="268" text-anchor="middle" fill="#dcffe9" font-size="14">timestamp_event</text>
+            <rect x="42" y="286" width="320" height="34" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="202" y="308" text-anchor="middle" fill="#dcffe9" font-size="14">environment</text>
+
+            <rect x="410" y="80" width="372" height="256" rx="12" fill="#332b18" stroke="#8c6d2d"/>
+            <text x="596" y="110" text-anchor="middle" fill="#ffe3ab" font-size="18" font-weight="700">Conditionally Required</text>
+
+            <rect x="430" y="126" width="332" height="94" rx="9" fill="#3d3219" stroke="#b99143"/>
+            <text x="596" y="147" text-anchor="middle" fill="#fff0cd" font-size="13" font-weight="700">If event_type is JobCreatedEvent OR JobCreatedAndStartedEvent</text>
+            <text x="596" y="169" text-anchor="middle" fill="#fff0cd" font-size="13">source_app, source_app_version, environment</text>
+            <text x="596" y="189" text-anchor="middle" fill="#fff0cd" font-size="13">platform, input_arguments</text>
+            <text x="596" y="209" text-anchor="middle" fill="#ffd998" font-size="12">purpose: ensure enough context exists at creation/start</text>
+
+            <rect x="430" y="236" width="332" height="84" rx="9" fill="#3d3219" stroke="#b99143"/>
+            <text x="596" y="258" text-anchor="middle" fill="#fff0cd" font-size="13" font-weight="700">If event_type is JobFinishedEvent</text>
+            <text x="596" y="280" text-anchor="middle" fill="#fff0cd" font-size="13">status_type is required</text>
+            <text x="596" y="300" text-anchor="middle" fill="#fff0cd" font-size="13">and must be SUCCEEDED, FAILED, or KILLED</text>
+
+            <rect x="810" y="80" width="348" height="256" rx="12" fill="#1d3134" stroke="#3c8d93"/>
+            <text x="984" y="110" text-anchor="middle" fill="#b8f6ff" font-size="18" font-weight="700">Optional (Nullable) Fields</text>
+
+            <rect x="830" y="126" width="308" height="186" rx="9" fill="#203941" stroke="#4aa6ad"/>
+            <text x="984" y="148" text-anchor="middle" fill="#dafcff" font-size="13">job_ref, tenant_id, country, job_name</text>
+            <text x="984" y="168" text-anchor="middle" fill="#dafcff" font-size="13">parent_job_id, initial_job_id, job_group_id</text>
+            <text x="984" y="188" text-anchor="middle" fill="#dafcff" font-size="13">attempt_number, definition_id, definition_version</text>
+            <text x="984" y="208" text-anchor="middle" fill="#dafcff" font-size="13">platform_metadata, additional_context</text>
+            <text x="984" y="228" text-anchor="middle" fill="#dafcff" font-size="13">status_subtype, status_detail</text>
+            <text x="984" y="248" text-anchor="middle" fill="#dafcff" font-size="13">status_type (except JobFinishedEvent)</text>
+            <text x="984" y="276" text-anchor="middle" fill="#bfeef3" font-size="12">design intent: progressive disclosure over lifecycle events</text>
+            <text x="984" y="296" text-anchor="middle" fill="#bfeef3" font-size="12">consumers should merge updates, not expect full snapshots</text>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card span-12">
+        <h2>Field Topology Map</h2>
+        <p class="small">What tends to be stable, mutable, and sparse.</p>
+        <div class="svgbox">
+          <svg viewBox="0 0 840 420" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schema fields infographic">
+            <defs>
+              <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#89aacc"/>
+              </marker>
+            </defs>
+            <rect x="315" y="160" width="210" height="104" rx="14" fill="#1a2a3a" stroke="#3f5d7b"/>
+            <text x="420" y="194" text-anchor="middle" fill="#d6e8fb" font-size="22" font-weight="700">Core Envelope</text>
+            <text x="420" y="220" text-anchor="middle" fill="#9fc0de" font-size="15">event_type, event_id</text>
+            <text x="420" y="241" text-anchor="middle" fill="#9fc0de" font-size="15">job_id, timestamp_event</text>
+            <text x="420" y="262" text-anchor="middle" fill="#9fc0de" font-size="15">environment</text>
+
+            <rect x="32" y="42" width="232" height="112" rx="12" fill="#233220" stroke="#4d8754"/>
+            <text x="148" y="75" text-anchor="middle" fill="#c6efcb" font-size="19" font-weight="700">Identity + Business</text>
+            <text x="148" y="99" text-anchor="middle" fill="#dff7e2" font-size="14">tenant_id, country, job_name</text>
+            <text x="148" y="119" text-anchor="middle" fill="#dff7e2" font-size="14">definition_id/version</text>
+            <text x="148" y="139" text-anchor="middle" fill="#dff7e2" font-size="14">source_app/version</text>
+
+            <rect x="571" y="42" width="238" height="112" rx="12" fill="#342b18" stroke="#8c6d2d"/>
+            <text x="690" y="75" text-anchor="middle" fill="#ffe3ab" font-size="19" font-weight="700">Execution Context</text>
+            <text x="690" y="99" text-anchor="middle" fill="#fff0cd" font-size="14">platform, platform_metadata</text>
+            <text x="690" y="119" text-anchor="middle" fill="#fff0cd" font-size="14">input_arguments</text>
+            <text x="690" y="139" text-anchor="middle" fill="#fff0cd" font-size="14">additional_context</text>
+
+            <rect x="50" y="290" width="246" height="112" rx="12" fill="#3a1f25" stroke="#9a4050"/>
+            <text x="173" y="322" text-anchor="middle" fill="#ffb9c5" font-size="19" font-weight="700">Status Snapshot</text>
+            <text x="173" y="346" text-anchor="middle" fill="#ffdbe2" font-size="14">status_type/subtype/detail</text>
+            <text x="173" y="366" text-anchor="middle" fill="#ffdbe2" font-size="14">attempt_number</text>
+
+            <rect x="545" y="290" width="256" height="112" rx="12" fill="#1d3134" stroke="#3c8d93"/>
+            <text x="673" y="322" text-anchor="middle" fill="#b8f6ff" font-size="19" font-weight="700">Relationship Graph</text>
+            <text x="673" y="346" text-anchor="middle" fill="#dafcff" font-size="14">parent_job_id</text>
+            <text x="673" y="366" text-anchor="middle" fill="#dafcff" font-size="14">initial_job_id, job_group_id</text>
+
+            <line x1="264" y1="120" x2="315" y2="178" stroke="#89aacc" stroke-width="2.8" marker-end="url(#arr2)"/>
+            <line x1="571" y1="120" x2="525" y2="178" stroke="#89aacc" stroke-width="2.8" marker-end="url(#arr2)"/>
+            <line x1="296" y1="320" x2="315" y2="245" stroke="#89aacc" stroke-width="2.8" marker-end="url(#arr2)"/>
+            <line x1="545" y1="320" x2="525" y2="245" stroke="#89aacc" stroke-width="2.8" marker-end="url(#arr2)"/>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <h2>Merge Semantics Heatmap</h2>
+        <p class="small">How incoming events typically alter the latest-state row.</p>
+        <div class="svgbox">
+          <svg viewBox="0 0 560 350" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Merge heatmap infographic">
+            <text x="18" y="34" fill="#d3e8fc" font-size="14">Legend:</text>
+            <rect x="80" y="21" width="18" height="18" fill="#7ee6a9"/><text x="105" y="34" fill="#cdeed8" font-size="13">strong update</text>
+            <rect x="215" y="21" width="18" height="18" fill="#ffb84d"/><text x="240" y="34" fill="#ffe3bb" font-size="13">conditional</text>
+            <rect x="332" y="21" width="18" height="18" fill="#5ab0ff"/><text x="357" y="34" fill="#cae6ff" font-size="13">default/derived</text>
+            <rect x="464" y="21" width="18" height="18" fill="#3d5166"/><text x="489" y="34" fill="#9eb1c5" font-size="13">usually no-op</text>
+
+            <g transform="translate(20,60)">
+              <text x="0" y="28" fill="#b8d4ef" font-size="13">Created</text>
+              <text x="0" y="68" fill="#b8d4ef" font-size="13">Created+Started</text>
+              <text x="0" y="108" fill="#b8d4ef" font-size="13">Started</text>
+              <text x="0" y="148" fill="#b8d4ef" font-size="13">Updated</text>
+              <text x="0" y="188" fill="#b8d4ef" font-size="13">Finished</text>
+
+              <text x="136" y="3" text-anchor="middle" fill="#b8d4ef" font-size="10">
+                <tspan x="136" dy="0">parent</tspan>
+                <tspan x="136" dy="10">job_id</tspan>
+              </text>
+              <text x="198" y="3" text-anchor="middle" fill="#b8d4ef" font-size="10">
+                <tspan x="198" dy="0">initial</tspan>
+                <tspan x="198" dy="10">job_id</tspan>
+              </text>
+              <text x="260" y="3" text-anchor="middle" fill="#b8d4ef" font-size="10">
+                <tspan x="260" dy="0">job_group</tspan>
+                <tspan x="260" dy="10">_id</tspan>
+              </text>
+              <text x="322" y="3" text-anchor="middle" fill="#b8d4ef" font-size="10">
+                <tspan x="322" dy="0">attempt</tspan>
+                <tspan x="322" dy="10">_number</tspan>
+              </text>
+              <text x="384" y="3" text-anchor="middle" fill="#b8d4ef" font-size="10">
+                <tspan x="384" dy="0">status</tspan>
+                <tspan x="384" dy="10">_type</tspan>
+              </text>
+
+              <rect x="108" y="18" width="56" height="24" fill="#ffb84d"/>
+              <rect x="170" y="18" width="56" height="24" fill="#ffb84d"/>
+              <rect x="232" y="18" width="56" height="24" fill="#ffb84d"/>
+              <rect x="294" y="18" width="56" height="24" fill="#5ab0ff"/>
+              <rect x="356" y="18" width="56" height="24" fill="#5ab0ff"/>
+
+              <rect x="108" y="58" width="56" height="24" fill="#ffb84d"/>
+              <rect x="170" y="58" width="56" height="24" fill="#ffb84d"/>
+              <rect x="232" y="58" width="56" height="24" fill="#ffb84d"/>
+              <rect x="294" y="58" width="56" height="24" fill="#5ab0ff"/>
+              <rect x="356" y="58" width="56" height="24" fill="#5ab0ff"/>
+
+              <rect x="108" y="98" width="56" height="24" fill="#3d5166"/>
+              <rect x="170" y="98" width="56" height="24" fill="#3d5166"/>
+              <rect x="232" y="98" width="56" height="24" fill="#3d5166"/>
+              <rect x="294" y="98" width="56" height="24" fill="#3d5166"/>
+              <rect x="356" y="98" width="56" height="24" fill="#5ab0ff"/>
+
+              <rect x="108" y="138" width="56" height="24" fill="#3d5166"/>
+              <rect x="170" y="138" width="56" height="24" fill="#3d5166"/>
+              <rect x="232" y="138" width="56" height="24" fill="#3d5166"/>
+              <rect x="294" y="138" width="56" height="24" fill="#ffb84d"/>
+              <rect x="356" y="138" width="56" height="24" fill="#ffb84d"/>
+
+              <rect x="108" y="178" width="56" height="24" fill="#3d5166"/>
+              <rect x="170" y="178" width="56" height="24" fill="#3d5166"/>
+              <rect x="232" y="178" width="56" height="24" fill="#3d5166"/>
+              <rect x="294" y="178" width="56" height="24" fill="#3d5166"/>
+              <rect x="356" y="178" width="56" height="24" fill="#7ee6a9"/>
+            </g>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <h2>Hierarchy Example: Ingestion</h2>
+        <p class="small">Parent-child lineage uses parent_job_id; one job_group_id ties the full execution tree.</p>
+        <div class="svgbox">
+          <svg viewBox="0 0 560 360" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ingestion hierarchy example">
+            <defs>
+              <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#9bc2e8"/>
+              </marker>
+            </defs>
+
+            <rect x="160" y="18" width="240" height="48" rx="10" fill="#263a4e" stroke="#4d7396"/>
+            <text x="280" y="47" text-anchor="middle" fill="#d7ecff" font-size="15">Ingestion (root)</text>
+
+            <rect x="38" y="104" width="184" height="46" rx="10" fill="#263a4e" stroke="#4d7396"/>
+            <text x="130" y="133" text-anchor="middle" fill="#d7ecff" font-size="14">Create Config</text>
+
+            <rect x="250" y="104" width="184" height="46" rx="10" fill="#263a4e" stroke="#4d7396"/>
+            <text x="342" y="133" text-anchor="middle" fill="#d7ecff" font-size="14">Pramen Job</text>
+
+            <line x1="280" y1="66" x2="130" y2="102" stroke="#9bc2e8" stroke-width="2.5" marker-end="url(#arr3)"/>
+            <line x1="280" y1="66" x2="342" y2="102" stroke="#9bc2e8" stroke-width="2.5" marker-end="url(#arr3)"/>
+
+            <rect x="18" y="194" width="112" height="44" rx="9" fill="#1e3347" stroke="#4d7396"/>
+            <text x="74" y="221" text-anchor="middle" fill="#d7ecff" font-size="13">Land</text>
+
+            <rect x="148" y="194" width="112" height="44" rx="9" fill="#1e3347" stroke="#4d7396"/>
+            <text x="204" y="221" text-anchor="middle" fill="#d7ecff" font-size="13">Standardize</text>
+
+            <rect x="278" y="194" width="132" height="44" rx="9" fill="#1e3347" stroke="#4d7396"/>
+            <text x="344" y="221" text-anchor="middle" fill="#d7ecff" font-size="13">Publish to Hive</text>
+
+            <rect x="428" y="194" width="112" height="44" rx="9" fill="#1e3347" stroke="#4d7396"/>
+            <text x="484" y="221" text-anchor="middle" fill="#d7ecff" font-size="13">Add metrics</text>
+
+            <line x1="342" y1="150" x2="74" y2="192" stroke="#9bc2e8" stroke-width="2.3" marker-end="url(#arr3)"/>
+            <line x1="342" y1="150" x2="204" y2="192" stroke="#9bc2e8" stroke-width="2.3" marker-end="url(#arr3)"/>
+            <line x1="342" y1="150" x2="344" y2="192" stroke="#9bc2e8" stroke-width="2.3" marker-end="url(#arr3)"/>
+            <line x1="342" y1="150" x2="484" y2="192" stroke="#9bc2e8" stroke-width="2.3" marker-end="url(#arr3)"/>
+
+            <rect x="24" y="300" width="512" height="36" rx="8" fill="#162634" stroke="#35526f"/>
+            <text x="280" y="323" text-anchor="middle" fill="#cbe1f7" font-size="14">All nodes share one job_group_id; tree edges are parent_job_id relationships.</text>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card span-6">
+        <h2>Retry Example: Publish to Hive</h2>
+        <p class="small">Rerun repeats a reduced tree: Ingestion, Create Config, Pramen, and Publish to Hive. Only the rerun root links back via initial_job_id.</p>
+        <div class="svgbox">
+          <svg viewBox="0 0 560 430" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Initial run and rerun retry example">
+            <defs>
+              <marker id="arr4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#9bc2e8"/>
+              </marker>
+            </defs>
+
+            <rect x="18" y="20" width="200" height="30" rx="8" fill="#2e2132" stroke="#825a8f"/>
+            <text x="118" y="40" text-anchor="middle" fill="#e9d2f2" font-size="13">Initial run</text>
+            <rect x="342" y="20" width="200" height="30" rx="8" fill="#1e3528" stroke="#2e7f5a"/>
+            <text x="442" y="40" text-anchor="middle" fill="#d8ffe6" font-size="13">Rerun (retry)</text>
+
+            <rect x="30" y="66" width="176" height="38" rx="9" fill="#263a4e" stroke="#4d7396"/>
+            <text x="118" y="90" text-anchor="middle" fill="#d7ecff" font-size="13">Ingestion</text>
+
+            <rect x="30" y="126" width="176" height="34" rx="8" fill="#1e3347" stroke="#4d7396"/>
+            <text x="118" y="148" text-anchor="middle" fill="#d7ecff" font-size="12">Create Config</text>
+
+            <rect x="30" y="176" width="176" height="34" rx="8" fill="#1e3347" stroke="#4d7396"/>
+            <text x="118" y="198" text-anchor="middle" fill="#d7ecff" font-size="12">Pramen Job</text>
+
+            <rect x="10" y="236" width="82" height="30" rx="7" fill="#1e3347" stroke="#4d7396"/>
+            <text x="51" y="256" text-anchor="middle" fill="#d7ecff" font-size="11">Land</text>
+
+            <rect x="96" y="236" width="92" height="30" rx="7" fill="#1e3347" stroke="#4d7396"/>
+            <text x="142" y="256" text-anchor="middle" fill="#d7ecff" font-size="11">Standardize</text>
+
+            <rect x="192" y="236" width="118" height="42" rx="7" fill="#3a1f25" stroke="#9a4050"/>
+            <text x="251" y="255" text-anchor="middle" fill="#ffdbe2" font-size="11">Publish to Hive</text>
+            <text x="251" y="269" text-anchor="middle" fill="#ffb9c5" font-size="10">attempt=1, FAILED</text>
+
+            <rect x="96" y="284" width="110" height="30" rx="7" fill="#1e3347" stroke="#4d7396"/>
+            <text x="151" y="304" text-anchor="middle" fill="#d7ecff" font-size="11">Add metrics</text>
+
+            <line x1="118" y1="104" x2="118" y2="124" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="118" y1="160" x2="118" y2="174" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="118" y1="210" x2="118" y2="232" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="118" y1="210" x2="142" y2="232" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="118" y1="210" x2="236" y2="232" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="118" y1="210" x2="151" y2="282" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+
+            <rect x="354" y="66" width="176" height="38" rx="9" fill="#263a4e" stroke="#4d7396"/>
+            <text x="442" y="90" text-anchor="middle" fill="#d7ecff" font-size="13">Ingestion</text>
+
+            <rect x="354" y="126" width="176" height="34" rx="8" fill="#1e3347" stroke="#4d7396"/>
+            <text x="442" y="148" text-anchor="middle" fill="#d7ecff" font-size="12">Create Config</text>
+
+            <rect x="354" y="176" width="176" height="34" rx="8" fill="#1e3347" stroke="#4d7396"/>
+            <text x="442" y="198" text-anchor="middle" fill="#d7ecff" font-size="12">Pramen Job</text>
+
+            <rect x="384" y="236" width="146" height="42" rx="8" fill="#1f3b2a" stroke="#2e7f5a"/>
+            <text x="457" y="255" text-anchor="middle" fill="#d8ffe6" font-size="11">Publish to Hive</text>
+            <text x="457" y="269" text-anchor="middle" fill="#aef2c7" font-size="10">attempt=2, SUCCEEDED</text>
+
+            <line x1="442" y1="104" x2="442" y2="124" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="442" y1="160" x2="442" y2="174" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+            <line x1="442" y1="210" x2="457" y2="232" stroke="#9bc2e8" stroke-width="2.2" marker-end="url(#arr4)"/>
+
+            <path d="M 442 66 C 420 48, 165 48, 118 66" fill="none" stroke="#f3c36f" stroke-width="2.4" stroke-dasharray="7 5" marker-end="url(#arr4)"/>
+            <text x="280" y="58" text-anchor="middle" fill="#ffd998" font-size="12">only cross-run link: rerun root initial_job_id -> original root</text>
+
+            <rect x="24" y="370" width="512" height="36" rx="8" fill="#162634" stroke="#35526f"/>
+            <text x="280" y="393" text-anchor="middle" fill="#cbe1f7" font-size="13">No other initial_job_id links between old and rerun jobs; only the rerun Aqueduct root references the old root.</text>
+          </svg>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
