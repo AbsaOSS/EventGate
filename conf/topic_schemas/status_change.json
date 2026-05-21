@@ -32,17 +32,11 @@
             "description": "Application ID or ServiceNow identifier"
         },
         "source_app": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": " Standardized source application name (aqueduct, unify, lum, etc)"
         },
         "source_app_version": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Source application version (SemVer preferred)"
         },
         "environment": {
@@ -181,6 +175,8 @@
         "event_type",
         "event_id",
         "job_id",
+        "source_app",
+        "source_app_version",
         "timestamp_event",
         "environment"
     ],
