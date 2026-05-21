@@ -148,28 +148,20 @@ that the runs topic uses.
             "description": "Application ID or ServiceNow identifier"
         },
         "source_app": {
-            "type": [
-                "string",
-                "null"
-            ],
-            "description": " Standardized source application name (ingestapp, curateapp, processapp, etc)"
+            "type": "string",
+            "description": " Standardized source application name (aqueduct, unify, lum, etc)"
         },
         "source_app_version": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Source application version (SemVer preferred)"
         },
         "environment": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Environment (dev, uat, pre-prod, prod, test or others)"
         },
         "timestamp_event": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 0,
             "description": "Timestamp of the event in epoch milliseconds"
         },
         "country": {
@@ -299,7 +291,10 @@ that the runs topic uses.
         "event_type",
         "event_id",
         "job_id",
-        "timestamp_event"
+        "source_app",
+        "source_app_version",
+        "timestamp_event",
+        "environment"
     ],
     "allOf": [
         {

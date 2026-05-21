@@ -205,14 +205,17 @@
             <text x="202" y="268" text-anchor="middle" fill="#dcffe9" font-size="14">timestamp_event</text>
             <rect x="42" y="286" width="320" height="34" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
             <text x="202" y="308" text-anchor="middle" fill="#dcffe9" font-size="14">environment</text>
+            <rect x="42" y="326" width="156" height="26" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="120" y="343" text-anchor="middle" fill="#dcffe9" font-size="12">source_app</text>
+            <rect x="206" y="326" width="156" height="26" rx="8" fill="#1f3b2a" stroke="#39a16f"/>
+            <text x="284" y="343" text-anchor="middle" fill="#dcffe9" font-size="12">source_app_version</text>
 
             <rect x="410" y="80" width="372" height="256" rx="12" fill="#332b18" stroke="#8c6d2d"/>
             <text x="596" y="110" text-anchor="middle" fill="#ffe3ab" font-size="18" font-weight="700">Conditionally Required</text>
 
             <rect x="430" y="126" width="332" height="94" rx="9" fill="#3d3219" stroke="#b99143"/>
             <text x="596" y="147" text-anchor="middle" fill="#fff0cd" font-size="13" font-weight="700">If event_type is JobCreatedEvent OR JobCreatedAndStartedEvent</text>
-            <text x="596" y="169" text-anchor="middle" fill="#fff0cd" font-size="13">source_app, source_app_version, environment</text>
-            <text x="596" y="189" text-anchor="middle" fill="#fff0cd" font-size="13">platform, input_arguments</text>
+            <text x="596" y="169" text-anchor="middle" fill="#fff0cd" font-size="13">platform, input_arguments</text>
             <text x="596" y="209" text-anchor="middle" fill="#ffd998" font-size="12">purpose: ensure enough context exists at creation/start</text>
 
             <rect x="430" y="236" width="332" height="84" rx="9" fill="#3d3219" stroke="#b99143"/>
@@ -246,11 +249,12 @@
                 <path d="M0 0 L10 5 L0 10 z" fill="#89aacc"/>
               </marker>
             </defs>
-            <rect x="315" y="160" width="210" height="104" rx="14" fill="#1a2a3a" stroke="#3f5d7b"/>
+            <rect x="315" y="160" width="210" height="130" rx="14" fill="#1a2a3a" stroke="#3f5d7b"/>
             <text x="420" y="194" text-anchor="middle" fill="#d6e8fb" font-size="22" font-weight="700">Core Envelope</text>
-            <text x="420" y="220" text-anchor="middle" fill="#9fc0de" font-size="15">event_type, event_id</text>
-            <text x="420" y="241" text-anchor="middle" fill="#9fc0de" font-size="15">job_id, timestamp_event</text>
-            <text x="420" y="262" text-anchor="middle" fill="#9fc0de" font-size="15">environment</text>
+            <text x="420" y="218" text-anchor="middle" fill="#9fc0de" font-size="15">event_type, event_id</text>
+            <text x="420" y="238" text-anchor="middle" fill="#9fc0de" font-size="15">job_id, timestamp_event</text>
+            <text x="420" y="258" text-anchor="middle" fill="#9fc0de" font-size="15">environment</text>
+            <text x="420" y="278" text-anchor="middle" fill="#9fc0de" font-size="14">source_app, source_app_version</text>
 
             <rect x="32" y="42" width="232" height="112" rx="12" fill="#233220" stroke="#4d8754"/>
             <text x="148" y="75" text-anchor="middle" fill="#c6efcb" font-size="19" font-weight="700">Identity + Business</text>
@@ -467,7 +471,10 @@
             <text x="280" y="58" text-anchor="middle" fill="#ffd998" font-size="12">only cross-run link: rerun root initial_job_id -> original root</text>
 
             <rect x="24" y="370" width="512" height="36" rx="8" fill="#162634" stroke="#35526f"/>
-            <text x="280" y="393" text-anchor="middle" fill="#cbe1f7" font-size="13">No other initial_job_id links between old and rerun jobs; only the rerun Aqueduct root references the old root.</text>
+            <text x="280" y="389" text-anchor="middle" fill="#cbe1f7" font-size="13">
+              <tspan x="280" dy="0">No other initial_job_id links between old and rerun jobs;</tspan>
+              <tspan x="280" dy="15">only the rerun Aqueduct root references the old root.</tspan>
+            </text>
           </svg>
         </div>
       </article>
