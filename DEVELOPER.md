@@ -26,14 +26,13 @@ EventGate ships two Lambda functions:
 
 ## Prerequisites
 - Python 3.13 (current required runtime)
-- PostgreSQL client dev package
-  - For local development, you may temporarily switch to the commented `psycopg2-binary==2.9.10` in `requirements.txt`.
+- Docker (for local integration tests using testcontainers)
 
 ## Set Up Python Environment
 ```shell
 python3 -m venv .venv
 source .venv/bin/activate
-pip3 install -r requirements.txt
+pip3 install -r requirements-dev.txt
 ```
 
 ## Run Pylint Tool Locally

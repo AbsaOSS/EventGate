@@ -25,6 +25,9 @@ ARG SASL_SSL_ARTIFACTS=./sasl_ssl_artifacts
 # Trusted certs
 COPY $TRUSTED_SSL_CERTS /opt/certs/
 
+# Production dependencies
+COPY requirements.txt ${LAMBDA_TASK_ROOT}/requirements.txt
+
 RUN \
   echo "######################################################" && \
   echo "### Import trusted certs before doing anything else ###" && \
@@ -36,33 +39,25 @@ RUN \
   echo "### -> Basics                                 ###" && \
   echo "### -> GCC (some makefiles require cmd which)###" && \
   echo "### -> dependencies for kerberos SASL_SSL   ###" && \
+  echo "### -> PostgreSQL dev headers (psycopg2)    ###" && \
   echo "##############################################" && \
     dnf install -y \
       wget tar xz bzip2-devel zlib-devel \
       which make gcc gcc-c++ \
-      libffi-devel cyrus-sasl-devel cyrus-sasl-gssapi openssl-devel krb5-workstation && \
+      libffi-devel cyrus-sasl-devel cyrus-sasl-gssapi openssl-devel krb5-workstation postgresql-devel && \
   echo "#################" && \
   echo "### librdkafka ###" && \
   echo "#################" && \
     mkdir -p /tmp/env-install-workdir/librdkafka && \
     cd /tmp/env-install-workdir/librdkafka && \
-    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/edenhill/librdkafka/archive/v2.4.0.tar.gz && \
-    tar -xf v2.4.0.tar.gz && \
-    cd /tmp/env-install-workdir/librdkafka/librdkafka-2.4.0 && \
+    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v2.14.0.tar.gz && \
+    tar -xf v2.14.0.tar.gz && \
+    cd /tmp/env-install-workdir/librdkafka/librdkafka-2.14.0 && \
     ./configure && make && make install && \
   echo "###################" && \
   echo "### pip installs ###" && \
   echo "###################" && \
-    pip install requests==2.31.0 urllib3==1.26.18 setuptools cryptography jsonschema PyJWT psycopg2-binary && \
-  echo "######################" && \
-  echo "### confluent-kafka ###" && \
-  echo "######################" && \
-    mkdir -p /tmp/env-install-workdir/confluent-kafka && \
-    cd /tmp/env-install-workdir/confluent-kafka && \
-    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/confluent-kafka-python/archive/v2.4.0.tar.gz && \
-    tar -xf v2.4.0.tar.gz && \
-    cd /tmp/env-install-workdir/confluent-kafka/confluent-kafka-python-2.4.0 && \
-    CPPFLAGS="-I/usr/local/include" LDFLAGS="-L/opt" python setup.py install && \
+    pip install -r ${LAMBDA_TASK_ROOT}/requirements.txt --no-binary confluent-kafka && \
   echo "##############" && \
   echo "### cleanup ###" && \
   echo "##############" && \
