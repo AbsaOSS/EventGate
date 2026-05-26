@@ -53,5 +53,8 @@ Quality gates (run after changes, fix only if below threshold)
 - Run all quality gates at once: `make qa`
 - Once a quality gate passes, do not re-run it in different scenarios
 
+Dependencies
+- Two requirements files: `requirements.txt` (prod/Docker only) and `requirements-dev.txt` (extends prod with test and lint tools)
+
 Git workflow
 - Do NOT create git commits; committing is the developer's responsibility

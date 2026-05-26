@@ -1,0 +1,15 @@
+name: Setup Dev Python Environment
+description: Set up Python 3.13 and install dev dependencies (requirements-dev.txt).
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: '3.13'
+        cache: 'pip'
+
+    - name: Install dev dependencies
+      shell: bash
+      run: pip install -r requirements-dev.txt
