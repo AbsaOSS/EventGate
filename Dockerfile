@@ -57,6 +57,9 @@ RUN \
   echo "###################" && \
   echo "### pip installs ###" && \
   echo "###################" && \
+    # requirements.txt pins the version of confluent-kafka.
+    # --no-binary confluent-kafka forces source compilation against the system librdkafka
+    # built above, which includes Kerberos/GSSAPI support. The PyPI compiles without GSSAPI.
     pip install -r ${LAMBDA_TASK_ROOT}/requirements.txt --no-binary confluent-kafka && \
   echo "##############" && \
   echo "### cleanup ###" && \

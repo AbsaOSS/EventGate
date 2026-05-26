@@ -62,14 +62,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Set up dev Python environment
+        uses: ./.github/actions/setup-dev-python-env
 
       - name: Analyze code with Pylint
         id: analyze-code
@@ -98,14 +92,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Set up dev Python environment
+        uses: ./.github/actions/setup-dev-python-env
 
       - name: Check code format with Black
         id: check-format
@@ -123,14 +111,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Set up dev Python environment
+        uses: ./.github/actions/setup-dev-python-env
 
       - name: Check types with Mypy
         id: check-types
@@ -148,14 +130,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-
-      - name: Install Python dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Set up dev Python environment
+        uses: ./.github/actions/setup-dev-python-env
 
       - name: Check code coverage with Pytest
         run: pytest --cov=. -v tests/unit/ --cov-fail-under=80
@@ -173,14 +149,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Set up dev Python environment
+        uses: ./.github/actions/setup-dev-python-env
 
       - name: Run integration tests
         run: pytest tests/integration/ -v --tb=short --log-cli-level=INFO
