@@ -109,7 +109,7 @@ class TestLoadTopicNames:
         assert "public.cps.za.runs" in result
         assert "public.cps.za.dlchange" in result
         assert "public.cps.za.test" in result
-        assert "public.cps.za.status-change" in result
+        assert "public.cps.za.status_change" in result
 
     def test_missing_schema_file_excluded(self, conf_dir: str) -> None:
         """Test that a missing schema file excludes that topic."""

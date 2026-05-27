@@ -104,7 +104,7 @@ def test_load_topic_schemas_success():
     assert "public.cps.za.runs" in handler.topics
     assert "public.cps.za.dlchange" in handler.topics
     assert "public.cps.za.test" in handler.topics
-    assert "public.cps.za.status-change" in handler.topics
+    assert "public.cps.za.status_change" in handler.topics
 
 
 ## get_topics_list()
@@ -114,7 +114,7 @@ def test_get_topics(event_gate_module, make_event):
     assert 200 == resp["statusCode"]
     body = json.loads(resp["body"])
     assert "public.cps.za.test" in body
-    assert "public.cps.za.status-change" in body
+    assert "public.cps.za.status_change" in body
 
 
 ## get_topic_schema()

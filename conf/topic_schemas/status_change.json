@@ -85,10 +85,7 @@
             "description": "Job group identifier (UUID), may or may not reference a job id."
         },
         "job_name": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Human-readable job name."
         },
         "attempt_number": {
@@ -121,10 +118,7 @@
             "description": "Arguments passed to the job."
         },
         "definition_id": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "description": "Definition (Pipeline, Domain, Process) identifier."
         },
         "definition_version": {
@@ -175,10 +169,13 @@
         "event_type",
         "event_id",
         "job_id",
+        "job_name",
         "source_app",
         "source_app_version",
         "timestamp_event",
-        "environment"
+        "environment",
+        "definition_id",
+        "status_type"
     ],
     "allOf": [
         {
@@ -186,7 +183,30 @@
                 "properties": {
                     "event_type": {
                         "enum": [
-                            "JobCreatedEvent",
+                            "JobCreatedEvent"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "platform",
+                    "input_arguments"
+                ],
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "WAITING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "enum": [
                             "JobCreatedAndStartedEvent"
                         ]
                     }
@@ -194,12 +214,53 @@
             },
             "then": {
                 "required": [
-                    "source_app",
-                    "source_app_version",
-                    "environment",
                     "platform",
                     "input_arguments"
-                ]
+                ],
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "RUNNING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "JobStartedEvent"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "RUNNING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "JobUpdatedEvent"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "WAITING",
+                            "RUNNING"
+                        ]
+                    }
+                }
             }
         },
         {
@@ -211,9 +272,6 @@
                 }
             },
             "then": {
-                "required": [
-                    "status_type"
-                ],
                 "properties": {
                     "status_type": {
                         "enum": [
