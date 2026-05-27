@@ -169,12 +169,6 @@
         "event_type",
         "event_id",
         "job_id",
-        "job_name",
-        "source_app",
-        "source_app_version",
-        "timestamp_event",
-        "environment",
-        "definition_id",
         "status_type"
     ],
     "allOf": [
@@ -190,6 +184,12 @@
             },
             "then": {
                 "required": [
+                    "job_name",
+                    "source_app",
+                    "source_app_version",
+                    "timestamp_event",
+                    "environment",
+                    "definition_id",
                     "platform",
                     "input_arguments"
                 ],
@@ -214,6 +214,12 @@
             },
             "then": {
                 "required": [
+                    "job_name",
+                    "source_app",
+                    "source_app_version",
+                    "timestamp_event",
+                    "environment",
+                    "definition_id",
                     "platform",
                     "input_arguments"
                 ],
