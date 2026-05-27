@@ -37,7 +37,7 @@ POSTGRES_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000  # 7 days in milliseconds
 TOPIC_RUNS = "public.cps.za.runs"
 TOPIC_DLCHANGE = "public.cps.za.dlchange"
 TOPIC_TEST = "public.cps.za.test"
-TOPIC_STATUS_CHANGE = "public.cps.za.status-change"
+TOPIC_STATUS_CHANGE = "public.cps.za.status_change"
 
 SUPPORTED_WRITE_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS, TOPIC_DLCHANGE, TOPIC_TEST})
 SUPPORTED_STATS_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS})
