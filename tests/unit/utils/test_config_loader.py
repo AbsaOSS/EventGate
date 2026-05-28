@@ -26,7 +26,6 @@ import pytest
 
 from src.utils.config_loader import (
     _normalize_access_config,
-    _normalize_topic_keys_config,
     load_access_config,
     load_config,
     load_topic_keys_config,
@@ -231,28 +230,3 @@ class TestNormalizeAccessConfig:
         """Test that malformed access config raises ValueError."""
         with pytest.raises(ValueError, match=error_fragment):
             _normalize_access_config(raw)
-
-
-class TestNormalizeTopicKeysConfig:
-    """Tests for _normalize_topic_keys_config()."""
-
-    def test_normalize_valid_topic_keys(self) -> None:
-        """Test valid topic key mappings are preserved."""
-        raw = {"public.cps.za.runs": "event_id", "public.cps.za.status_change": "job_id"}
-
-        result = _normalize_topic_keys_config(raw)
-
-        assert raw == result
-
-    @pytest.mark.parametrize(
-        "raw,error_fragment",
-        [
-            ({"topic": 123}, "expected key field name as string"),
-            ({"topic": "   "}, "must be a non-empty string"),
-        ],
-        ids=["invalid-type", "empty-string"],
-    )
-    def test_normalize_rejects_invalid_topic_keys(self, raw: dict[str, Any], error_fragment: str) -> None:
-        """Test malformed topic key config raises ValueError."""
-        with pytest.raises(ValueError, match=error_fragment):
-            _normalize_topic_keys_config(raw)

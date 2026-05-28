@@ -157,9 +157,7 @@ def _validate_topic_keys_config(topic_key_data: dict[str, Any]) -> None:
     """
     for topic, field_name in topic_key_data.items():
         if not isinstance(field_name, str):
-            raise ValueError(
-                f"Topic '{topic}': expected key field name as string, got {type(field_name).__name__}."
-            )
+            raise ValueError(f"Topic '{topic}': expected key field name as string, got {type(field_name).__name__}.")
     return
 
 
