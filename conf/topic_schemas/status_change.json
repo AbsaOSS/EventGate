@@ -129,17 +129,13 @@
             "description": "Optional definition version."
         },
         "status_type": {
-            "type": [
-                "string",
-                "null"
-            ],
+            "type": "string",
             "enum": [
                 "WAITING",
                 "RUNNING",
                 "SUCCEEDED",
                 "FAILED",
-                "KILLED",
-                null
+                "KILLED"
             ],
             "description": "High-level status type for the current lifecycle event."
         },
