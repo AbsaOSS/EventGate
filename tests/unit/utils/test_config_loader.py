@@ -24,19 +24,36 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.utils.config_loader import _normalize_access_config, load_access_config, load_config, load_topic_names
+from src.utils.config_loader import (
+    _normalize_access_config,
+    _normalize_topic_keys_config,
+    load_access_config,
+    load_config,
+    load_topic_keys_config,
+    load_topic_names,
+)
 
 
 @pytest.fixture
 def conf_dir(tmp_path: Path) -> str:
     """Create a temporary config directory with topic schemas."""
     # Write config.json.
-    config_data = {"token_provider_url": "http://test", "access_config": str(tmp_path / "access.json")}
+    config_data = {
+        "token_provider_url": "http://test",
+        "access_config": str(tmp_path / "access.json"),
+        "topic_keys_config": str(tmp_path / "topic_keys.json"),
+    }
     (tmp_path / "config.json").write_text(json.dumps(config_data), encoding="utf-8")
 
     # Write access.json.
     (tmp_path / "access.json").write_text(
         json.dumps({"public.cps.za.runs": ["UserA"], "public.cps.za.test": ["UserB"]}),
+        encoding="utf-8",
+    )
+
+    # Write topic_keys.json.
+    (tmp_path / "topic_keys.json").write_text(
+        json.dumps({"public.cps.za.runs": "event_id", "public.cps.za.status_change": "job_id"}),
         encoding="utf-8",
     )
 
@@ -129,6 +146,42 @@ class TestLoadTopicNames:
         assert [] == result
 
 
+class TestLoadTopicKeysConfig:
+    """Tests for load_topic_keys_config()."""
+
+    def test_loads_from_local_file(self, conf_dir: str) -> None:
+        """Test loading topic key config from local file path."""
+        config = load_config(conf_dir)
+        aws_s3 = MagicMock()
+
+        result = load_topic_keys_config(config, aws_s3)
+
+        assert "job_id" == result["public.cps.za.status_change"]
+        aws_s3.Bucket.assert_not_called()
+
+    def test_loads_from_s3(self) -> None:
+        """Test loading topic key config from S3 path."""
+        config = {"topic_keys_config": "s3://my-bucket/conf/topic_keys.json"}
+        key_data = {"public.cps.za.test": "event_id"}
+
+        mock_body = MagicMock()
+        mock_body.read.return_value = json.dumps(key_data).encode("utf-8")
+
+        mock_s3 = MagicMock()
+        mock_s3.Bucket.return_value.Object.return_value.get.return_value = {"Body": mock_body}
+
+        result = load_topic_keys_config(config, mock_s3)
+
+        assert "event_id" == result["public.cps.za.test"]
+        mock_s3.Bucket.assert_called_once_with("my-bucket")
+        mock_s3.Bucket.return_value.Object.assert_called_once_with("conf/topic_keys.json")
+
+    def test_missing_config_returns_empty_mapping(self) -> None:
+        """Test missing topic_keys_config returns empty mapping."""
+        result = load_topic_keys_config({}, MagicMock())
+        assert {} == result
+
+
 class TestNormalizeAccessConfig:
     """Tests for _normalize_access_config()."""
 
@@ -178,3 +231,28 @@ class TestNormalizeAccessConfig:
         """Test that malformed access config raises ValueError."""
         with pytest.raises(ValueError, match=error_fragment):
             _normalize_access_config(raw)
+
+
+class TestNormalizeTopicKeysConfig:
+    """Tests for _normalize_topic_keys_config()."""
+
+    def test_normalize_valid_topic_keys(self) -> None:
+        """Test valid topic key mappings are preserved."""
+        raw = {"public.cps.za.runs": "event_id", "public.cps.za.status_change": "job_id"}
+
+        result = _normalize_topic_keys_config(raw)
+
+        assert raw == result
+
+    @pytest.mark.parametrize(
+        "raw,error_fragment",
+        [
+            ({"topic": 123}, "expected key field name as string"),
+            ({"topic": "   "}, "must be a non-empty string"),
+        ],
+        ids=["invalid-type", "empty-string"],
+    )
+    def test_normalize_rejects_invalid_topic_keys(self, raw: dict[str, Any], error_fragment: str) -> None:
+        """Test malformed topic key config raises ValueError."""
+        with pytest.raises(ValueError, match=error_fragment):
+            _normalize_topic_keys_config(raw)

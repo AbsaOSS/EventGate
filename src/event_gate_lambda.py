@@ -64,7 +64,12 @@ writers = {
 
 # Initialize EventGate handlers
 handler_token = HandlerToken(config).with_public_keys_queried()
-handler_topic = HandlerTopic(config, aws_s3, handler_token, writers).with_load_access_config().with_load_topic_schemas()
+handler_topic = (
+    HandlerTopic(config, aws_s3, handler_token, writers)
+    .with_load_access_config()
+    .with_load_topic_keys_config()
+    .with_load_topic_schemas()
+)
 handler_health = HandlerHealth(writers)
 handler_api = HandlerApi().with_api_definition_loaded()
 

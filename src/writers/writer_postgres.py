@@ -158,11 +158,12 @@ class WriterPostgres(Writer, PostgresBase):
             },
         )
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> None:
+    def write(self, topic_name: str, message: dict[str, Any], message_key: str = "") -> None:
         """Dispatch insertion for a topic into the correct Postgres table(s).
         Args:
             topic_name: Incoming topic identifier.
             message: JSON-serializable payload.
+            message_key: Optional transport key (unused by Postgres writer).
         Raises:
             WriteError: If publishing fails.
         """

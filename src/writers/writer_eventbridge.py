@@ -49,11 +49,12 @@ class WriterEventBridge(Writer):
         failed = [e for e in self._entries if "ErrorCode" in e or "ErrorMessage" in e]
         return json.dumps(failed) if failed else "[]"
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> None:
+    def write(self, topic_name: str, message: dict[str, Any], message_key: str = "") -> None:
         """Publish a message to EventBridge.
         Args:
             topic_name: Target EventBridge writer topic (destination) name.
             message: JSON-serializable payload to publish.
+            message_key: Optional transport key (unused by EventBridge).
         Raises:
             WriteError: If publishing fails.
         """
