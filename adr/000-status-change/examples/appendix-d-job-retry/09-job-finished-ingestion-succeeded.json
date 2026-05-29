@@ -1,0 +1,7 @@
+{
+    "event_type": "JobFinishedEvent",
+    "event_id": "2fe09e1f-25d0-4d89-911e-f5fbf699d1f5",
+    "timestamp_event": 1747646870000,
+    "job_id": "0011aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "status_type": "SUCCEEDED"
+}

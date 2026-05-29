@@ -1,0 +1,9 @@
+{
+    "event_type": "JobFinishedEvent",
+    "event_id": "ff1714bf-a3f6-4b0d-9b4b-5662b8e9c42e",
+    "tenant_id": "abcd",
+    "timestamp_event": 1747646445000,
+    "country": "za",
+    "job_id": "0002aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "status_type": "SUCCEEDED"
+}

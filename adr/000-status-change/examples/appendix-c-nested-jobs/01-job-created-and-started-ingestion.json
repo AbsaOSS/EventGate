@@ -1,0 +1,21 @@
+{
+    "event_type": "JobCreatedAndStartedEvent",
+    "event_id": "ea4ef752-2a2b-4f6c-93ee-f31a2f9b7d10",
+    "tenant_id": "abcd",
+    "source_app": "ingestapp",
+    "source_app_version": "2.14.0",
+    "environment": "dev",
+    "timestamp_event": 1747646400000,
+    "country": "za",
+    "job_id": "0001aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "job_group_id": "0001aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "job_name": "IngestApp Ingestion",
+    "platform": "aws.stepfunctions",
+    "input_arguments": {
+        "pipelineId": 1234,
+        "currentDate": "2026-05-19",
+        "triggerType": "SCHEDULE"
+    },
+    "definition_id": "1234",
+    "status_type": "RUNNING"
+}

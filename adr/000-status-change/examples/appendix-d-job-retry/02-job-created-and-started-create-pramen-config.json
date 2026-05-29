@@ -1,0 +1,21 @@
+{
+    "event_type": "JobCreatedAndStartedEvent",
+    "event_id": "f2f0cf47-a738-489c-b900-671f74c6f58b",
+    "tenant_id": "abcd",
+    "source_app": "ingestapp",
+    "source_app_version": "2.14.0",
+    "environment": "dev",
+    "timestamp_event": 1747646810000,
+    "country": "za",
+    "job_id": "0012aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "parent_job_id": "0011aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "job_group_id": "0011aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "job_name": "Create Pramen Config",
+    "platform": "aws.lambda",
+    "input_arguments": {
+        "pipelineId": 1234,
+        "currentDate": "2026-05-19"
+    },
+    "definition_id": "1234",
+    "status_type": "RUNNING"
+}

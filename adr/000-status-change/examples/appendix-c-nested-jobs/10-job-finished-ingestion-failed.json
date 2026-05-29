@@ -1,0 +1,9 @@
+{
+    "event_type": "JobFinishedEvent",
+    "event_id": "7baea31d-b630-451f-a59e-699e0c4f53b3",
+    "timestamp_event": 1747646705000,
+    "job_id": "0001aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "status_type": "FAILED",
+    "status_subtype": "HIVE_TABLE_UPDATE_FAILED",
+    "status_detail": "sun.security.provider.certpath.SunCertPathBuilderException: unable to find valid certification path to requested target: Unable to execute HTTP request: PKIX path building failed."
+}
