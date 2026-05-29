@@ -186,8 +186,7 @@
                     "timestamp_event",
                     "environment",
                     "definition_id",
-                    "platform",
-                    "input_arguments"
+                    "platform"
                 ],
                 "properties": {
                     "status_type": {
@@ -216,8 +215,7 @@
                     "timestamp_event",
                     "environment",
                     "definition_id",
-                    "platform",
-                    "input_arguments"
+                    "platform"
                 ],
                 "properties": {
                     "status_type": {
