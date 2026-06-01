@@ -39,5 +39,5 @@ TOPIC_DLCHANGE = "public.cps.za.dlchange"
 TOPIC_TEST = "public.cps.za.test"
 TOPIC_STATUS_CHANGE = "public.cps.za.status_change"
 
-SUPPORTED_WRITE_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS, TOPIC_DLCHANGE, TOPIC_TEST})
+POSTGRES_WRITE_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS, TOPIC_DLCHANGE, TOPIC_TEST})
 SUPPORTED_STATS_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS})
