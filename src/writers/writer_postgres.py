@@ -31,7 +31,7 @@ from src.utils.constants import (
     TOPIC_DLCHANGE,
     TOPIC_RUNS,
     TOPIC_TEST,
-    SUPPORTED_WRITE_TOPICS,
+    POSTGRES_WRITE_TOPICS,
 )
 from src.utils.postgres_base import PsycopgError, PostgresBase
 import src.utils.postgres_base as _pb
@@ -158,11 +158,12 @@ class WriterPostgres(Writer, PostgresBase):
             },
         )
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> None:
+    def write(self, topic_name: str, message: dict[str, Any], message_key: str = "") -> None:
         """Dispatch insertion for a topic into the correct Postgres table(s).
         Args:
             topic_name: Incoming topic identifier.
             message: JSON-serializable payload.
+            message_key: Optional transport key (unused by Postgres writer).
         Raises:
             WriteError: If publishing fails.
         """
@@ -188,9 +189,9 @@ class WriterPostgres(Writer, PostgresBase):
 
         log_payload_at_trace(logger, "Postgres", topic_name, message)
 
-        if topic_name not in SUPPORTED_WRITE_TOPICS:
+        if topic_name not in POSTGRES_WRITE_TOPICS:
             msg = f"Unknown topic for Postgres/{topic_name}"
-            logger.error(msg)
+            logger.debug(msg)
             raise WriteError(msg)
 
         try:

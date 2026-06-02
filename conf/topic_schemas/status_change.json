@@ -1,0 +1,287 @@
+{
+    "type": "object",
+    "properties": {
+        "event_type": {
+            "type": "string",
+            "enum": [
+                "JobCreatedEvent",
+                "JobCreatedAndStartedEvent",
+                "JobStartedEvent",
+                "JobUpdatedEvent",
+                "JobFinishedEvent"
+            ],
+            "description": "Lifecycle event type for job status changes."
+        },
+        "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the event (UUID)"
+        },
+        "job_ref": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Identifier of the job in it's respective system (e.g. Spark Application Id, Glue Job Id, EMR Step Id, etc)."
+        },
+        "tenant_id": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Application ID or ServiceNow identifier"
+        },
+        "source_app": {
+            "type": "string",
+            "description": " Standardized source application name (aqueduct, unify, lum, etc)"
+        },
+        "source_app_version": {
+            "type": "string",
+            "description": "Source application version (SemVer preferred)"
+        },
+        "environment": {
+            "type": "string",
+            "description": "Environment (dev, uat, pre-prod, prod, test or others)"
+        },
+        "timestamp_event": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Timestamp of the event in epoch milliseconds"
+        },
+        "country": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "The country the data is related to, e.g. za, ke, on-mu, nbc-tz, etc."
+        },
+        "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Primary job identifier (UUID)."
+        },
+        "parent_job_id": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "format": "uuid",
+            "description": "Optional parent job identifier (UUID), to represent nested job hierarchies."
+        },
+        "initial_job_id": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "format": "uuid",
+            "description": "Optional initial job identifier (UUID), to represent retried or replayed jobs."
+        },
+        "job_group_id": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "format": "uuid",
+            "description": "Job group identifier (UUID), may or may not reference a job id."
+        },
+        "job_name": {
+            "type": "string",
+            "description": "Human-readable job name."
+        },
+        "attempt_number": {
+            "type": [
+                "integer",
+                "null"
+            ],
+            "minimum": 1,
+            "description": "Attempt number for this job."
+        },
+        "platform": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Platform, e.g. aws.emr, aws.glue, aws.lambda."
+        },
+        "platform_metadata": {
+            "type": [
+                "object",
+                "null"
+            ],
+            "description": "Platform-specific metadata (e.g. {\"cluster_id\": \"j-...\"})."
+        },
+        "input_arguments": {
+            "type": [
+                "object",
+                "null"
+            ],
+            "description": "Arguments passed to the job."
+        },
+        "definition_id": {
+            "type": "string",
+            "description": "Definition (Pipeline, Domain, Process) identifier."
+        },
+        "definition_version": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Optional definition version."
+        },
+        "status_type": {
+            "type": "string",
+            "enum": [
+                "WAITING",
+                "RUNNING",
+                "SUCCEEDED",
+                "FAILED",
+                "KILLED"
+            ],
+            "description": "High-level status type for the current lifecycle event."
+        },
+        "status_subtype": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Optional status subtype, e.g. NO_DATA or error code."
+        },
+        "status_detail": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "Optional human-readable status detail, e.g. short error message."
+        },
+        "additional_context": {
+            "type": [
+                "object",
+                "null"
+            ],
+            "description": "Additional context payload."
+        }
+    },
+    "required": [
+        "event_type",
+        "event_id",
+        "job_id",
+        "status_type"
+    ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "enum": [
+                            "JobCreatedEvent"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "job_name",
+                    "source_app",
+                    "source_app_version",
+                    "timestamp_event",
+                    "environment",
+                    "definition_id",
+                    "platform"
+                ],
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "WAITING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "enum": [
+                            "JobCreatedAndStartedEvent"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "job_name",
+                    "source_app",
+                    "source_app_version",
+                    "timestamp_event",
+                    "environment",
+                    "definition_id",
+                    "platform"
+                ],
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "RUNNING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "JobStartedEvent"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "RUNNING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "JobUpdatedEvent"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "WAITING",
+                            "RUNNING"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "event_type": {
+                        "const": "JobFinishedEvent"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "status_type": {
+                        "enum": [
+                            "SUCCEEDED",
+                            "FAILED",
+                            "KILLED"
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}

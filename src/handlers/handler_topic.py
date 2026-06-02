@@ -28,8 +28,8 @@ from jsonschema.exceptions import ValidationError
 
 from src.handlers.handler_token import HandlerToken
 from src.utils.conf_path import CONF_DIR
-from src.utils.config_loader import TopicAccessMap, load_access_config
-from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
+from src.utils.config_loader import TopicAccessMap, TopicKeyMap, load_access_config, load_topic_keys_config
+from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
 from src.utils.utils import build_error_response
 from src.writers.writer import WriteError, Writer
 
@@ -51,6 +51,7 @@ class HandlerTopic:
         self.handler_token = handler_token
         self.writers = writers
         self.access_config: TopicAccessMap = {}
+        self.topic_keys: TopicKeyMap = {}
         self.topics: dict[str, dict[str, Any]] = {}
 
     def with_load_access_config(self) -> "HandlerTopic":
@@ -75,8 +76,18 @@ class HandlerTopic:
             self.topics[TOPIC_DLCHANGE] = json.load(file)
         with open(os.path.join(topic_schemas_dir, "test.json"), "r", encoding="utf-8") as file:
             self.topics[TOPIC_TEST] = json.load(file)
+        with open(os.path.join(topic_schemas_dir, "status_change.json"), "r", encoding="utf-8") as file:
+            self.topics[TOPIC_STATUS_CHANGE] = json.load(file)
 
         logger.debug("Loaded topic schemas successfully.")
+        return self
+
+    def with_load_topic_keys_config(self) -> "HandlerTopic":
+        """Load topic key mapping configuration from S3 or local file.
+        Returns:
+            The current instance with loaded topic key config.
+        """
+        self.topic_keys = load_topic_keys_config(self.config, self.aws_s3)
         return self
 
     def get_topics_list(self) -> dict[str, Any]:
@@ -169,10 +180,11 @@ class HandlerTopic:
         except ValidationError as exc:
             return build_error_response(400, "validation", exc.message)
 
+        message_key = self._resolve_message_key(topic_name, topic_message)
         errors = []
         for writer_name, writer in self.writers.items():
             try:
-                writer.write(topic_name, topic_message)
+                writer.write(topic_name, topic_message, message_key)
             except WriteError as exc:
                 errors.append({"type": writer_name, "message": str(exc)})
 
@@ -215,3 +227,26 @@ class HandlerTopic:
                 return False, f"Field '{restricted_field}' value not permitted for user '{user}'"
 
         return True, None
+
+    def _resolve_message_key(self, topic_name: str, message: dict[str, Any]) -> str:
+        """Resolve topic key value from message using configured field mapping.
+        Args:
+            topic_name: Target topic name.
+            message: Topic payload.
+        Returns:
+            String key value for writers, or empty string when no key is configured/resolvable.
+        """
+        key_field = self.topic_keys.get(topic_name)
+        if not key_field:
+            return ""
+
+        key_value = message.get(key_field)
+        if key_value is None:
+            logger.warning("Topic key field '%s' missing for topic '%s'.", key_field, topic_name)
+            return ""
+
+        if isinstance(key_value, (dict, list)):
+            logger.warning("Topic key field '%s' for topic '%s' is not scalar.", key_field, topic_name)
+            return ""
+
+        return str(key_value)

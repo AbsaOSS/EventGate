@@ -24,19 +24,35 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.utils.config_loader import _normalize_access_config, load_access_config, load_config, load_topic_names
+from src.utils.config_loader import (
+    _normalize_access_config,
+    load_access_config,
+    load_config,
+    load_topic_keys_config,
+    load_topic_names,
+)
 
 
 @pytest.fixture
 def conf_dir(tmp_path: Path) -> str:
     """Create a temporary config directory with topic schemas."""
     # Write config.json.
-    config_data = {"token_provider_url": "http://test", "access_config": str(tmp_path / "access.json")}
+    config_data = {
+        "token_provider_url": "http://test",
+        "access_config": str(tmp_path / "access.json"),
+        "topic_keys_config": str(tmp_path / "topic_keys.json"),
+    }
     (tmp_path / "config.json").write_text(json.dumps(config_data), encoding="utf-8")
 
     # Write access.json.
     (tmp_path / "access.json").write_text(
         json.dumps({"public.cps.za.runs": ["UserA"], "public.cps.za.test": ["UserB"]}),
+        encoding="utf-8",
+    )
+
+    # Write topic_keys.json.
+    (tmp_path / "topic_keys.json").write_text(
+        json.dumps({"public.cps.za.runs": "event_id", "public.cps.za.status_change": "job_id"}),
         encoding="utf-8",
     )
 
@@ -46,6 +62,7 @@ def conf_dir(tmp_path: Path) -> str:
     (schemas_dir / "runs.json").write_text('{"type": "object"}', encoding="utf-8")
     (schemas_dir / "dlchange.json").write_text('{"type": "object"}', encoding="utf-8")
     (schemas_dir / "test.json").write_text('{"type": "object"}', encoding="utf-8")
+    (schemas_dir / "status_change.json").write_text('{"type": "object"}', encoding="utf-8")
 
     return str(tmp_path)
 
@@ -101,13 +118,14 @@ class TestLoadTopicNames:
     """Tests for load_topic_names()."""
 
     def test_discovers_all_topics(self, conf_dir: str) -> None:
-        """Test that all three topics are discovered from schema files."""
+        """Test that all configured topics are discovered from schema files."""
         result = load_topic_names(conf_dir)
 
-        assert 3 == len(result)
+        assert 4 == len(result)
         assert "public.cps.za.runs" in result
         assert "public.cps.za.dlchange" in result
         assert "public.cps.za.test" in result
+        assert "public.cps.za.status_change" in result
 
     def test_missing_schema_file_excluded(self, conf_dir: str) -> None:
         """Test that a missing schema file excludes that topic."""
@@ -115,7 +133,7 @@ class TestLoadTopicNames:
 
         result = load_topic_names(conf_dir)
 
-        assert 2 == len(result)
+        assert 3 == len(result)
         assert "public.cps.za.test" not in result
 
     def test_empty_schemas_dir(self, tmp_path: Path) -> None:
@@ -125,6 +143,42 @@ class TestLoadTopicNames:
         result = load_topic_names(str(tmp_path))
 
         assert [] == result
+
+
+class TestLoadTopicKeysConfig:
+    """Tests for load_topic_keys_config()."""
+
+    def test_loads_from_local_file(self, conf_dir: str) -> None:
+        """Test loading topic key config from local file path."""
+        config = load_config(conf_dir)
+        aws_s3 = MagicMock()
+
+        result = load_topic_keys_config(config, aws_s3)
+
+        assert "job_id" == result["public.cps.za.status_change"]
+        aws_s3.Bucket.assert_not_called()
+
+    def test_loads_from_s3(self) -> None:
+        """Test loading topic key config from S3 path."""
+        config = {"topic_keys_config": "s3://my-bucket/conf/topic_keys.json"}
+        key_data = {"public.cps.za.test": "event_id"}
+
+        mock_body = MagicMock()
+        mock_body.read.return_value = json.dumps(key_data).encode("utf-8")
+
+        mock_s3 = MagicMock()
+        mock_s3.Bucket.return_value.Object.return_value.get.return_value = {"Body": mock_body}
+
+        result = load_topic_keys_config(config, mock_s3)
+
+        assert "event_id" == result["public.cps.za.test"]
+        mock_s3.Bucket.assert_called_once_with("my-bucket")
+        mock_s3.Bucket.return_value.Object.assert_called_once_with("conf/topic_keys.json")
+
+    def test_missing_config_returns_empty_mapping(self) -> None:
+        """Test missing topic_keys_config returns empty mapping."""
+        result = load_topic_keys_config({}, MagicMock())
+        assert {} == result
 
 
 class TestNormalizeAccessConfig:

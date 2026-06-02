@@ -38,11 +38,12 @@ class Writer(ABC):
         self.config = config
 
     @abstractmethod
-    def write(self, topic_name: str, message: dict[str, Any]) -> None:
+    def write(self, topic_name: str, message: dict[str, Any], message_key: str = "") -> None:
         """Publish a message to the target system.
         Args:
             topic_name: Target writer topic (destination) name.
             message: JSON-serializable payload to publish.
+            message_key: Optional transport key for systems that support keyed messages.
         Raises:
             WriteError: If publishing fails.
         """

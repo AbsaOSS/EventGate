@@ -1,0 +1,12 @@
+{
+    "event_type": "JobUpdatedEvent",
+    "event_id": "9dbf71c1-5f71-4a92-8747-3db90d6904e4",
+    "tenant_id": "abcd",
+    "timestamp_event": 1747646826000,
+    "country": "za",
+    "job_id": "0011aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "status_type": "RUNNING",
+    "additional_context": {
+        "pipeline_name": "MYPIPELINE"
+    }
+}

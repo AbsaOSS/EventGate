@@ -24,12 +24,13 @@ from typing import Any
 
 from boto3.resources.base import ServiceResource
 
-from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_TEST
+from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
 
 logger = logging.getLogger(__name__)
 
 FieldPatterns = dict[str, list[re.Pattern[str]]]
 TopicAccessMap = dict[str, dict[str, FieldPatterns]]
+TopicKeyMap = dict[str, str]
 
 
 def load_config(conf_dir: str) -> dict[str, Any]:
@@ -44,6 +45,24 @@ def load_config(conf_dir: str) -> dict[str, Any]:
         config: dict[str, Any] = json.load(file)
     logger.debug("Loaded main configuration from %s.", config_path)
     return config
+
+
+def _load_json_from_path(path: str, aws_s3: ServiceResource) -> dict[str, Any]:
+    """Load JSON data from either S3 (`s3://...`) or local file path.
+    Args:
+        path: JSON source path.
+        aws_s3: Boto3 S3 resource used for S3-backed paths.
+    Returns:
+        Parsed JSON object.
+    """
+    if path.startswith("s3://"):
+        name_parts = path.split("/")
+        bucket_name = name_parts[2]
+        bucket_object_key = "/".join(name_parts[3:])
+        return json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object_key).get()["Body"].read().decode("utf-8"))
+
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def _compile_topic_patterns(
@@ -121,22 +140,46 @@ def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> Topic
     """
     access_path: str = config["access_config"]
     logger.debug("Loading access configuration from %s.", access_path)
-
-    access_data: dict[str, Any] = {}
-
-    if access_path.startswith("s3://"):
-        name_parts = access_path.split("/")
-        bucket_name = name_parts[2]
-        bucket_object_key = "/".join(name_parts[3:])
-        access_data = json.loads(
-            aws_s3.Bucket(bucket_name).Object(bucket_object_key).get()["Body"].read().decode("utf-8")
-        )
-    else:
-        with open(access_path, "r", encoding="utf-8") as file:
-            access_data = json.load(file)
+    access_data = _load_json_from_path(access_path, aws_s3)
 
     logger.debug("Loaded access configuration.")
     return _normalize_access_config(access_data)
+
+
+def _validate_topic_keys_config(topic_key_data: dict[str, Any]) -> None:
+    """Validate topic key mapping config.
+    Args:
+        topic_key_data: Parsed JSON mapping of topic to event property name.
+    Returns:
+        None
+    Raises:
+        ValueError: If any topic key mapping is not a string.
+    """
+    for topic, field_name in topic_key_data.items():
+        if not isinstance(field_name, str):
+            raise ValueError(f"Topic '{topic}': expected key field name as string, got {type(field_name).__name__}.")
+    return
+
+
+def load_topic_keys_config(config: dict[str, Any], aws_s3: ServiceResource) -> TopicKeyMap:
+    """Load topic key configuration from S3 or a local file.
+    Args:
+        config: Main configuration dict. If `topic_keys_config` is absent, returns empty mapping.
+        aws_s3: Boto3 S3 resource for loading from S3 paths.
+    Returns:
+        Mapping of topic name to message property used as Kafka key.
+    """
+    topic_keys_path = config.get("topic_keys_config")
+    if not topic_keys_path:
+        logger.debug("No topic_keys_config configured. Using empty topic key mapping.")
+        return {}
+
+    logger.debug("Loading topic key configuration from %s.", topic_keys_path)
+    topic_key_data = _load_json_from_path(topic_keys_path, aws_s3)
+
+    logger.debug("Loaded topic key configuration.")
+    _validate_topic_keys_config(topic_key_data)
+    return topic_key_data
 
 
 def load_topic_names(conf_dir: str) -> list[str]:
@@ -150,6 +193,7 @@ def load_topic_names(conf_dir: str) -> list[str]:
         "runs.json": TOPIC_RUNS,
         "dlchange.json": TOPIC_DLCHANGE,
         "test.json": TOPIC_TEST,
+        "status_change.json": TOPIC_STATUS_CHANGE,
     }
     schemas_dir = os.path.join(conf_dir, "topic_schemas")
     topics: list[str] = []

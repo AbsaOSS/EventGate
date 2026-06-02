@@ -88,11 +88,12 @@ class WriterKafka(Writer):
         except TypeError:
             return self._producer.flush()
 
-    def write(self, topic_name: str, message: dict[str, Any]) -> None:
+    def write(self, topic_name: str, message: dict[str, Any], message_key: str = "") -> None:
         """Publish a message to Kafka.
         Args:
             topic_name: Kafka topic to publish to.
             message: JSON-serializable payload.
+            message_key: Optional Kafka key used for partitioning.
         Raises:
             WriteError: If publishing fails.
         """
@@ -115,7 +116,7 @@ class WriterKafka(Writer):
             logger.debug("Sending to Kafka %s.", topic_name)
             self._producer.produce(
                 topic_name,
-                key="",
+                key=message_key,
                 value=json.dumps(message).encode("utf-8"),
                 callback=lambda err, msg: (errors.append(str(err)) if err is not None else None),
             )

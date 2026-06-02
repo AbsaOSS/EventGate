@@ -71,6 +71,52 @@ def test_load_access_config_from_s3():
     mock_aws_s3.Bucket.return_value.Object.assert_called_once_with("path/to/access.json")
 
 
+## load_topic_keys_config()
+def test_load_topic_keys_config_from_local_file():
+    """Test loading topic key config from local file."""
+    mock_handler_token = MagicMock()
+    mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
+    config = {"topic_keys_config": "conf/topic_keys.json"}
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
+
+    topic_keys_data = {"public.cps.za.test": "event_id"}
+    with patch("builtins.open", mock_open(read_data=json.dumps(topic_keys_data))):
+        result = handler.with_load_topic_keys_config()
+
+    assert result is handler
+    assert "event_id" == handler.topic_keys["public.cps.za.test"]
+
+
+def test_load_topic_keys_config_from_s3():
+    """Test loading topic key config from S3."""
+    mock_handler_token = MagicMock()
+    mock_aws_s3 = MagicMock()
+    mock_writers = {
+        "kafka": MagicMock(),
+        "eventbridge": MagicMock(),
+        "postgres": MagicMock(),
+    }
+    config = {"topic_keys_config": "s3://my-bucket/path/to/topic_keys.json"}
+    handler = HandlerTopic(config, mock_aws_s3, mock_handler_token, mock_writers)
+
+    topic_keys_data = {"public.cps.za.status_change": "job_id"}
+    mock_body = MagicMock()
+    mock_body.read.return_value = json.dumps(topic_keys_data).encode("utf-8")
+    mock_aws_s3.Bucket.return_value.Object.return_value.get.return_value = {"Body": mock_body}
+
+    result = handler.with_load_topic_keys_config()
+
+    assert result is handler
+    assert "job_id" == handler.topic_keys["public.cps.za.status_change"]
+    mock_aws_s3.Bucket.assert_called_once_with("my-bucket")
+    mock_aws_s3.Bucket.return_value.Object.assert_called_once_with("path/to/topic_keys.json")
+
+
 ## load_topic_schemas()
 def test_load_topic_schemas_success():
     mock_handler_token = MagicMock()
@@ -87,6 +133,7 @@ def test_load_topic_schemas_success():
         "runs.json": {"type": "object", "properties": {"run_id": {"type": "string"}}},
         "dlchange.json": {"type": "object", "properties": {"change_id": {"type": "string"}}},
         "test.json": {"type": "object", "properties": {"event_id": {"type": "string"}}},
+        "status_change.json": {"type": "object", "properties": {"execution_id": {"type": "string"}}},
     }
 
     def mock_open_side_effect(file_path, *_args, **_kwargs):
@@ -99,10 +146,11 @@ def test_load_topic_schemas_success():
         result = handler.with_load_topic_schemas()
 
     assert result is handler
-    assert 3 == len(handler.topics)
+    assert 4 == len(handler.topics)
     assert "public.cps.za.runs" in handler.topics
     assert "public.cps.za.dlchange" in handler.topics
     assert "public.cps.za.test" in handler.topics
+    assert "public.cps.za.status_change" in handler.topics
 
 
 ## get_topics_list()
@@ -112,6 +160,7 @@ def test_get_topics(event_gate_module, make_event):
     assert 200 == resp["statusCode"]
     body = json.loads(resp["body"])
     assert "public.cps.za.test" in body
+    assert "public.cps.za.status_change" in body
 
 
 ## get_topic_schema()
@@ -206,6 +255,50 @@ def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
         body = json.loads(resp["body"])
         assert body["success"]
         assert 202 == body["statusCode"]
+
+
+def test_post_passes_topic_key_to_writers(event_gate_module, make_event, valid_payload):
+    """Configured topic key field is extracted and passed to writer.write."""
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.topic_keys["public.cps.za.test"] = "event_id"
+        kafka_writer = event_gate_module.handler_topic.writers["kafka"]
+        kafka_writer.write = MagicMock(return_value=None)
+        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=None)
+        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=None)
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+        assert 202 == resp["statusCode"]
+
+        kafka_writer.write.assert_called_once_with("public.cps.za.test", valid_payload, "e1")
+
+
+def test_post_missing_topic_key_field_falls_back_to_empty_key(event_gate_module, make_event, valid_payload):
+    """Missing configured key field falls back to empty message key."""
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.topic_keys["public.cps.za.test"] = "job_id"
+        kafka_writer = event_gate_module.handler_topic.writers["kafka"]
+        kafka_writer.write = MagicMock(return_value=None)
+        event_gate_module.handler_topic.writers["eventbridge"].write = MagicMock(return_value=None)
+        event_gate_module.handler_topic.writers["postgres"].write = MagicMock(return_value=None)
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+        assert 202 == resp["statusCode"]
+
+        kafka_writer.write.assert_called_once_with("public.cps.za.test", valid_payload, "")
 
 
 def test_post_single_writer_failure(event_gate_module, make_event, valid_payload):

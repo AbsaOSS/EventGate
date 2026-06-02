@@ -1,0 +1,10 @@
+{
+    "event_type": "JobUpdatedEvent",
+    "event_id": "1f2456d2-f2bf-40f7-a8be-e46f3dc9b4b3",
+    "timestamp_event": 1747646447000,
+    "job_id": "0001aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "status_type": "RUNNING",
+    "additional_context": {
+        "pipeline_name": "MYPIPELINE"
+    }
+}

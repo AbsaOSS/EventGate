@@ -95,6 +95,16 @@ def test_write_success():
     writer.write("topic", {"b": 2})
 
 
+def test_write_uses_message_key():
+    writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
+    producer = FakeProducerSuccess()
+    writer._producer = producer
+
+    writer.write("topic", {"b": 2}, message_key="job-1")
+
+    assert [("topic", "job-1", b'{"b": 2}')] == producer.produced
+
+
 def test_write_async_error():
     writer = WriterKafka({"kafka_bootstrap_server": "localhost:9092"})
     writer._producer = FakeProducerError()

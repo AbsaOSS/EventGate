@@ -1,0 +1,22 @@
+{
+    "event_type": "JobCreatedAndStartedEvent",
+    "event_id": "2e6f31c8-76b8-4bcf-9066-b27cbd5564e1",
+    "tenant_id": "abcd",
+    "source_app": "ingestapp",
+    "source_app_version": "2.14.0",
+    "environment": "dev",
+    "timestamp_event": 1747646830000,
+    "country": "za",
+    "job_id": "0014aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "parent_job_id": "0011aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "job_group_id": "0011aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaaaaa",
+    "job_name": "Publish to Hive",
+    "attempt_number": 1,
+    "platform": "aws.glue",
+    "input_arguments": {
+        "pipelineId": 1234,
+        "currentDate": "2026-05-19"
+    },
+    "definition_id": "1234",
+    "status_type": "RUNNING"
+}
