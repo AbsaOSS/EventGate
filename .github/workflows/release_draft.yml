@@ -20,7 +20,7 @@ jobs:
   release-draft:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -51,7 +51,7 @@ jobs:
 
       - name: Generate Release Notes
         id: generate_release_notes
-        uses: AbsaOSS/generate-release-notes@da535383f54a6532adb84e88d3b6e5c7236132df
+        uses: AbsaOSS/generate-release-notes@b4d6e3fafcff2dedc32ec751975fa3d0b3efad67
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
