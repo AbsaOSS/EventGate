@@ -7,6 +7,6 @@ pylint==4.0.5
 black==26.5.1
 mypy==2.1.0
 mypy-extensions==1.1.0
-moto[s3,secretsmanager,events]==5.2.1
+moto[s3,secretsmanager,events]==5.2.2
 testcontainers==4.14.2
 docker==7.1.0
