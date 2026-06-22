@@ -5,10 +5,16 @@ resource "aws_security_group" "event_gate_sg" {
   tags        = { "BuiltBy" = "Terraform" }
 }
 
-resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
+# Example only — these terraform_examples are illustrative and not used for
+# real deployments. In production, egress is governed by org-managed policies
+# in the target (internal, non-SEN) AWS account. The dummy restricted CIDR and
+# port below satisfy AVD-AWS-0104; replace with values appropriate to your VPC.
+resource "aws_vpc_security_group_egress_rule" "allow_https_egress_ipv4" {
   security_group_id = aws_security_group.event_gate_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
+  cidr_ipv4         = "10.0.0.0/32"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
 }
 
 data "aws_s3_object" "event_gate_lambda_zip" {

@@ -65,8 +65,13 @@ RUN \
   echo "### cleanup ###" && \
   echo "##############" && \
     cd /root && \
-    rm -rf /tmp/env-install-workdir
-  
+    rm -rf /tmp/env-install-workdir && \
+  echo "##############" && \
+  echo "### dnf clean ##" && \
+  echo "##############" && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
+
 # Lambda and SASL_SSL_Artifacts
 COPY $SASL_SSL_ARTIFACTS /opt/sasl_ssl_artifacts/
 COPY src $LAMBDA_TASK_ROOT/src
@@ -78,6 +83,16 @@ COPY api.yaml $LAMBDA_TASK_ROOT/api.yaml
 ENV \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib \
   KRB5CCNAME=FILE:/tmp/krb5cc
+
+# Run as non-root user (AVD-DS-0002).
+# The base image has no shadow-utils, so register the user directly in
+# /etc/passwd + /etc/group. Lambda only needs read access to the task root
+# and write access to /tmp.
+RUN echo 'app:x:1000:1000::/home/app:/sbin/nologin' >> /etc/passwd && \
+    echo 'app:x:1000:' >> /etc/group && \
+    mkdir -p /home/app && \
+    chown -R 1000:1000 /home/app ${LAMBDA_TASK_ROOT} /opt/certs /opt/sasl_ssl_artifacts
+USER 1000
 
 # Set lambda entry point as CMD
 CMD ["src.event_gate_lambda.lambda_handler"]
