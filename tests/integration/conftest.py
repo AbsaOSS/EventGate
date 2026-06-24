@@ -175,7 +175,23 @@ def postgres_container() -> Generator[str, None, None]:
     dsn = _convert_dsn(container.get_connection_url())
     logger.debug("PostgreSQL started, initializing schema.")
 
-    conn = psycopg2.connect(dsn)
+    # Attempt up to 5 times to connect to Postgres (2s interval).
+    # This is a workaround for colima on macOS. The built-in wait strategy is only tested against Docker Desktop, see https://github.com/testcontainers/testcontainers-java/issues/5986
+    conn = None
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, 6):
+        try:
+            conn = psycopg2.connect(dsn)
+            break
+        except psycopg2.OperationalError as exc:
+            last_exc = exc
+            logger.debug("Postgres not ready yet (attempt %d/5): %s. Retrying in 2s.", attempt, exc)
+            if attempt < 5:
+                time.sleep(2)
+
+    if conn is None:
+        raise TimeoutError(f"Timed out waiting for Postgres to become available after 5 attempts: {last_exc}")
+
     conn.autocommit = True
     with conn.cursor() as cursor:
         cursor.execute(SCHEMA_SQL)

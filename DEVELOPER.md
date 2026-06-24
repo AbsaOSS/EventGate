@@ -164,6 +164,12 @@ EventGate uses a **direct invocation approach** for integration testing:
 - Docker running (Docker Desktop on macOS/Windows, or Docker Engine on Linux)
 - Python 3.13 with dependencies installed
 
+When using colima on macOS, set the following environment variables before running tests:
+```shell
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+```
+
 ### Run Integration Tests
 
 Containers start and stop automatically:
