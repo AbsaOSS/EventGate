@@ -32,7 +32,10 @@ RUN \
   echo "######################################################" && \
   echo "### Import trusted certs before doing anything else ###" && \
   echo "######################################################" && \
-  find /opt/certs -type f \( -name "*.pem" -o -name "*.crt" \) -exec cat {} + >> /etc/pki/tls/certs/ca-bundle.crt && \
+    for CERT_PATH in "/opt/certs/"*.pem "/opt/certs/"*.crt; \
+      do [ -e "$CERT_PATH" ] || continue; \
+        cat "$CERT_PATH" >> /etc/pki/tls/certs/ca-bundle.crt; \
+      done && \
   echo "###############################################" && \
   echo "### Install                                  ###" && \
   echo "### -> Basics                                 ###" && \
