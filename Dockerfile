@@ -32,8 +32,10 @@ RUN \
   echo "######################################################" && \
   echo "### Import trusted certs before doing anything else ###" && \
   echo "######################################################" && \
-  for FILE in `ls /opt/certs/*.pem /opt/certs/*.crt 2>/dev/null`; \
-    do cat $FILE >> /etc/pki/tls/certs/ca-bundle.crt ; done && \
+    for FILE in `ls /opt/certs/*.pem /opt/certs/*.crt`; \
+      do [ -e "$FILE" ] || continue; \
+      cat "$FILE" >> /etc/pki/tls/certs/ca-bundle.crt; \
+      done && \
   echo "###############################################" && \
   echo "### Install                                  ###" && \
   echo "### -> Basics                                 ###" && \
