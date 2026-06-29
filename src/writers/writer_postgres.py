@@ -19,6 +19,7 @@
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from src.utils.constants import (
     REQUIRED_CONNECTION_FIELDS,
     TOPIC_DLCHANGE,
     TOPIC_RUNS,
+    TOPIC_STATUS_CHANGE,
     TOPIC_TEST,
     POSTGRES_WRITE_TOPICS,
 )
@@ -51,6 +53,7 @@ class WriterQueries:
     insert_run: str
     insert_run_job: str
     insert_test: str
+    upsert_status_change: str
 
 
 class WriterPostgres(Writer, PostgresBase):
@@ -72,6 +75,7 @@ class WriterPostgres(Writer, PostgresBase):
             insert_run=queries.insert_run.sql,  # pylint: disable=no-member
             insert_run_job=queries.insert_run_job.sql,  # pylint: disable=no-member
             insert_test=queries.insert_test.sql,  # pylint: disable=no-member
+            upsert_status_change=queries.upsert_status_change.sql,  # pylint: disable=no-member
         )
 
     def _insert_dlchange(self, cursor: Any, message: dict[str, Any]) -> None:
@@ -158,6 +162,67 @@ class WriterPostgres(Writer, PostgresBase):
             },
         )
 
+    def _upsert_status_change(self, cursor: Any, message: dict[str, Any]) -> None:
+        """Upsert a status_change event into the aggregated job table.
+        Args:
+            cursor: Database cursor.
+            message: Event payload.
+        """
+        logger.debug("Sending to Postgres - status_change.")
+        ts = datetime.fromtimestamp(message["timestamp_event"] / 1000.0, tz=timezone.utc)
+        event_type = message["event_type"]
+
+        created_at: datetime | None = None
+        started_at: datetime | None = None
+        finished_at: datetime | None = None
+
+        if event_type == "JobCreatedEvent":
+            created_at = ts
+        elif event_type == "JobCreatedAndStartedEvent":
+            created_at = ts
+            started_at = ts
+        elif event_type == "JobStartedEvent":
+            started_at = ts
+        elif event_type == "JobFinishedEvent":
+            finished_at = ts
+
+        cursor.execute(
+            self._queries.upsert_status_change,
+            {
+                "job_id": message["job_id"],
+                "job_group_id": message.get("job_group_id"),
+                "parent_job_id": message.get("parent_job_id"),
+                "initial_job_id": message.get("initial_job_id"),
+                "job_ref": message.get("job_ref"),
+                "job_name": message.get("job_name"),
+                "definition_id": message.get("definition_id"),
+                "definition_version": message.get("definition_version"),
+                "tenant_id": message.get("tenant_id"),
+                "country": message.get("country"),
+                "source_app": message.get("source_app"),
+                "source_app_version": message.get("source_app_version"),
+                "environment": message.get("environment") or "",
+                "platform": message.get("platform"),
+                "platform_metadata": (
+                    json.dumps(message["platform_metadata"]) if message.get("platform_metadata") is not None else None
+                ),
+                "input_arguments": (
+                    json.dumps(message["input_arguments"]) if message.get("input_arguments") is not None else None
+                ),
+                "additional_context": (
+                    json.dumps(message["additional_context"]) if message.get("additional_context") is not None else None
+                ),
+                "attempt_number": message.get("attempt_number") or 1,
+                "status_type": message.get("status_type"),
+                "status_subtype": message.get("status_subtype"),
+                "status_detail": message.get("status_detail"),
+                "created_at": created_at,
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "last_updated_at": ts,
+            },
+        )
+
     def write(self, topic_name: str, message: dict[str, Any], message_key: str = "") -> None:
         """Dispatch insertion for a topic into the correct Postgres table(s).
         Args:
@@ -190,9 +255,9 @@ class WriterPostgres(Writer, PostgresBase):
         log_payload_at_trace(logger, "Postgres", topic_name, message)
 
         if topic_name not in POSTGRES_WRITE_TOPICS:
-            msg = f"Unknown topic for Postgres/{topic_name}"
+            msg = f"Unknown topic for Postgres/{topic_name}. Skipping Postgres writer."
             logger.debug(msg)
-            raise WriteError(msg)
+            # raise WriteError(msg)
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)
@@ -211,6 +276,8 @@ class WriterPostgres(Writer, PostgresBase):
                 self._insert_run(cursor, message)
             elif topic_name == TOPIC_TEST:
                 self._insert_test(cursor, message)
+            elif topic_name == TOPIC_STATUS_CHANGE:
+                self._upsert_status_change(cursor, message)
         connection.commit()
 
     @staticmethod
