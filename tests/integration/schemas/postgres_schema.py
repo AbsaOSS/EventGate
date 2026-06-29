@@ -68,4 +68,33 @@ CREATE TABLE IF NOT EXISTS public_cps_za_test (
     timestamp_event BIGINT,
     additional_info JSONB
 );
+
+-- Table matching ADR 001 job table (no FK constraints for test isolation)
+CREATE TABLE IF NOT EXISTS public_cps_za_status_change_aggregated_job (
+    job_id               UUID PRIMARY KEY,
+    job_group_id         UUID,
+    parent_job_id        UUID,
+    initial_job_id       UUID,
+    job_ref              TEXT,
+    job_name             TEXT,
+    definition_id        TEXT,
+    definition_version   TEXT,
+    tenant_id            TEXT,
+    country              TEXT,
+    source_app           TEXT,
+    source_app_version   TEXT,
+    environment          TEXT NOT NULL,
+    platform             TEXT,
+    platform_metadata    JSONB,
+    input_arguments      JSONB,
+    additional_context   JSONB,
+    attempt_number       INTEGER NOT NULL DEFAULT 1 CHECK (attempt_number > 0),
+    status_type          TEXT CHECK (status_type IN ('WAITING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'KILLED')),
+    status_subtype       TEXT,
+    status_detail        TEXT,
+    created_at           TIMESTAMPTZ,
+    started_at           TIMESTAMPTZ,
+    finished_at          TIMESTAMPTZ,
+    last_updated_at      TIMESTAMPTZ NOT NULL
+);
 """
