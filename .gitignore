@@ -5,5 +5,4 @@ __pycache__
 /dependencies
 /lambda_function.zip
 
-# Terraform Plan output files
 *.sarif
