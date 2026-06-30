@@ -33,8 +33,6 @@ EventGate receives JSON payloads for registered topics, authorizes the caller vi
 - Runtime-configurable access rules (local or S3)
 - API-discoverable schema catalogue
 - Pluggable writer initialization via `config.json`
-- Terraform IaC examples for AWS deployment (API Gateway + Lambda) in `terraform_examples/`
-- Supports both Zip-based and Container Image Lambda packaging (Container path enables custom `librdkafka` / SASL_SSL / Kerberos builds)
 
 ## Architecture
 High-level flow:
@@ -133,35 +131,6 @@ Environment variables:
 - `CONF_DIR` (optional) – directory containing `config.json` and `access.json`. Defaults to `conf`.
 - `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, database, user, password). Required for Postgres writer and stats reader.
 - `POSTGRES_SECRET_REGION` (optional) – AWS region of the Secrets Manager secret. Must be set together with `POSTGRES_SECRET_NAME`.
-
-## Deployment
-Infrastructure-as-Code examples are provided in `terraform_examples/`. These are reference implementations that you can adapt to your environment. Variables are supplied via a `*.tfvars` file or CLI.
-
-### Zip Lambda Package
-Use when no custom native libraries are needed.
-1. Run packaging script: `scripts/prepare.deplyoment.sh` (downloads deps + zips sources & config)
-2. Upload resulting zip to S3
-3. Provide Terraform variables:
-   - `aws_region`
-   - `vpc_id`
-   - `vpc_endpoint`
-   - `resource_prefix` (prepended to created resource names)
-   - `lambda_role_arn`
-   - `lambda_vpc_subnet_ids`
-   - `lambda_package_type = "Zip"`
-   - `lambda_src_s3_bucket`
-   - `lambda_src_s3_key`
-4. `terraform apply`
-
-### Container Image Lambda
-Use when Kafka access needs Kerberos / SASL_SSL or custom `librdkafka` build.
-1. Build image (see comments at top of `Dockerfile`)
-2. Push to ECR
-3. Terraform variables:
-   - Same networking / role vars as above
-   - `lambda_package_type = "Image"`
-   - `lambda_src_ecr_image` (ECR image reference)
-4. `terraform apply`
 
 ## Local Development & Testing
 

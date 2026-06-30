@@ -11,7 +11,6 @@ Structure
 - Writers: `src/writers/` (inherit from `Writer` base class)
 - Readers: `src/readers/` (read-only database access for stats)
 - Config: `conf/config.json`, `conf/access.json`, `conf/topic_schemas/*.json`
-- Production Terraform scripts are not part of this repository; `terraform_examples/` for reference configurations only
 
 Python style
 - Python 3.13
