@@ -55,22 +55,71 @@ VALUES (
     :created_at, :started_at, :finished_at, :last_updated_at
 )
 ON CONFLICT (job_id) DO UPDATE SET
-    job_group_id       = COALESCE(EXCLUDED.job_group_id, t.job_group_id),
-    parent_job_id      = COALESCE(EXCLUDED.parent_job_id, t.parent_job_id),
-    initial_job_id     = COALESCE(EXCLUDED.initial_job_id, t.initial_job_id),
-    job_ref            = COALESCE(EXCLUDED.job_ref, t.job_ref),
-    job_name           = COALESCE(EXCLUDED.job_name, t.job_name),
-    definition_id      = COALESCE(EXCLUDED.definition_id, t.definition_id),
-    definition_version = COALESCE(EXCLUDED.definition_version, t.definition_version),
-    tenant_id          = COALESCE(EXCLUDED.tenant_id, t.tenant_id),
-    country            = COALESCE(EXCLUDED.country, t.country),
-    source_app         = COALESCE(EXCLUDED.source_app, t.source_app),
-    source_app_version = COALESCE(EXCLUDED.source_app_version, t.source_app_version),
+    job_group_id       = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.job_group_id, t.job_group_id)
+                           ELSE t.job_group_id
+                         END,
+    parent_job_id      = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.parent_job_id, t.parent_job_id)
+                           ELSE t.parent_job_id
+                         END,
+    initial_job_id     = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.initial_job_id, t.initial_job_id)
+                           ELSE t.initial_job_id
+                         END,
+    job_ref            = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.job_ref, t.job_ref)
+                           ELSE t.job_ref
+                         END,
+    job_name           = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.job_name, t.job_name)
+                           ELSE t.job_name
+                         END,
+    definition_id      = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.definition_id, t.definition_id)
+                           ELSE t.definition_id
+                         END,
+    definition_version = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.definition_version, t.definition_version)
+                           ELSE t.definition_version
+                         END,
+    tenant_id          = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.tenant_id, t.tenant_id)
+                           ELSE t.tenant_id
+                         END,
+    country            = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.country, t.country)
+                           ELSE t.country
+                         END,
+    source_app         = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.source_app, t.source_app)
+                           ELSE t.source_app
+                         END,
+    source_app_version = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.source_app_version, t.source_app_version)
+                           ELSE t.source_app_version
+                         END,
     environment        = CASE
-                           WHEN EXCLUDED.environment <> '' THEN EXCLUDED.environment
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at AND EXCLUDED.environment <> ''
+                           THEN EXCLUDED.environment
                            ELSE t.environment
                          END,
-    platform           = COALESCE(EXCLUDED.platform, t.platform),
+    platform           = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.platform, t.platform)
+                           ELSE t.platform
+                         END,
     platform_metadata  = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
                            THEN COALESCE(EXCLUDED.platform_metadata, t.platform_metadata)
@@ -108,7 +157,19 @@ ON CONFLICT (job_id) DO UPDATE SET
                            THEN COALESCE(EXCLUDED.status_detail, t.status_detail)
                            ELSE t.status_detail
                          END,
-    created_at         = COALESCE(t.created_at, EXCLUDED.created_at),
-    started_at         = COALESCE(t.started_at, EXCLUDED.started_at),
-    finished_at        = COALESCE(t.finished_at, EXCLUDED.finished_at),
+    created_at         = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.created_at, t.created_at)
+                           ELSE t.created_at
+                         END,
+    started_at         = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.started_at, t.started_at)
+                           ELSE t.started_at
+                         END,
+    finished_at        = CASE
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.finished_at, t.finished_at)
+                           ELSE t.finished_at
+                         END,
     last_updated_at    = GREATEST(EXCLUDED.last_updated_at, t.last_updated_at);

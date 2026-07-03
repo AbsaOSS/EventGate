@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_test (
     additional_info JSONB
 );
 
--- Table matching ADR 001 job table (no FK constraints for test isolation)
+-- Table for test_status_change_writer
 CREATE TABLE IF NOT EXISTS public_cps_za_status_change_aggregated_job (
     job_id               UUID PRIMARY KEY,
     job_group_id         UUID,

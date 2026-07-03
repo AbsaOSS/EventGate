@@ -77,41 +77,15 @@ Notes:
 - The `job` table stores the latest snapshot, not historical versions.
 - No concurrent inserts / updates?
 
-### Field merge policy
-- Structural identifiers (`job_group_id`, `parent_job_id`, `initial_job_id`) are set when present in the event.
-- Descriptive fields (`job_ref`, `job_name`, `definition_id`, `definition_version`, `tenant_id`, `country`, `source_app`, `source_app_version`, `platform`) are updated only when incoming values are non-null.
-- The JSON fields `platform_metadata`, `input_arguments` are replaced by the latest non-null value.
-- The JSON field `additional_context` is merged in a shallow way, i.e. top-level fields are merged, while nested fields will be replaced.
-- `attempt_number` is updated to the latest non-null value; if missing on insert, default to `1`.
-- `status_type`, `status_subtype`, and `status_detail` are updated from the latest event when provided.
-- `last_updated_at` is set to the incoming `timestamp_event` on every successful merge.
+### Field merge strategy
+The field merge strategy takes into account out-of-order updates. The true event order is determined by the field `last_updated_at`. If the incoming event is newer, then any field should be updated with the incoming value, unless it is null. A value that has been set, will never be set to null again.
 
-### Out-of-order handling
-- The constant fields (`job_ref`, `job_name`, `definition_id`, `definition_version`, `tenant_id`, `country`, `source_app`, `source_app_version`, `platform`) are assumed to be constant per job-id, therefore they should be updated if they are not null.
-- The variable fields `platform_metadata` and `input_arguments` should only be updated if the event timestamp is newer than the event timestamp in the database
-- The variable field `additional_context` will always be merged, where the value with the newer timestamp overrides older timestamps in case of key conflicts
-- `status_type`, `status_subtype`, `status_detail`, `last_updated_at` are only updated if the incoming timestamp is  newer than the existing one
-- Any field updates should only be performed if the new timestamp
+For `additional_context`, the merge strategy is a cumulative merge, i.e. fields from both the existing and incoming record are retained. Note that this is not the case for `input_arguments` and `platform_metadata`
 
-### Event-type update rules
-
-| event_type | Core updates |
-| --- | --- |
-| JobCreatedEvent | Set `created_at`, set `status_type` to `WAITING` when not provided. |
-| JobCreatedAndStartedEvent | Set `created_at`, set `started_at`, set `status_type` to `RUNNING` when not provided. |
-| JobStartedEvent | Ensure row exists, set `started_at` if null, set `status_type` to `RUNNING` when not provided. |
-| JobUpdatedEvent | Ensure row exists, merge provided fields only, set `updated_at`. |
-| JobFinishedEvent | Ensure row exists, set `finished_at` if null, set terminal `status_type` (`SUCCEEDED`, `FAILED`, `KILLED`), update `status_subtype` and `status_detail` when provided. |
+This field merge strategy is idempotent.
 
 ### Timestamp conversion
 Timestamps in events are epoch milliseconds, which should be converted to `TIMESTAMPTZ` in Postgres. Using a dedicated timestamp type greatly simplifies querying and reading from the table, especially in BI-tools.
-
-### Idempotency for duplicates
-Idempotency is achieved directly in the `job` upsert logic.
-
-Processing rule:
-- For duplicate events with the same payload, the merge computes the same target state.
-
 
 ## Sample query patterns
 **Get all jobs grouped by job group id (including retries)**
@@ -206,101 +180,3 @@ SELECT *
 FROM tree
 ORDER BY started_at;
 ```
-
-
-## Appendix A. SQL-like merge pseudocode
-Please note that the following is only meant to illustrate the merge logic. In reality, the upsert query may have suboptimal performance and should be replaced by dedicated insert and update queries, depending on the event type.
-
-
-```sql
-BEGIN;
-INSERT INTO job (
-    job_id,
-    job_group_id,
-    parent_job_id,
-    initial_job_id,
-    job_ref,
-    job_name,
-    definition_id,
-    definition_version,
-    tenant_id,
-    country,
-    source_app,
-    source_app_version,
-    environment,
-    platform,
-    platform_metadata,
-    input_arguments,
-    additional_context,
-    attempt_number,
-    status_type,
-    status_subtype,
-    status_detail,
-    created_at,
-    started_at,
-    finished_at,
-    last_updated_at
-)
-VALUES (
-    :job_id,
-    :job_group_id,
-    :parent_job_id,
-    :initial_job_id,
-    :job_ref,
-    :job_name,
-    :definition_id,
-    :definition_version,
-    :tenant_id,
-    :country,
-    :source_app,
-    :source_app_version,
-    :environment,
-    :platform,
-    :platform_metadata,
-    :input_arguments,
-    :additional_context,
-    COALESCE(:attempt_number, 1),
-    CASE
-        WHEN :event_type = 'JobFinishedEvent' THEN :status_type
-        WHEN :event_type IN ('JobCreatedAndStartedEvent', 'JobStartedEvent') THEN COALESCE(:status_type, 'RUNNING')
-        WHEN :event_type = 'JobCreatedEvent' THEN COALESCE(:status_type, 'WAITING')
-        ELSE :status_type
-    END,
-    :status_subtype,
-    :status_detail,
-    CASE WHEN :event_type IN ('JobCreatedEvent', 'JobCreatedAndStartedEvent') THEN to_timestamp(:timestamp_event / 1000.0) END,
-    CASE WHEN :event_type IN ('JobCreatedAndStartedEvent', 'JobStartedEvent') THEN to_timestamp(:timestamp_event / 1000.0) END,
-    CASE WHEN :event_type = 'JobFinishedEvent' THEN to_timestamp(:timestamp_event / 1000.0) END,
-    to_timestamp(:timestamp_event / 1000.0)
-)
-ON CONFLICT (job_id) DO UPDATE SET
-    job_group_id       = COALESCE(EXCLUDED.job_group_id, job.job_group_id),
-    parent_job_id      = COALESCE(EXCLUDED.parent_job_id, job.parent_job_id),
-    initial_job_id     = COALESCE(EXCLUDED.initial_job_id, job.initial_job_id),
-    job_ref            = COALESCE(EXCLUDED.job_ref, job.job_ref),
-    job_name           = COALESCE(EXCLUDED.job_name, job.job_name),
-    definition_id      = COALESCE(EXCLUDED.definition_id, job.definition_id),
-    definition_version = COALESCE(EXCLUDED.definition_version, job.definition_version),
-    tenant_id          = COALESCE(EXCLUDED.tenant_id, job.tenant_id),
-    country            = COALESCE(EXCLUDED.country, job.country),
-    source_app         = COALESCE(EXCLUDED.source_app, job.source_app),
-    source_app_version = COALESCE(EXCLUDED.source_app_version, job.source_app_version),
-    environment        = COALESCE(EXCLUDED.environment, job.environment),
-    platform           = COALESCE(EXCLUDED.platform, job.platform),
-    platform_metadata  = COALESCE(EXCLUDED.platform_metadata, job.platform_metadata),
-    input_arguments    = COALESCE(EXCLUDED.input_arguments, job.input_arguments),
-    additional_context = CASE
-        WHEN EXCLUDED.additional_context IS NULL THEN job.additional_context
-        ELSE COALESCE(job.additional_context, '{}'::jsonb) || EXCLUDED.additional_context
-    END,
-    attempt_number     = COALESCE(EXCLUDED.attempt_number, job.attempt_number),
-    status_type        = COALESCE(EXCLUDED.status_type, job.status_type),
-    status_subtype     = COALESCE(EXCLUDED.status_subtype, job.status_subtype),
-    status_detail      = COALESCE(EXCLUDED.status_detail, job.status_detail),
-    created_at         = COALESCE(job.created_at, EXCLUDED.created_at),
-    started_at         = COALESCE(job.started_at, EXCLUDED.started_at),
-    finished_at        = COALESCE(job.finished_at, EXCLUDED.finished_at),
-    last_updated_at    = to_timestamp(:timestamp_event / 1000.0)
-COMMIT;
-```
-
