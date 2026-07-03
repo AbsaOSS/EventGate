@@ -34,9 +34,9 @@ CREATE TABLE job (
     platform_metadata    JSONB,
     input_arguments      JSONB,
     additional_context   JSONB,
+    attempt_number       INTEGER NOT NULL CHECK (attempt_number > 0),
 
     -- Current lifecycle status (latest known snapshot)
-    attempt_number       INTEGER NOT NULL CHECK (attempt_number > 0),
     status_type          TEXT CHECK (status_type IN ('WAITING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'KILLED')),
     status_subtype       TEXT,
     status_detail        TEXT,
@@ -78,11 +78,12 @@ Notes:
 - No concurrent inserts / updates?
 
 ### Field merge strategy
-The field merge strategy takes into account out-of-order updates. The true event order is determined by the field `last_updated_at`. If the incoming event is newer, then any field should be updated with the incoming value, unless it is null. A value that has been set, will never be set to null again.
+The field merge strategy takes into account out-of-order updates and is idempotent. The true event order is determined by the field `last_updated_at`. There are three merge strategies:
+- Take latest non-null: If either the incoming or the current field value is non-null, then the non-null value is accepted. If both incoming and current value are non-null, then the newer value (determined by `last_updated_at`) is accepted. This means that a value that has been set, will never be set to null again. This merge strategy applies to most fields.
 
-For `additional_context`, the merge strategy is a cumulative merge, i.e. fields from both the existing and incoming record are retained. Note that this is not the case for `input_arguments` and `platform_metadata`
+- Take latest: The newer value is accepted, even if it is null. This applies to the `status_subtype` and `status_detail` fields, as they are coupled to the `status_type` field, which is mandatory for all events. If an initial status like `RUNNING` has a `status_detail` (for whatever reason), then it should not be kept when the status changes to `FINISHED`, but instead set to null. However, usually only terminal statuses should have `status_detail` and `status_subtype`
 
-This field merge strategy is idempotent.
+- Cumulative merge: For `additional_context`, the merge strategy is a cumulative merge, i.e. fields from both the incoming and current record are retained. Note that this is not the case for `input_arguments` and `platform_metadata`
 
 ### Timestamp conversion
 Timestamps in events are epoch milliseconds, which should be converted to `TIMESTAMPTZ` in Postgres. Using a dedicated timestamp type greatly simplifies querying and reading from the table, especially in BI-tools.
