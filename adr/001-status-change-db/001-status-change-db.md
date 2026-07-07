@@ -1,13 +1,13 @@
 # ADR 001. Event Bus -- Status change database
 
 ## Decision
+Aggregate events and insert into newly created database table.
 
 ## Background
-The status change topic receives job status events, i.e. it is an event log
-For monitoring, we need a DB with the current status, i.e. we need to merge
-events into the latest state
+The status change topic receives job status events, i.e. it is an event log.
+For monitoring, a DB with the current status is needed, i.e. events need to be aggregated into the latest state
 
-This ADR shall describe the merge logic as well as the database schema and some of the queries that the database should support.
+This ADR shall describe the database schema as well as the merge logic and some of the queries that the database should support.
 
 ## Database schema
 
@@ -69,16 +69,15 @@ CREATE TABLE job (
 Notes:
 - This table stores the latest merged state per `job_id`, not the full event log.
 
-## Merge logic
+## Event insertion and aggregation
 
 ### Assumptions
 - Most events are received in order per `job_id`, but some events may be received out-of-order (during failures scenarios).
 - Duplicate events can occur and must be handled idempotently.
 - The `job` table stores the latest snapshot, not historical versions.
-- No concurrent inserts / updates?
 
 ### Field merge strategy
-The field merge strategy takes into account out-of-order updates and is idempotent. The true event order is determined by the field `last_updated_at`. There are three merge strategies:
+The field merge strategy takes into account out-of-order updates and the idempotency of duplicates. The true event order is determined by the field `last_updated_at`. There are three merge strategies:
 - Take latest non-null: If either the incoming or the current field value is non-null, then the non-null value is accepted. If both incoming and current value are non-null, then the newer value (determined by `last_updated_at`) is accepted. This means that a value that has been set, will never be set to null again. This merge strategy applies to most fields.
 
 - Take latest: The newer value is accepted, even if it is null. This applies to the `status_subtype` and `status_detail` fields, as they are coupled to the `status_type` field, which is mandatory for all events. If an initial status like `RUNNING` has a `status_detail` (for whatever reason), then it should not be kept when the status changes to `FINISHED`, but instead set to null. However, usually only terminal statuses should have `status_detail` and `status_subtype`

@@ -255,9 +255,9 @@ class WriterPostgres(Writer, PostgresBase):
         log_payload_at_trace(logger, "Postgres", topic_name, message)
 
         if topic_name not in POSTGRES_WRITE_TOPICS:
-            msg = f"Unknown topic for Postgres/{topic_name}. Skipping Postgres writer."
+            msg = f"Unknown topic for Postgres/{topic_name}."
             logger.debug(msg)
-            # raise WriteError(msg)
+            raise WriteError(msg)
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)
