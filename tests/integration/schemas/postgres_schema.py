@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_status_change_aggregated_job (
     country              TEXT,
     source_app           TEXT,
     source_app_version   TEXT,
-    environment          TEXT NOT NULL,
+    environment          TEXT,
     platform             TEXT,
     platform_metadata    JSONB,
     input_arguments      JSONB,

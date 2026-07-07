@@ -27,7 +27,7 @@ CREATE TABLE job (
     country              TEXT,
     source_app           TEXT,
     source_app_version   TEXT,
-    environment          TEXT NOT NULL,
+    environment          TEXT,
 
     -- Execution context (latest known snapshot)
     platform             TEXT,
@@ -81,6 +81,8 @@ The field merge strategy takes into account out-of-order updates and the idempot
 - Take latest non-null: If either the incoming or the current field value is non-null, then the non-null value is accepted. If both incoming and current value are non-null, then the newer value (determined by `last_updated_at`) is accepted. This means that a value that has been set, will never be set to null again. This merge strategy applies to most fields.
 
 - Take latest: The newer value is accepted, even if it is null. This applies to the `status_subtype` and `status_detail` fields, as they are coupled to the `status_type` field, which is mandatory for all events. If an initial status like `RUNNING` has a `status_detail` (for whatever reason), then it should not be kept when the status changes to `FINISHED`, but instead set to null. However, usually only terminal statuses should have `status_detail` and `status_subtype`
+
+- Take latest non-default: For fields with default values, default values are treated like null values in terms of the merge. This means that non-default values are preferred, even if they are not the latest value. Once a value different to the default has been set, it is not possible to set it back to the default value. This applies to the field `attempt_number`.
 
 - Cumulative merge: For `additional_context`, the merge strategy is a cumulative merge, i.e. fields from both the incoming and current record are retained. Note that this is not the case for `input_arguments` and `platform_metadata`
 

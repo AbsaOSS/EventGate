@@ -111,11 +111,9 @@ ON CONFLICT (job_id) DO UPDATE SET
                            ELSE COALESCE(t.source_app_version, EXCLUDED.source_app_version)
                          END,
     environment        = CASE
-                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at AND EXCLUDED.environment <> ''
-                           THEN EXCLUDED.environment
-                           WHEN t.environment <> ''
-                           THEN t.environment
-                           ELSE EXCLUDED.environment
+                           WHEN EXCLUDED.last_updated_at >= t.last_updated_at
+                           THEN COALESCE(EXCLUDED.environment, t.environment)
+                           ELSE COALESCE(t.environment, EXCLUDED.environment)
                          END,
     platform           = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
@@ -125,7 +123,7 @@ ON CONFLICT (job_id) DO UPDATE SET
     platform_metadata  = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
                            THEN COALESCE(EXCLUDED.platform_metadata, t.platform_metadata)
-                           ELSE t.platform_metadata
+                           ELSE COALESCE(t.platform_metadata, EXCLUDED.platform_metadata)
                          END,
     input_arguments    = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
@@ -141,8 +139,8 @@ ON CONFLICT (job_id) DO UPDATE SET
                          END,
     attempt_number     = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
-                           THEN COALESCE(EXCLUDED.attempt_number, t.attempt_number)
-                           ELSE t.attempt_number
+                           THEN COALESCE(NULLIF(EXCLUDED.attempt_number, 1), t.attempt_number, 1) --
+                           ELSE COALESCE(NULLIF(t.attempt_number, 1), EXCLUDED.attempt_number, 1)
                          END,
     status_type        = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at

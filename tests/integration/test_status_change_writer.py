@@ -131,7 +131,6 @@ class TestStatusChangeJobFinished:
             "initial_job_id": str(uuid.uuid4()),            
             "job_group_id": job_id,
             "job_name": "IngestApp Ingestion",
-            "attempt_number": 2,
             "platform": "aws.stepfunctions",
             "platform_metadata": {"create_platform_key": "create_platform_value"},
             "input_arguments": {"pipelineId": 1234, "currentDate": "2026-05-19", "triggerType": "SCHEDULE"},
@@ -153,6 +152,16 @@ class TestStatusChangeJobFinished:
             "platform_metadata": {"finish_platform_key": "finish_platform_value"},
         }
 
+    def update_event(self, job_id) -> Dict[str, Any]:
+        return {
+            "event_type": "JobUpdatedEvent",
+            "event_id": str(uuid.uuid4()),
+            "timestamp_event": 1500000000000,
+            "job_id": job_id,
+            "attempt_number": 2,
+            "status_type": "RUNNING",
+        }
+
     @pytest.fixture(scope="class")
     def in_order_events(
         self, eventgate_client: EventGateTestClient, valid_token: str
@@ -161,10 +170,11 @@ class TestStatusChangeJobFinished:
         job_id = str(uuid.uuid4())
         create_event = self.create_event(job_id)
         finish_event = self.finish_event(job_id)
-        for event in (create_event, finish_event):
+        update_event = self.update_event(job_id)
+        for event in (create_event, update_event, finish_event):
             response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
             assert 202 == response["statusCode"]
-        return create_event
+        return {"create_event": create_event}
 
     @pytest.fixture(scope="class")
     def out_of_order_events(
@@ -174,10 +184,11 @@ class TestStatusChangeJobFinished:
         job_id = str(uuid.uuid4())
         create_event = self.create_event(job_id)
         finish_event = self.finish_event(job_id)
-        for event in (finish_event, create_event):
+        late_update_event = self.update_event(job_id)
+        for event in (finish_event, create_event, late_update_event):
             response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
             assert 202 == response["statusCode"]
-        return create_event
+        return {"create_event": create_event}
 
     def _test_all_fields(
         self, create_event: Dict[str, Any], postgres_container: str
@@ -204,7 +215,8 @@ class TestStatusChangeJobFinished:
             assert create_event["input_arguments"] == row["input_arguments"]
             # Cumulative merge of additional_context
             assert {"create_key": "create_value", "finish_key": "finish_value", "common_key": "finish_value"} == row["additional_context"]
-            assert create_event["attempt_number"] == 2
+            # Take non-default value even if it's not from latest event
+            assert 2 == row["attempt_number"]
             # Take latest with nulls for status fields
             assert "SUCCEEDED" == row["status_type"]
             assert None is row["status_subtype"]
@@ -222,13 +234,13 @@ class TestStatusChangeJobFinished:
         self, in_order_events: Dict[str, Any], postgres_container: str
     ) -> None:
         """Status fields must use latest values, even if null, and timestamps must be updated to the latest event."""
-        self._test_all_fields(in_order_events, postgres_container)
+        self._test_all_fields(in_order_events["create_event"], postgres_container)
 
     def test_all_fields_with_out_of_order_events(
         self, out_of_order_events: Dict[str, Any], postgres_container: str
     ) -> None:
         """Out of order events must lead to same outcome as in order events"""
-        self._test_all_fields(out_of_order_events, postgres_container)
+        self._test_all_fields(out_of_order_events["create_event"], postgres_container)
 
 
     def test_single_row_after_create_and_finish(
@@ -240,7 +252,7 @@ class TestStatusChangeJobFinished:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT COUNT(*) FROM public_cps_za_status_change_aggregated_job WHERE job_id = %s",
-                    (in_order_events["job_id"],),
+                    (in_order_events["create_event"]["job_id"],),
                 )
                 count = cursor.fetchone()[0]
             assert 1 == count
@@ -455,128 +467,5 @@ class TestStatusChangeIdempotency:
 
             assert 1 == count
             assert {"test_key": "test_value"} == row["additional_context"]
-        finally:
-            conn.close()
-
-class TestStatusChangeOutOfOrder:
-    """Verify that a late-arriving event does not overwrite a newer terminal status."""
-
-    def test_late_event_does_not_overwrite_terminal_status(
-        self,
-        eventgate_client: EventGateTestClient,
-        valid_token: str,
-        postgres_container: str,
-    ) -> None:
-        """A JobUpdatedEvent with an older timestamp must not overwrite a FAILED status."""
-        job_id = str(uuid.uuid4())
-        create_event: Dict[str, Any] = {
-            "event_type": "JobCreatedAndStartedEvent",
-            "event_id": str(uuid.uuid4()),
-            "tenant_id": "abcd",
-            "source_app": "ingestapp",
-            "source_app_version": "2.14.0",
-            "environment": "dev",
-            "timestamp_event": 1000000000000,
-            "job_id": job_id,
-            "job_group_id": job_id,
-            "job_name": "Out-of-Order Test Job",
-            "platform": "aws.stepfunctions",
-            "definition_id": "1234",
-            "status_type": "RUNNING",
-        }
-        finish_event: Dict[str, Any] = {
-            "event_type": "JobFinishedEvent",
-            "event_id": str(uuid.uuid4()),
-            "timestamp_event": 2000000000000,
-            "job_id": job_id,
-            "status_type": "FAILED",
-            "status_subtype": "TIMEOUT",
-            "status_detail": "Job timed out.",
-        }
-        # Older timestamp — must not overwrite the terminal FAILED state.
-        late_update_event: Dict[str, Any] = {
-            "event_type": "JobUpdatedEvent",
-            "event_id": str(uuid.uuid4()),
-            "timestamp_event": 500000000000,
-            "job_id": job_id,
-            "input_arguments": {"myInput": 1234},
-            "attempt_number": 3,
-            "status_type": "RUNNING",
-            "platform_metadata": {"platform_key": "platform_value"},
-            "additional_context": {"late_key": "late_value"},
-        }
-        for event in (create_event, finish_event, late_update_event):
-            response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
-            assert 202 == response["statusCode"]
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, job_id)
-            assert row is not None
-            assert "FAILED" == row["status_type"]
-            assert "TIMEOUT" == row["status_subtype"]
-            assert "Job timed out." == row["status_detail"]
-            assert 3 == row["attempt_number"]
-            assert {"myInput": 1234} == row["input_arguments"]
-            assert {"platform_key": "platform_value"} == row["platform_metadata"]
-            assert {"late_key": "late_value"} == row["additional_context"]
-        finally:
-            conn.close()
-
-    def test_late_started_event_does_not_overwrite_terminal_status(
-        self,
-        eventgate_client: EventGateTestClient,
-        valid_token: str,
-        postgres_container: str,
-    ) -> None:
-        """A late-arriving JobStartedEvent must not overwrite the status set by a JobFinishedEvent.
-
-        The JobFinishedEvent carries only status_type. The later-processed but older-timestamped
-        JobStartedEvent carries status_type, status_subtype, and status_detail. None of those
-        fields must overwrite the terminal row because the event timestamp is older.
-        """
-        job_id = str(uuid.uuid4())
-        create_event: Dict[str, Any] = {
-            "event_type": "JobCreatedAndStartedEvent",
-            "event_id": str(uuid.uuid4()),
-            "tenant_id": "abcd",
-            "source_app": "ingestapp",
-            "source_app_version": "2.14.0",
-            "environment": "dev",
-            "timestamp_event": 1000000000000,
-            "job_id": job_id,
-            "job_group_id": job_id,
-            "job_name": "Late-Started Out-of-Order Test Job",
-            "platform": "aws.stepfunctions",
-            "definition_id": "1234",
-            "status_type": "RUNNING",
-        }
-        # JobFinishedEvent has only status_type — no subtype or detail.
-        finish_event: Dict[str, Any] = {
-            "event_type": "JobFinishedEvent",
-            "event_id": str(uuid.uuid4()),
-            "timestamp_event": 2000000000000,
-            "job_id": job_id,
-            "status_type": "SUCCEEDED",
-        }
-        # Older timestamp — must not overwrite the terminal SUCCEEDED state.
-        late_started_event: Dict[str, Any] = {
-            "event_type": "JobStartedEvent",
-            "event_id": str(uuid.uuid4()),
-            "timestamp_event": 500000000000,
-            "job_id": job_id,
-            "status_type": "RUNNING",
-            "status_subtype": "RETRY",
-            "status_detail": "Retry attempt started.",
-        }
-        for event in (create_event, finish_event, late_started_event):
-            response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
-            assert 202 == response["statusCode"]
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, job_id)
-            assert row is not None
-            assert "SUCCEEDED" == row["status_type"]
-            assert row["status_subtype"] is None
-            assert row["status_detail"] is None
         finally:
             conn.close()

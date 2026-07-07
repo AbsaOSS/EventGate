@@ -201,7 +201,7 @@ class WriterPostgres(Writer, PostgresBase):
                 "country": message.get("country"),
                 "source_app": message.get("source_app"),
                 "source_app_version": message.get("source_app_version"),
-                "environment": message.get("environment") or "",
+                "environment": message.get("environment"),
                 "platform": message.get("platform"),
                 "platform_metadata": (
                     json.dumps(message["platform_metadata"]) if message.get("platform_metadata") is not None else None
