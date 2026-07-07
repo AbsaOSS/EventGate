@@ -48,6 +48,7 @@ class TestStatusChangeJobCreatedAndStarted:
         event: Dict[str, Any] = {
             "event_type": "JobCreatedAndStartedEvent",
             "event_id": str(uuid.uuid4()),
+            "job_ref": "myJobRef",
             "tenant_id": "abcd",
             "source_app": "ingestapp",
             "source_app_version": "2.14.0",
@@ -55,146 +56,183 @@ class TestStatusChangeJobCreatedAndStarted:
             "timestamp_event": 1747646400000,
             "country": "za",
             "job_id": job_id,
+            "parent_job_id": str(uuid.uuid4()),
+            "initial_job_id": str(uuid.uuid4()),            
             "job_group_id": job_id,
             "job_name": "IngestApp Ingestion",
             "platform": "aws.stepfunctions",
+            "platform_metadata": {"platform_key": "platform_value"},
             "input_arguments": {"pipelineId": 1234, "currentDate": "2026-05-19", "triggerType": "SCHEDULE"},
             "definition_id": "1234",
+            "definition_version": "v1.0",
             "status_type": "RUNNING",
+            "status_subtype": "myStatusSubtype",
+            "status_detail": "myStatusDetail",
+            "additional_context": {"context_key": "context_value"},
         }
         response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
         assert 202 == response["statusCode"]
         return event
 
-    def test_row_is_inserted_in_job_table(
-        self, created_event: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """A job row must exist after posting a JobCreatedAndStartedEvent."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, created_event["job_id"])
-            assert row is not None
-        finally:
-            conn.close()
-
-    def test_source_and_platform_fields_populated(
+    def test_all_fields_populated(
         self, created_event: Dict[str, Any], postgres_container: str
     ) -> None:
         """source_app, platform, tenant_id and environment must be stored from the event."""
         conn = psycopg2.connect(postgres_container)
         try:
             row = _fetch_job_row(conn, created_event["job_id"])
-            assert row is not None
-            assert created_event["source_app"] == row["source_app"]
-            assert created_event["platform"] == row["platform"]
+            assert row is not None                       
+            assert created_event["job_id"] == str(row["job_id"])
+            assert created_event["job_group_id"] == str(row["job_group_id"])
+            assert created_event["parent_job_id"] == str(row["parent_job_id"])
+            assert created_event["initial_job_id"] == str(row["initial_job_id"])
+            assert created_event["job_ref"] == row["job_ref"]
+            assert created_event["job_name"] == row["job_name"]
+            assert created_event["definition_id"] == row["definition_id"]
+            assert created_event["definition_version"] == row["definition_version"]
             assert created_event["tenant_id"] == row["tenant_id"]
+            assert created_event["country"] == row["country"]
+            assert created_event["source_app"] == row["source_app"]
+            assert created_event["source_app_version"] == row["source_app_version"]
             assert created_event["environment"] == row["environment"]
-        finally:
-            conn.close()
-
-    def test_status_type_is_running(
-        self, created_event: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """status_type must be RUNNING after a JobCreatedAndStartedEvent."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, created_event["job_id"])
-            assert row is not None
-            assert "RUNNING" == row["status_type"]
-        finally:
-            conn.close()
-
-    def test_lifecycle_timestamps_set(
-        self, created_event: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """created_at, started_at and last_updated_at must be derived from timestamp_event."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, created_event["job_id"])
-            assert row is not None
-            assert row["created_at"] is not None
-            assert row["started_at"] is not None
-            assert row["last_updated_at"] is not None
-        finally:
-            conn.close()
-
-    def test_input_arguments_stored_as_json(
-        self, created_event: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """input_arguments must be stored as JSONB and round-trip correctly."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, created_event["job_id"])
-            assert row is not None
+            assert created_event["platform"] == row["platform"]
+            assert created_event["platform_metadata"] == row["platform_metadata"]
             assert created_event["input_arguments"] == row["input_arguments"]
-        finally:
-            conn.close()
-
-    def test_attempt_number_defaults_to_one(
-        self, created_event: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """attempt_number must default to 1 when not present in the event."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, created_event["job_id"])
-            assert row is not None
+            assert created_event["additional_context"] == row["additional_context"]
             assert 1 == row["attempt_number"]
+            assert created_event["status_type"] == row["status_type"]
+            assert created_event["status_subtype"] == row["status_subtype"]
+            assert created_event["status_detail"] == row["status_detail"]
+            ts = datetime.fromtimestamp(created_event["timestamp_event"] / 1000, tz=timezone.utc)
+            assert ts == row["started_at"]
+            assert ts == row["created_at"]
+            assert None is row["finished_at"]
+            assert ts == row["last_updated_at"]
+
         finally:
             conn.close()
 
 
-class TestStatusChangeJobUpdated:
-    """Verify a JobUpdatedEvent merges into an existing job row."""
-
-    @pytest.fixture(scope="class")
-    def updated_event_pair(
-        self, eventgate_client: EventGateTestClient, valid_token: str
-    ) -> Dict[str, Any]:
-        """Post a JobCreatedAndStartedEvent followed by a JobUpdatedEvent."""
-        job_id = str(uuid.uuid4())
-        create_event: Dict[str, Any] = {
+class TestStatusChangeJobFinished:
+    """Verify a JobFinishedEvent overwrites terminal status and timestamps."""
+    def create_event(self, job_id) -> Dict[str, Any]:
+        return {
             "event_type": "JobCreatedAndStartedEvent",
             "event_id": str(uuid.uuid4()),
+            "job_ref": "myJobRef",
             "tenant_id": "abcd",
             "source_app": "ingestapp",
             "source_app_version": "2.14.0",
             "environment": "dev",
-            "timestamp_event": 1747646400000,
+            "timestamp_event": 1000000000000,
             "country": "za",
             "job_id": job_id,
+            "parent_job_id": str(uuid.uuid4()),
+            "initial_job_id": str(uuid.uuid4()),            
             "job_group_id": job_id,
             "job_name": "IngestApp Ingestion",
+            "attempt_number": 2,
             "platform": "aws.stepfunctions",
+            "platform_metadata": {"create_platform_key": "create_platform_value"},
+            "input_arguments": {"pipelineId": 1234, "currentDate": "2026-05-19", "triggerType": "SCHEDULE"},
             "definition_id": "1234",
+            "definition_version": "v1.0",
             "status_type": "RUNNING",
+            "status_subtype": "myStatusSubtype",
+            "status_detail": "myStatusDetail",
+            "additional_context": {"create_key": "create_value", "common_key": "create_value"},
         }
-        update_event: Dict[str, Any] = {
-            "event_type": "JobUpdatedEvent",
+    def finish_event(self, job_id) -> Dict[str, Any]:
+        return {
+            "event_type": "JobFinishedEvent",
             "event_id": str(uuid.uuid4()),
-            "timestamp_event": 1747646447000,
+            "timestamp_event": 2000000000000,
             "job_id": job_id,
-            "status_type": "RUNNING",
-            "additional_context": {"pipeline_name": "MYPIPELINE"},
+            "status_type": "SUCCEEDED",
+            "additional_context": {"finish_key": "finish_value", "common_key": "finish_value"},
+            "platform_metadata": {"finish_platform_key": "finish_platform_value"},
         }
-        for event in (create_event, update_event):
+
+    @pytest.fixture(scope="class")
+    def in_order_events(
+        self, eventgate_client: EventGateTestClient, valid_token: str
+    ) -> Dict[str, Any]:
+        """Post a JobCreatedAndStartedEvent followed by a SUCCEEDED JobFinishedEvent."""
+        job_id = str(uuid.uuid4())
+        create_event = self.create_event(job_id)
+        finish_event = self.finish_event(job_id)
+        for event in (create_event, finish_event):
             response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
             assert 202 == response["statusCode"]
-        return {"job_id": job_id, "create_event": create_event, "update_event": update_event}
+        return create_event
 
-    def test_additional_context_populated_after_update(
-        self, updated_event_pair: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """additional_context must be set after a JobUpdatedEvent with context."""
+    @pytest.fixture(scope="class")
+    def out_of_order_events(
+        self, eventgate_client: EventGateTestClient, valid_token: str
+    ) -> Dict[str, Any]:
+        """First post a JobFinishedEvent followed by a JobCreatedAndStartedEvent."""
+        job_id = str(uuid.uuid4())
+        create_event = self.create_event(job_id)
+        finish_event = self.finish_event(job_id)
+        for event in (finish_event, create_event):
+            response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
+            assert 202 == response["statusCode"]
+        return create_event
+
+    def _test_all_fields(
+        self, create_event: Dict[str, Any], postgres_container: str
+    ) -> None:        
         conn = psycopg2.connect(postgres_container)
         try:
-            row = _fetch_job_row(conn, updated_event_pair["job_id"])
-            assert row is not None
-            assert {"pipeline_name": "MYPIPELINE"} == row["additional_context"]
+            row = _fetch_job_row(conn, create_event["job_id"])
+
+            assert create_event["job_id"] == str(row["job_id"])
+            assert create_event["job_group_id"] == str(row["job_group_id"])
+            assert create_event["parent_job_id"] == str(row["parent_job_id"])
+            assert create_event["initial_job_id"] == str(row["initial_job_id"])
+            assert create_event["job_ref"] == row["job_ref"]
+            assert create_event["job_name"] == row["job_name"]
+            assert create_event["definition_id"] == row["definition_id"]
+            assert create_event["definition_version"] == row["definition_version"]
+            assert create_event["tenant_id"] == row["tenant_id"]
+            assert create_event["country"] == row["country"]
+            assert create_event["source_app"] == row["source_app"]
+            assert create_event["source_app_version"] == row["source_app_version"]
+            assert create_event["environment"] == row["environment"]
+            assert create_event["platform"] == row["platform"]
+            assert {"finish_platform_key": "finish_platform_value"} == row["platform_metadata"]
+            assert create_event["input_arguments"] == row["input_arguments"]
+            # Cumulative merge of additional_context
+            assert {"create_key": "create_value", "finish_key": "finish_value", "common_key": "finish_value"} == row["additional_context"]
+            assert create_event["attempt_number"] == 2
+            # Take latest with nulls for status fields
+            assert "SUCCEEDED" == row["status_type"]
+            assert None is row["status_subtype"]
+            assert None is row["status_detail"]
+            ts_create = datetime.fromtimestamp(1000000000000 / 1000, tz=timezone.utc)
+            ts_finish = datetime.fromtimestamp(2000000000000 / 1000, tz=timezone.utc)
+            assert ts_create == row["started_at"]
+            assert ts_create == row["created_at"]
+            assert ts_finish == row["finished_at"]
+            assert ts_finish == row["last_updated_at"]
         finally:
             conn.close()
 
-    def test_single_row_after_create_and_update(
-        self, updated_event_pair: Dict[str, Any], postgres_container: str
+    def test_all_fields_with_in_order_events(
+        self, in_order_events: Dict[str, Any], postgres_container: str
+    ) -> None:
+        """Status fields must use latest values, even if null, and timestamps must be updated to the latest event."""
+        self._test_all_fields(in_order_events, postgres_container)
+
+    def test_all_fields_with_out_of_order_events(
+        self, out_of_order_events: Dict[str, Any], postgres_container: str
+    ) -> None:
+        """Out of order events must lead to same outcome as in order events"""
+        self._test_all_fields(out_of_order_events, postgres_container)
+
+
+    def test_single_row_after_create_and_finish(
+        self, in_order_events: Dict[str, Any], postgres_container: str
     ) -> None:
         """Two events for the same job_id must produce exactly one row."""
         conn = psycopg2.connect(postgres_container)
@@ -202,7 +240,7 @@ class TestStatusChangeJobUpdated:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT COUNT(*) FROM public_cps_za_status_change_aggregated_job WHERE job_id = %s",
-                    (updated_event_pair["job_id"],),
+                    (in_order_events["job_id"],),
                 )
                 count = cursor.fetchone()[0]
             assert 1 == count
@@ -210,107 +248,13 @@ class TestStatusChangeJobUpdated:
             conn.close()
 
 
-class TestStatusChangeJobFinished:
-    """Verify a JobFinishedEvent sets terminal status and timestamps."""
-
-    @pytest.fixture(scope="class")
-    def finished_event_pair(
-        self, eventgate_client: EventGateTestClient, valid_token: str
-    ) -> Dict[str, Any]:
-        """Post a JobCreatedAndStartedEvent followed by a FAILED JobFinishedEvent."""
-        job_id = str(uuid.uuid4())
-        create_event: Dict[str, Any] = {
-            "event_type": "JobCreatedAndStartedEvent",
-            "event_id": str(uuid.uuid4()),
-            "tenant_id": "abcd",
-            "source_app": "ingestapp",
-            "source_app_version": "2.14.0",
-            "environment": "dev",
-            "timestamp_event": 1747646400000,
-            "country": "za",
-            "job_id": job_id,
-            "job_group_id": job_id,
-            "job_name": "IngestApp Ingestion",
-            "platform": "aws.stepfunctions",
-            "definition_id": "1234",
-            "status_type": "RUNNING",
-        }
-        finish_event: Dict[str, Any] = {
-            "event_type": "JobFinishedEvent",
-            "event_id": str(uuid.uuid4()),
-            "timestamp_event": 1747646705000,
-            "job_id": job_id,
-            "status_type": "FAILED",
-            "status_subtype": "HIVE_TABLE_UPDATE_FAILED",
-            "status_detail": "PKIX path building failed.",
-        }
-        for event in (create_event, finish_event):
-            response = eventgate_client.post_event(_TOPIC, event, token=valid_token)
-            assert 202 == response["statusCode"]
-        return {"job_id": job_id, "finish_event": finish_event}
-
-    def test_status_type_is_failed(
-        self, finished_event_pair: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """status_type must be FAILED after a JobFinishedEvent."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, finished_event_pair["job_id"])
-            assert row is not None
-            assert "FAILED" == row["status_type"]
-        finally:
-            conn.close()
-
-    def test_status_subtype_and_detail_set(
-        self, finished_event_pair: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """status_subtype and status_detail must be stored from the finish event."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, finished_event_pair["job_id"])
-            assert row is not None
-            assert finished_event_pair["finish_event"]["status_subtype"] == row["status_subtype"]
-            assert finished_event_pair["finish_event"]["status_detail"] == row["status_detail"]
-        finally:
-            conn.close()
-
-    def test_finished_at_is_set(
-        self, finished_event_pair: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """finished_at must be populated from the JobFinishedEvent timestamp."""
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, finished_event_pair["job_id"])
-            assert row is not None
-            assert row["finished_at"] is not None
-        finally:
-            conn.close()
-
-    def test_timestamps_stored_as_timestamptz(
-        self, finished_event_pair: Dict[str, Any], postgres_container: str
-    ) -> None:
-        """created_at, started_at, finished_at and last_updated_at must be stored
-        as TIMESTAMPTZ values matching the epoch-millisecond timestamps from the events."""
-        expected_create_ts = datetime.fromtimestamp(1747646400000 / 1000, tz=timezone.utc)
-        expected_finish_ts = datetime.fromtimestamp(1747646705000 / 1000, tz=timezone.utc)
-        conn = psycopg2.connect(postgres_container)
-        try:
-            row = _fetch_job_row(conn, finished_event_pair["job_id"])
-            assert row is not None
-            assert expected_create_ts == row["created_at"]
-            assert expected_create_ts == row["started_at"]
-            assert expected_finish_ts == row["finished_at"]
-            assert expected_finish_ts == row["last_updated_at"]
-        finally:
-            conn.close()
-
 class TestNestedJobsScenario:
 
     @pytest.fixture(scope="class")
     def nested_jobs_posted(
         self, eventgate_client: EventGateTestClient, valid_token: str
     ) -> Dict[str, Any]:
-        """Post a JobCreatedAndStartedEvent followed by a FAILED JobFinishedEvent."""
+        """Post a JobCreatedAndStartedEvent followed by a nested event."""
         job_id = str(uuid.uuid4())
         parent_event: Dict[str, Any] = {
             "event_type": "JobCreatedAndStartedEvent",
@@ -514,7 +458,6 @@ class TestStatusChangeIdempotency:
         finally:
             conn.close()
 
-
 class TestStatusChangeOutOfOrder:
     """Verify that a late-arriving event does not overwrite a newer terminal status."""
 
@@ -613,9 +556,9 @@ class TestStatusChangeOutOfOrder:
             "event_id": str(uuid.uuid4()),
             "timestamp_event": 2000000000000,
             "job_id": job_id,
-            "status_type": "COMPLETED",
+            "status_type": "SUCCEEDED",
         }
-        # Older timestamp — must not overwrite the terminal COMPLETED state.
+        # Older timestamp — must not overwrite the terminal SUCCEEDED state.
         late_started_event: Dict[str, Any] = {
             "event_type": "JobStartedEvent",
             "event_id": str(uuid.uuid4()),
@@ -632,7 +575,7 @@ class TestStatusChangeOutOfOrder:
         try:
             row = _fetch_job_row(conn, job_id)
             assert row is not None
-            assert "COMPLETED" == row["status_type"]
+            assert "SUCCEEDED" == row["status_type"]
             assert row["status_subtype"] is None
             assert row["status_detail"] is None
         finally:
