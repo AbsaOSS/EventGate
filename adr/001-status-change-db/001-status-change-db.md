@@ -5,9 +5,10 @@ Aggregate events and insert into newly created database table.
 
 ## Background
 The status change topic receives job status events, i.e. it is an event log.
-For monitoring, a DB with the current status is needed, i.e. events need to be aggregated into the latest state
+For monitoring, a database table with the current status is needed, i.e. events need to be aggregated into the latest state
+So, the table stores the latest merged state per `job_id`, not the full event log.
 
-This ADR shall describe the database schema as well as the merge logic and some of the queries that the database should support.
+This ADR shall describe the database schema as well as the aggregation logic and some of the queries that the database should support.
 
 ## Database schema
 
@@ -29,14 +30,14 @@ CREATE TABLE job (
     source_app_version   TEXT,
     environment          TEXT,
 
-    -- Execution context (latest known snapshot)
+    -- Execution context
     platform             TEXT,
     platform_metadata    JSONB,
     input_arguments      JSONB,
     additional_context   JSONB,
     attempt_number       INTEGER NOT NULL CHECK (attempt_number > 0),
 
-    -- Current lifecycle status (latest known snapshot)
+    -- Current lifecycle status
     status_type          TEXT CHECK (status_type IN ('WAITING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'KILLED')),
     status_subtype       TEXT,
     status_detail        TEXT,
@@ -50,34 +51,26 @@ CREATE TABLE job (
    CONSTRAINT fk_job_parent
        FOREIGN KEY (parent_job_id)
            REFERENCES job (job_id)
-           ON DELETE RESTRICT,
-    -- Prevent self-parenting
-   CONSTRAINT chk_no_self_parent
-       CHECK (parent_job_id IS NULL OR parent_job_id <> job_id),
-
+           ON DELETE RESTRICT
 
    CONSTRAINT fk_job_initial
        FOREIGN KEY (initial_job_id)
            REFERENCES job (job_id)
-           ON DELETE RESTRICT,
-    -- Prevent self-retry
-   CONSTRAINT chk_no_self_initial
-       CHECK (initial_job_id IS NULL OR initial_job_id <> job_id)
+           ON DELETE RESTRICT
 );
 ```
-
-Notes:
-- This table stores the latest merged state per `job_id`, not the full event log.
 
 ## Event insertion and aggregation
 
 ### Assumptions
-- Most events are received in order per `job_id`, but some events may be received out-of-order (during failures scenarios).
-- Duplicate events can occur and must be handled idempotently.
-- The `job` table stores the latest snapshot, not historical versions.
+- Most events are received in order per `job_id`, but some events may be received out-of-order (during failures scenarios). The order of events is determined by the field `timestamp_event`. If an event is out-of-order, it means that an event with a higher `timestamp_event` has already been processed for the database insert / update.
+- Duplicate events can occur and must be handled idempotently, i.e. duplicate events must not lead to two rows in the database table.
+- The `job` table stores the latest snapshot of the job's status, not historical versions.
 
 ### Field merge strategy
-The field merge strategy takes into account out-of-order updates and the idempotency of duplicates. The true event order is determined by the field `last_updated_at`. There are three merge strategies:
+The field merge strategy is defined in the SQL upsert query. Therefore the field names of the database table rather than the Kafka event are used below.
+
+The field merge strategy takes into account out-of-order updates and the idempotency of duplicates. The true event order is determined by the field `last_updated_at` (same as `timestamp_event` in Kafka record). There are three merge strategies:
 - Take latest non-null: If either the incoming or the current field value is non-null, then the non-null value is accepted. If both incoming and current value are non-null, then the newer value (determined by `last_updated_at`) is accepted. This means that a value that has been set, will never be set to null again. This merge strategy applies to most fields.
 
 - Take latest: The newer value is accepted, even if it is null. This applies to the `status_subtype` and `status_detail` fields, as they are coupled to the `status_type` field, which is mandatory for all events. If an initial status like `RUNNING` has a `status_detail` (for whatever reason), then it should not be kept when the status changes to `FINISHED`, but instead set to null. However, usually only terminal statuses should have `status_detail` and `status_subtype`
@@ -87,9 +80,17 @@ The field merge strategy takes into account out-of-order updates and the idempot
 - Cumulative merge: For `additional_context`, the merge strategy is a cumulative merge, i.e. fields from both the incoming and current record are retained. Note that this is not the case for `input_arguments` and `platform_metadata`
 
 ### Timestamp conversion
-Timestamps in events are epoch milliseconds, which should be converted to `TIMESTAMPTZ` in Postgres. Using a dedicated timestamp type greatly simplifies querying and reading from the table, especially in BI-tools.
+Timestamps in Kafka events are epoch milliseconds, which should be converted to `TIMESTAMPTZ` in Postgres. Using a dedicated timestamp type greatly simplifies querying and reading from the table, especially in BI-tools.
 
 ## Sample query patterns
+**Get jobs by job name**
+```sql
+SELECT *
+FROM job j
+WHERE job_name = :my_job_name
+ORDER BY last_updated_at;
+```
+
 **Get all jobs grouped by job group id (including retries)**
 ```sql
 SELECT

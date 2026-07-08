@@ -139,12 +139,12 @@ ON CONFLICT (job_id) DO UPDATE SET
                          END,
     attempt_number     = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
-                           THEN COALESCE(NULLIF(EXCLUDED.attempt_number, 1), t.attempt_number, 1) --
+                           THEN COALESCE(NULLIF(EXCLUDED.attempt_number, 1), t.attempt_number, 1)
                            ELSE COALESCE(NULLIF(t.attempt_number, 1), EXCLUDED.attempt_number, 1)
                          END,
     status_type        = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
-                           THEN COALESCE(EXCLUDED.status_type, t.status_type)
+                           THEN EXCLUDED.status_type
                            ELSE t.status_type
                          END,
     status_subtype     = CASE

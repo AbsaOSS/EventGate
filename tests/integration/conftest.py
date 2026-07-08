@@ -176,7 +176,7 @@ def postgres_container() -> Generator[str, None, None]:
     logger.debug("PostgreSQL started, initializing schema.")
 
     # Attempt up to 5 times to connect to Postgres (2s interval).
-    # This is a workaround for colima on macOS. The built-in wait strategy is only tested against Docker Desktop, see https://github.com/testcontainers/testcontainers-java/issues/5986
+    # This is a workaround for colima on macOS. The built-in wait strategy for Postgres is only tested against Docker Desktop, see https://github.com/testcontainers/testcontainers-java/issues/5986
     conn = None
     last_exc: Optional[Exception] = None
     for attempt in range(1, 6):
