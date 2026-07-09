@@ -65,7 +65,7 @@ class HandlerApi:
         }
 
     def get_docs(self) -> dict[str, Any]:
-        """Return a Swagger UI HTML page pointed at the /api spec.
+        """Return a Swagger UI HTML page for browsing the API spec.
         Returns:
             API Gateway response with Swagger UI HTML page.
         """
