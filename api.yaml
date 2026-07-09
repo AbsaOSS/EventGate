@@ -30,6 +30,19 @@ paths:
               schema:
                 type: string
 
+  /docs:
+    get:
+      summary: Swagger UI documentation page
+      description: Renders interactive Swagger UI for the OpenAPI spec.
+      security: []
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
   /token:
     get:
       summary: Login to the service

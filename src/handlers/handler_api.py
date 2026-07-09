@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-"""OpenAPI specification endpoint handler."""
+"""OpenAPI specification and Swagger UI documentation endpoint handler."""
 
 import logging
 import os
@@ -62,4 +62,36 @@ class HandlerApi:
             "statusCode": 200,
             "headers": {"Content-Type": "application/yaml"},
             "body": self.api_spec,
+        }
+
+    def get_docs(self) -> dict[str, Any]:
+        """Return a Swagger UI HTML page pointed at the /api spec.
+        Returns:
+            API Gateway response with Swagger UI HTML page.
+        """
+        logger.debug("Handling GET docs.")
+        html = (
+            "<!DOCTYPE html>\n"
+            '<html lang="en">\n'
+            "<head>\n"
+            '  <meta charset="UTF-8">\n'
+            "  <title>EventGate API Docs</title>\n"
+            '  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">\n'
+            "</head>\n"
+            "<body>\n"
+            '  <div id="swagger-ui"></div>\n'
+            '  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>\n'
+            "  <script>\n"
+            "    window.ui = SwaggerUIBundle({\n"
+            '      url: "./api",\n'
+            '      dom_id: "#swagger-ui"\n'
+            "    });\n"
+            "  </script>\n"
+            "</body>\n"
+            "</html>"
+        )
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": html,
         }
