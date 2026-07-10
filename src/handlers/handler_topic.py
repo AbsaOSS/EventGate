@@ -170,11 +170,16 @@ class HandlerTopic:
         user = token.get("sub")
         authorized_user = self._resolve_authorized_user(topic_name, user)
         if authorized_user is None:
-            return build_error_response(403, "auth", "User not authorized for topic")
+            return build_error_response(403, "auth", f"User '{user}' is not authorized for topic '{topic_name}'")
 
         allowed, perm_error = self._validate_user_permissions(topic_name, authorized_user, topic_message)
         if not allowed:
-            return build_error_response(403, "permission", perm_error or "Permission denied")
+            return build_error_response(
+                403, "permission",
+                perm_error or f"Permission denied for user '{authorized_user}' for POST to topic '{topic_name}'"
+            )
+
+        logger.debug("Authorized user '%s' for topic '%s'.", authorized_user, topic_name)
 
         try:
             validate(instance=topic_message, schema=self.topics[topic_name])
@@ -190,12 +195,19 @@ class HandlerTopic:
                 errors.append({"type": writer_name, "message": str(exc)})
 
         if errors:
+            logger.error(
+                "POST to topic '%s' failed: %d of %d writer(s) reported errors.",
+                topic_name,
+                len(errors),
+                len(self.writers),
+            )
             return {
                 "statusCode": 500,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"success": False, "statusCode": 500, "errors": errors}),
             }
 
+        logger.info("Message accepted for topic '%s' from user '%s'.", topic_name, authorized_user)
         return {
             "statusCode": 202,
             "headers": {"Content-Type": "application/json"},
