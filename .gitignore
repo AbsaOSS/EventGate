@@ -1,8 +1,164 @@
-.ipynb_checkpoints
-.venv
-__pycache__
-/.idea/
-/dependencies
-/lambda_function.zip
+# ===========================
+# OS files
+# ===========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-*.sarif
+# ===========================
+# IDE and editors
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+.ropeproject
+
+# ===========================
+# Environment and secrets
+# ===========================
+.env
+.env.local
+.env.*.local
+
+# ===========================
+# Python – byte-compiled / optimized
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+cython_debug/
+
+# ===========================
+# Python – packaging and distribution
+# ===========================
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ===========================
+# Python – virtual environments
+# ===========================
+.venv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+__pypackages__/
+
+# ===========================
+# Python – tools and type checkers
+# ===========================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.pdm.toml
+.pdm-python
+.pdm-build/
+.ruff_cache/
+
+# ===========================
+# Python – tests and coverage
+# ===========================
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+.pytest_cache/
+.hypothesis/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+cover/
+
+# ===========================
+# Python – installer logs
+# ===========================
+pip-log.txt
+pip-delete-this-directory.txt
+*.manifest
+*.spec
+
+# ===========================
+# Python – misc frameworks
+# ===========================
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+.scrapy
+celerybeat-schedule
+celerybeat.pid
+*.sage.py
+*.mo
+*.pot
+
+# ===========================
+# Documentation
+# ===========================
+docs/_build/
+/site
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# ===========================
+# Terraform and Terragrunt
+# ===========================
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+.terragrunt-cache/
+
+# ===========================
+# Corporate CA certificates
+# Actual cert files must never be committed -- provide via CI/CD secrets.
+# The trusted_certs/ directory is kept (README only) to document the convention.
+# ===========================
+trusted_certs/*.pem
+trusted_certs/*.crt
+
+# ===========================
+# Temporary files and logs
+# ===========================
+tmp/
+temp/
+*.tmp
+logs/
