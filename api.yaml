@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Event Gate
+  title: EventGate
   version: 0.0.0
   description: This API provides topic management for an event bus.
 
