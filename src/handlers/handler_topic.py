@@ -168,10 +168,11 @@ class HandlerTopic:
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         user = token.get("sub")
-        if topic_name not in self.access_config or user not in self.access_config[topic_name]:
+        authorized_user = self._resolve_authorized_user(topic_name, user)
+        if authorized_user is None:
             return build_error_response(403, "auth", "User not authorized for topic")
 
-        allowed, perm_error = self._validate_user_permissions(topic_name, user, topic_message)
+        allowed, perm_error = self._validate_user_permissions(topic_name, authorized_user, topic_message)
         if not allowed:
             return build_error_response(403, "permission", perm_error or "Permission denied")
 
@@ -200,6 +201,23 @@ class HandlerTopic:
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"success": True, "statusCode": 202}),
         }
+
+    def _resolve_authorized_user(self, topic_name: str, user: str | None) -> str | None:
+        """Match a token user to a configured user for a topic, ignoring case.
+        Args:
+            topic_name: Target topic name.
+            user: User identifier from the token `sub` claim.
+        Returns:
+            The configured username (original casing) when authorized, otherwise `None`.
+        """
+        if user is None or topic_name not in self.access_config:
+            return None
+
+        for configured_user in self.access_config[topic_name]:
+            if configured_user.casefold() == user.casefold():
+                return configured_user
+
+        return None
 
     def _validate_user_permissions(
         self,
