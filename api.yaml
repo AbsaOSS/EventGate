@@ -4,19 +4,6 @@ info:
   version: 0.0.0
   description: This API provides topic management for an event bus.
 
-servers:
-  - url: https://{id}-vpce-{vpce}.execute-api.{region}.amazonaws.com/DEV
-    variables:
-      id:
-        default: 01234567ab
-        description: API Gateway ID
-      vpce:
-        default: '01234567abcdef012'
-        description: VPC endpoint
-      region:
-        default: 'af-south-1'
-        description: AWS Region
-
 paths:
   /api:
     get:
