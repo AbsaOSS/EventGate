@@ -175,8 +175,9 @@ class HandlerTopic:
         allowed, perm_error = self._validate_user_permissions(topic_name, authorized_user, topic_message)
         if not allowed:
             return build_error_response(
-                403, "permission",
-                perm_error or f"Permission denied for user '{authorized_user}' for POST to topic '{topic_name}'"
+                403,
+                "permission",
+                perm_error or f"Permission denied for user '{authorized_user}' for POST to topic '{topic_name}'",
             )
 
         logger.debug("Authorized user '%s' for topic '%s'.", authorized_user, topic_name)
