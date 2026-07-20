@@ -84,3 +84,45 @@ def test_get_docs_body_contains_swagger_ui_markers(mocker):
     assert "swagger-ui" in body
     assert "SwaggerUIBundle" in body
     assert "./api" in body
+
+
+def test_get_docs_body_inlines_assets_not_cdn(mocker):
+    """Test get_docs inlines the vendored assets and references no external CDN."""
+    mocker.patch("builtins.open", mock_open(read_data="openapi: 3.0.0"))
+    handler = HandlerApi().with_api_definition_loaded()
+    body = handler.get_docs()["body"]
+
+    assert "<style>" in body
+    assert "<script>" in body
+    assert "cdn.jsdelivr.net" not in body
+    assert "./docs/swagger-ui" not in body
+
+
+def test_get_docs_inlines_asset_content(mocker):
+    """Test get_docs embeds the CSS and JS file contents into the page."""
+    mocker.patch("builtins.open", mock_open(read_data="ASSET_CONTENT"))
+    handler = HandlerApi()
+    body = handler.get_docs()["body"]
+
+    assert "<style>ASSET_CONTENT</style>" in body
+    assert "<script>ASSET_CONTENT</script>" in body
+
+
+def test_get_docs_builds_once_and_caches(mocker):
+    """Test get_docs reads the vendored assets once and serves later calls from cache."""
+    mock_file = mocker.patch("builtins.open", mock_open(read_data="body"))
+    handler = HandlerApi()
+
+    handler.get_docs()
+    handler.get_docs()
+
+    assert 2 == mock_file.call_count
+
+
+def test_get_docs_read_error_raises(mocker):
+    """Test get_docs raises RuntimeError when a vendored asset cannot be read."""
+    mocker.patch("builtins.open", side_effect=FileNotFoundError("missing"))
+    handler = HandlerApi()
+
+    with pytest.raises(RuntimeError, match="Static asset read failed"):
+        handler.get_docs()

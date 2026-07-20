@@ -68,3 +68,13 @@ class TestDocsEndpoint:
         assert "swagger" in body.lower()
         assert "SwaggerUIBundle" in body
         assert "./api" in body
+
+    def test_get_docs_uses_self_hosted_assets(self, eventgate_client: EventGateTestClient) -> None:
+        """Test GET /docs inlines its assets and makes no CDN requests."""
+        response = eventgate_client.get_docs()
+
+        body = response["body"]
+        assert "<style>" in body
+        assert "<script>" in body
+        assert "cdn.jsdelivr.net" not in body
+        assert "./docs/swagger-ui" not in body
