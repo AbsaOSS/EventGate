@@ -192,7 +192,7 @@ class WriterPostgres(Writer, PostgresBase):
         if topic_name not in POSTGRES_WRITE_TOPICS:
             msg = f"Unknown topic for Postgres/{topic_name}"
             logger.debug(msg)
-            raise WriteError(msg)
+            return  # no need to pollute the logs and no write should happen for these
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)

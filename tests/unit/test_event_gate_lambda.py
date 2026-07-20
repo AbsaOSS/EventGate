@@ -33,6 +33,17 @@ def test_get_api_endpoint(event_gate_module, make_event):
     assert "openapi" in resp["body"].lower()
 
 
+def test_get_docs_endpoint(event_gate_module, make_event):
+    event = make_event("/docs")
+    resp = event_gate_module.lambda_handler(event)
+    assert 200 == resp["statusCode"]
+    assert "swagger" in resp["body"].lower()
+
+
+def test_docs_route_in_route_map(event_gate_module):
+    assert "/docs" in event_gate_module.ROUTE_MAP
+
+
 def test_internal_error_path(event_gate_module, make_event):
     with patch.object(event_gate_module.handler_topic, "get_topics_list", side_effect=RuntimeError("boom")):
         event = make_event("/topics")

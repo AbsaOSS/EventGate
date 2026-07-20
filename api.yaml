@@ -1,21 +1,8 @@
 openapi: 3.0.0
 info:
-  title: Event Gate
-  version: 0.0.0
+  title: EventGate API
+  version: 1.0.0
   description: This API provides topic management for an event bus.
-
-servers:
-  - url: https://{id}-vpce-{vpce}.execute-api.{region}.amazonaws.com/DEV
-    variables:
-      id:
-        default: 01234567ab
-        description: API Gateway ID
-      vpce:
-        default: '01234567abcdef012'
-        description: VPC endpoint
-      region:
-        default: 'af-south-1'
-        description: AWS Region
 
 paths:
   /api:
@@ -27,6 +14,19 @@ paths:
           description: Open API specification
           content:
             application/vnd.oai.openapi:
+              schema:
+                type: string
+
+  /docs:
+    get:
+      summary: Swagger UI documentation page
+      description: Renders interactive Swagger UI for the OpenAPI spec.
+      security: []
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
               schema:
                 type: string
 
