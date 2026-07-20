@@ -168,12 +168,19 @@ class HandlerTopic:
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         user = token.get("sub")
-        if topic_name not in self.access_config or user not in self.access_config[topic_name]:
-            return build_error_response(403, "auth", "User not authorized for topic")
+        authorized_user = self._resolve_authorized_user(topic_name, user)
+        if authorized_user is None:
+            return build_error_response(403, "auth", f"User '{user}' is not authorized for topic '{topic_name}'")
 
-        allowed, perm_error = self._validate_user_permissions(topic_name, user, topic_message)
+        allowed, perm_error = self._validate_user_permissions(topic_name, authorized_user, topic_message)
         if not allowed:
-            return build_error_response(403, "permission", perm_error or "Permission denied")
+            return build_error_response(
+                403,
+                "permission",
+                perm_error or f"Permission denied for user '{authorized_user}' for POST to topic '{topic_name}'",
+            )
+
+        logger.debug("Authorized user '%s' for topic '%s'.", authorized_user, topic_name)
 
         try:
             validate(instance=topic_message, schema=self.topics[topic_name])
@@ -189,17 +196,41 @@ class HandlerTopic:
                 errors.append({"type": writer_name, "message": str(exc)})
 
         if errors:
+            logger.error(
+                "POST to topic '%s' failed: %d of %d writer(s) reported errors.",
+                topic_name,
+                len(errors),
+                len(self.writers),
+            )
             return {
                 "statusCode": 500,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"success": False, "statusCode": 500, "errors": errors}),
             }
 
+        logger.info("Message accepted for topic '%s' from user '%s'.", topic_name, authorized_user)
         return {
             "statusCode": 202,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"success": True, "statusCode": 202}),
         }
+
+    def _resolve_authorized_user(self, topic_name: str, user: str | None) -> str | None:
+        """Match a token user to a configured user for a topic, ignoring case.
+        Args:
+            topic_name: Target topic name.
+            user: User identifier from the token `sub` claim.
+        Returns:
+            The configured username (original casing) when authorized, otherwise `None`.
+        """
+        if user is None or topic_name not in self.access_config:
+            return None
+
+        for configured_user in self.access_config[topic_name]:
+            if configured_user.casefold() == user.casefold():
+                return configured_user
+
+        return None
 
     def _validate_user_permissions(
         self,

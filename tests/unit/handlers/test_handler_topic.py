@@ -257,6 +257,24 @@ def test_post_success_all_writers(event_gate_module, make_event, valid_payload):
         assert 202 == body["statusCode"]
 
 
+def test_post_authorized_user_case_insensitive(event_gate_module, make_event, valid_payload):
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "testuser"}):
+        for writer in event_gate_module.handler_topic.writers.values():
+            writer.write = MagicMock(return_value=None)
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+        assert 202 == resp["statusCode"]
+        body = json.loads(resp["body"])
+        assert body["success"]
+
+
 def test_post_passes_topic_key_to_writers(event_gate_module, make_event, valid_payload):
     """Configured topic key field is extracted and passed to writer.write."""
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
