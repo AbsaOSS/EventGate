@@ -51,7 +51,7 @@ CREATE TABLE job (
    CONSTRAINT fk_job_parent
        FOREIGN KEY (parent_job_id)
            REFERENCES job (job_id)
-           ON DELETE RESTRICT
+           ON DELETE RESTRICT,
 
    CONSTRAINT fk_job_initial
        FOREIGN KEY (initial_job_id)
