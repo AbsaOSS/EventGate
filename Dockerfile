@@ -52,9 +52,9 @@ RUN \
   echo "#################" && \
     mkdir -p /tmp/env-install-workdir/librdkafka && \
     cd /tmp/env-install-workdir/librdkafka && \
-    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v2.14.0.tar.gz && \
-    tar -xf v2.14.0.tar.gz && \
-    cd /tmp/env-install-workdir/librdkafka/librdkafka-2.14.0 && \
+    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v2.15.0.tar.gz && \
+    tar -xf v2.15.0.tar.gz && \
+    cd /tmp/env-install-workdir/librdkafka/librdkafka-2.15.0 && \
     ./configure && make && make install && \
   echo "###################" && \
   echo "### pip installs ###" && \

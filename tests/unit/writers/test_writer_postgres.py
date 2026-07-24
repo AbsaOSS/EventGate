@@ -215,7 +215,7 @@ def test_write_skips_when_psycopg2_missing(reset_env, monkeypatch):
         writer.write("public.cps.za.test", {})
 
 
-def test_write_unknown_topic_raises(reset_env, monkeypatch):
+def test_write_unknown_topic_skips_silently(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
     writer = WriterPostgres({})
@@ -224,8 +224,8 @@ def test_write_unknown_topic_raises(reset_env, monkeypatch):
         "_pg_config",
         property(lambda self: {"database": "db", "host": "h", "user": "u", "password": "p", "port": 5432}),
     )
-    with pytest.raises(WriteError, match="Unknown topic"):
-        writer.write("public.cps.za.unknown", {})
+    writer.write("public.cps.za.unknown", {})
+    assert 0 == len(store)
 
 
 def test_write_success_known_topic(reset_env, monkeypatch):
