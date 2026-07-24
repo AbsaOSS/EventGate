@@ -170,6 +170,6 @@ ON CONFLICT (job_id) DO UPDATE SET
     finished_at        = CASE
                            WHEN EXCLUDED.last_updated_at >= t.last_updated_at
                            THEN COALESCE(EXCLUDED.finished_at, t.finished_at)
-                           ELSE t.finished_at
+                           ELSE COALESCE(t.finished_at, EXCLUDED.finished_at)
                          END,
     last_updated_at    = GREATEST(EXCLUDED.last_updated_at, t.last_updated_at);
