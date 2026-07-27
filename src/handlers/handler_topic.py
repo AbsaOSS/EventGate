@@ -19,6 +19,7 @@
 import json
 import logging
 import os
+import time
 from typing import Any
 
 import jwt
@@ -30,6 +31,7 @@ from src.handlers.handler_token import HandlerToken
 from src.utils.conf_path import CONF_DIR
 from src.utils.config_loader import TopicAccessMap, TopicKeyMap, load_access_config, load_topic_keys_config
 from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
+from src.utils.observability import append_request_keys
 from src.utils.utils import build_error_response
 from src.writers.writer import WriteError, Writer
 
@@ -68,7 +70,7 @@ class HandlerTopic:
             The current instance with loaded topic schemas.
         """
         topic_schemas_dir = os.path.join(CONF_DIR, "topic_schemas")
-        logger.debug("Loading topic schemas from %s.", topic_schemas_dir)
+        logger.debug("Loading topic schemas.", extra={"topic_schemas_dir": topic_schemas_dir})
 
         with open(os.path.join(topic_schemas_dir, "runs.json"), "r", encoding="utf-8") as file:
             self.topics[TOPIC_RUNS] = json.load(file)
@@ -79,7 +81,7 @@ class HandlerTopic:
         with open(os.path.join(topic_schemas_dir, "status_change.json"), "r", encoding="utf-8") as file:
             self.topics[TOPIC_STATUS_CHANGE] = json.load(file)
 
-        logger.debug("Loaded topic schemas successfully.")
+        logger.debug("Loaded topic schemas.", extra={"topics": sorted(self.topics)})
         return self
 
     def with_load_topic_keys_config(self) -> "HandlerTopic":
@@ -109,17 +111,35 @@ class HandlerTopic:
         Returns:
             API Gateway response.
         """
-        topic_name = event["pathParameters"]["topic_name"].lower()
+        path_parameters = event.get("pathParameters") or {}
+        raw_topic_name = path_parameters.get("topic_name")
+        if not raw_topic_name:
+            logger.warning("Request rejected: path parameter 'topic_name' is missing.")
+            return build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
+
+        topic_name = str(raw_topic_name).lower()
+        append_request_keys(topic=topic_name)
         method = event.get("httpMethod")
 
         if method == "GET":
             return self._get_topic_schema(topic_name)
         if method == "POST":
+            try:
+                topic_message = json.loads(event.get("body") or "")
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Request rejected: message body is not valid JSON.")
+                return build_error_response(400, "validation", "Request body must be valid JSON.")
+            if not isinstance(topic_message, dict):
+                logger.warning("Request rejected: message body is not a JSON object.")
+                return build_error_response(400, "validation", "Request body must be a JSON object.")
+
             return self._post_topic_message(
                 topic_name,
-                json.loads(event["body"]),
+                topic_message,
                 self.handler_token.extract_token(event.get("headers", {})),
             )
+
+        logger.warning("Request rejected: unsupported HTTP method.", extra={"http_method": method})
         return build_error_response(404, "route", "Resource not found")
 
     def _get_topic_schema(self, topic_name: str) -> dict[str, Any]:
@@ -129,9 +149,10 @@ class HandlerTopic:
         Returns:
             API Gateway response with topic schema or error.
         """
-        logger.debug("Handling GET TopicSchema(%s).", topic_name)
+        logger.debug("Handling GET topic schema.")
 
         if topic_name not in self.topics:
+            logger.warning("Request rejected: unknown topic.", extra={"known_topics": sorted(self.topics)})
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         return {
@@ -153,7 +174,7 @@ class HandlerTopic:
             jwt.PyJWTError: If token decoding fails.
             ValidationError: If message validation fails.
         """
-        logger.debug("Handling POST TopicMessage(%s).", topic_name)
+        logger.debug("Handling POST topic message.")
 
         if not self.access_config:
             logger.error("Access configuration not loaded.")
@@ -161,45 +182,105 @@ class HandlerTopic:
 
         try:
             token: dict[str, Any] = self.handler_token.decode_jwt(token_encoded)
-        except jwt.PyJWTError:  # type: ignore[attr-defined]
+        except jwt.PyJWTError as exc:  # type: ignore[attr-defined]
+            logger.warning(
+                "Request rejected: token verification failed.",
+                extra={"auth_error": type(exc).__name__, "token_present": bool(token_encoded)},
+            )
             return build_error_response(401, "auth", "Invalid or missing token")
 
         if topic_name not in self.topics:
+            logger.warning("Request rejected: unknown topic.", extra={"known_topics": sorted(self.topics)})
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         user = token.get("sub")
+        append_request_keys(user=user)
+
         if topic_name not in self.access_config or user not in self.access_config[topic_name]:
+            logger.warning("Request rejected: user is not authorized for the topic.")
             return build_error_response(403, "auth", "User not authorized for topic")
 
         allowed, perm_error = self._validate_user_permissions(topic_name, user, topic_message)
         if not allowed:
+            logger.warning("Request rejected: user permissions do not allow the message.", extra={"reason": perm_error})
             return build_error_response(403, "permission", perm_error or "Permission denied")
 
         try:
             validate(instance=topic_message, schema=self.topics[topic_name])
         except ValidationError as exc:
+            logger.warning(
+                "Request rejected: message does not match the topic schema.",
+                extra={"validation_path": str(exc.json_path), "validator": str(exc.validator)},
+            )
             return build_error_response(400, "validation", exc.message)
 
         message_key = self._resolve_message_key(topic_name, topic_message)
-        errors = []
-        for writer_name, writer in self.writers.items():
-            try:
-                writer.write(topic_name, topic_message, message_key)
-            except WriteError as exc:
-                errors.append({"type": writer_name, "message": str(exc)})
+        errors, written_by = self._write_to_all(topic_name, topic_message, message_key)
 
         if errors:
+            logger.error(
+                "Message dispatch failed for at least one writer.",
+                extra={
+                    "writers_ok": written_by,
+                    "writers_failed": [error["type"] for error in errors],
+                    "message_key": message_key,
+                },
+            )
             return {
                 "statusCode": 500,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"success": False, "statusCode": 500, "errors": errors}),
             }
 
+        logger.info("Message accepted.", extra={"writers_ok": written_by, "message_key": message_key})
         return {
             "statusCode": 202,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"success": True, "statusCode": 202}),
         }
+
+    def _write_to_all(
+        self,
+        topic_name: str,
+        topic_message: dict[str, Any],
+        message_key: str,
+    ) -> tuple[list[dict[str, str]], list[str]]:
+        """Dispatch a message to every configured writer, collecting per-writer outcomes.
+        Args:
+            topic_name: Target topic name.
+            topic_message: Message payload.
+            message_key: Resolved transport key.
+        Returns:
+            Tuple of (errors, written_by) where `errors` holds one entry per failing writer and
+            `written_by` lists the writers that accepted the message.
+        """
+        errors: list[dict[str, str]] = []
+        written_by: list[str] = []
+
+        for writer_name, writer in self.writers.items():
+            started_at = time.perf_counter()
+            try:
+                writer.write(topic_name, topic_message, message_key)
+                written_by.append(writer_name)
+                logger.debug(
+                    "Writer accepted the message.",
+                    extra={
+                        "writer": writer_name,
+                        "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    },
+                )
+            except WriteError as exc:
+                errors.append({"type": writer_name, "message": str(exc)})
+                logger.error(
+                    "Writer failed to publish the message.",
+                    extra={
+                        "writer": writer_name,
+                        "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                        "writer_error": str(exc),
+                    },
+                )
+
+        return errors, written_by
 
     def _validate_user_permissions(
         self,
@@ -242,11 +323,11 @@ class HandlerTopic:
 
         key_value = message.get(key_field)
         if key_value is None:
-            logger.warning("Topic key field '%s' missing for topic '%s'.", key_field, topic_name)
+            logger.warning("Topic key field is missing from the message.", extra={"key_field": key_field})
             return ""
 
         if isinstance(key_value, (dict, list)):
-            logger.warning("Topic key field '%s' for topic '%s' is not scalar.", key_field, topic_name)
+            logger.warning("Topic key field is not a scalar value.", extra={"key_field": key_field})
             return ""
 
         return str(key_value)

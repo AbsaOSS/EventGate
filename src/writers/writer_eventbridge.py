@@ -18,6 +18,7 @@
 
 import json
 import logging
+import time
 from typing import Any, Optional
 
 import boto3
@@ -68,8 +69,9 @@ class WriterEventBridge(Writer):
 
         log_payload_at_trace(logger, "EventBridge", topic_name, message)
 
+        started_at = time.perf_counter()
         try:
-            logger.debug("Sending to EventBridge %s.", topic_name)
+            logger.debug("Sending message to EventBridge.", extra={"topic": topic_name})
             response = self._client.put_events(
                 Entries=[
                     {
@@ -80,15 +82,40 @@ class WriterEventBridge(Writer):
                     }
                 ]
             )
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             failed_count = response.get("FailedEntryCount", 0)
             if failed_count > 0:
                 self._entries = response.get("Entries", [])
                 failed_repr = self._format_failed_entries()
                 msg = f"{failed_count} EventBridge entries failed: {failed_repr}"
-                logger.error(msg)
+                logger.error(
+                    "EventBridge rejected entries.",
+                    extra={
+                        "topic": topic_name,
+                        "writer_duration_ms": duration_ms,
+                        "failed_entry_count": failed_count,
+                        "failed_entries": failed_repr,
+                    },
+                )
                 raise WriteError(msg)
+
+            entries = response.get("Entries") or [{}]
+            logger.debug(
+                "EventBridge accepted the message.",
+                extra={
+                    "topic": topic_name,
+                    "writer_duration_ms": duration_ms,
+                    "event_id": entries[0].get("EventId"),
+                },
+            )
         except (BotoCoreError, ClientError) as err:  # explicit AWS client-related errors
-            logger.exception("EventBridge put_events call failed.")
+            logger.exception(
+                "EventBridge put_events call failed.",
+                extra={
+                    "topic": topic_name,
+                    "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                },
+            )
             raise WriteError(str(err)) from err
 
     def check_health(self) -> str | None:

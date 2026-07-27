@@ -78,7 +78,8 @@ def test_current_dir_conf_used_when_parent_missing():
     mod = _load_isolated_conf_path(build)
     try:
         conf_dir, invalid = mod.resolve_conf_dir()
-        assert conf_dir.endswith("pkg/conf")  # current directory conf chosen
+        expected_current_conf = (Path(mod.__file__).resolve().parent / "conf").resolve()
+        assert Path(conf_dir).resolve() == expected_current_conf  # current directory conf chosen
         assert invalid is None
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
@@ -118,7 +119,8 @@ def test_invalid_env_uses_current_conf_when_parent_missing(monkeypatch):
         bad_path = "/definitely/not/there/abc123"
         monkeypatch.setenv("CONF_DIR", bad_path)
         conf_dir, invalid = mod.resolve_conf_dir()
-        assert conf_dir.endswith("pkg_invalid_current/conf")
+        expected_current_conf = (Path(mod.__file__).resolve().parent / "conf").resolve()
+        assert Path(conf_dir).resolve() == expected_current_conf
         assert invalid == os.path.abspath(bad_path)
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]

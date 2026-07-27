@@ -14,9 +14,12 @@
 # limitations under the License.
 #
 
-"""Custom logging levels and shared logging setup.
+"""Custom logging levels and log level resolution.
 
-Adds a TRACE level below DEBUG for very verbose payload logging.
+Adds a TRACE level below DEBUG for very verbose payload logging and resolves the
+configured level from the environment. The level is registered with the standard
+`logging` module, which is what makes `LOG_LEVEL=TRACE` resolvable by AWS Lambda
+Powertools as well.
 """
 
 from __future__ import annotations
@@ -44,24 +47,30 @@ if not hasattr(logging, "TRACE"):
     logging.Logger.trace = trace  # type: ignore[attr-defined]
 
 
-def init_root_logger(module_name: str) -> logging.Logger:
-    """Initialize the root logger and return a module-level logger.
-    Args:
-        module_name: Typically `__name__` of the calling module.
+def configured_log_level() -> str:
+    """Read the log level requested through the environment.
     Returns:
-        A logger instance for the calling module.
+        The upper-cased level name, defaulting to `INFO`.
     """
-    root_logger = logging.getLogger()
-    if not root_logger.handlers:
-        root_logger.addHandler(logging.StreamHandler())
-
-    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-    try:
-        root_logger.setLevel(log_level)
-    except ValueError:
-        root_logger.setLevel("INFO")
-        root_logger.warning("Invalid LOG_LEVEL %s; defaulting to INFO.", log_level)
-    return logging.getLogger(module_name)
+    return (os.environ.get("POWERTOOLS_LOG_LEVEL") or os.environ.get("LOG_LEVEL") or "INFO").strip().upper()
 
 
-__all__ = ["TRACE_LEVEL", "init_root_logger"]
+def resolve_log_level() -> int:
+    """Resolve the configured log level to a numeric logging level.
+    Returns:
+        The numeric level for the configured name, or `logging.INFO` when it is unknown.
+    """
+    level = logging.getLevelName(configured_log_level())
+    return level if isinstance(level, int) else logging.INFO
+
+
+def invalid_log_level() -> str | None:
+    """Report a configured log level that could not be resolved.
+    Returns:
+        The rejected level name, or `None` when the configured level is valid.
+    """
+    configured = configured_log_level()
+    return None if isinstance(logging.getLevelName(configured), int) else configured
+
+
+__all__ = ["TRACE_LEVEL", "configured_log_level", "invalid_log_level", "resolve_log_level"]

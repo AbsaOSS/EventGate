@@ -208,6 +208,45 @@ View container logs in pytest output by increasing log level:
 pytest tests/integration/ -v --log-cli-level=DEBUG
 ```
 
+## Logging Conventions
+
+Logging is structured. `src/utils/observability.py` attaches the AWS Lambda Powertools JSON handler to the root logger, so modules keep using the standard library logger and inherit the format, the Lambda execution context and the request correlation id.
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+```
+
+Rules:
+
+- The message is a constant sentence ending with a period. Variable data goes into `extra`, never into the sentence.
+  ```python
+  logger.warning("Request rejected: unknown topic.", extra={"topic": topic_name})
+  ```
+- Do not add `topic`, `user`, `resource`, `http_method`, `correlation_id` or the Lambda context to `extra`; they are bound once per request by `bind_request_context()` and `append_request_keys()`.
+- Every non-2xx response must produce exactly one log line explaining the cause.
+- Levels: `TRACE` payloads, `DEBUG` steps, `INFO` request outcomes, `WARNING` rejected requests and soft failures, `ERROR` failures that need action. See the level table in [README](./README.md#logging--correlation).
+- Never log tokens, passwords or full message payloads outside `TRACE`. `TRACE` payload logging goes through `log_payload_at_trace()`, which redacts and size caps the payload.
+- `logger.exception()` is only valid inside an `except` block. Outside one, pass the captured exception: `logger.error("...", exc_info=exc)`.
+- Durations are logged as milliseconds with an explicit key (`duration_ms`, `writer_duration_ms`, `query_duration_ms`).
+
+Assert on structured fields in tests, not on formatted strings:
+
+```python
+def test_rejects_unknown_topic(caplog):
+    caplog.set_level(logging.WARNING)
+    ...
+    assert "Request rejected: unknown topic." == caplog.records[-1].message
+```
+
+Keys bound with `append_request_keys()` live on the Powertools formatter rather than on the `LogRecord`. To assert on them, render the record:
+
+```python
+payload = json.loads(logger.registered_formatter.format(caplog.records[-1]))
+assert "run-42" == payload["correlation_id"]
+```
+
 ## Run All Quality Gates
 
 Run Black, Pylint, mypy, unit tests (with coverage), and integration tests in a single command:

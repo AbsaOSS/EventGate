@@ -18,6 +18,7 @@
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -80,7 +81,6 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - dlchange.")
         cursor.execute(
             self._queries.insert_dlchange,
             {
@@ -108,7 +108,6 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload (includes jobs array).
         """
-        logger.debug("Sending to Postgres - runs.")
         cursor.execute(
             self._queries.insert_run,
             {
@@ -122,6 +121,7 @@ class WriterPostgres(Writer, PostgresBase):
                 "timestamp_end": message["timestamp_end"],
             },
         )
+        logger.debug("Inserting run jobs.", extra={"job_count": len(message["jobs"])})
         for job in message["jobs"]:
             cursor.execute(
                 self._queries.insert_run_job,
@@ -143,7 +143,6 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - test.")
         cursor.execute(
             self._queries.insert_test,
             {
@@ -171,17 +170,17 @@ class WriterPostgres(Writer, PostgresBase):
             pg_config = self._pg_config
         except (RuntimeError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception(err_msg)
+            logger.exception("Postgres writer failed to load its configuration.", extra={"topic": topic_name})
             raise WriteError(err_msg) from e
 
         if not pg_config.get("database"):
-            logger.debug("No Postgres - skipping Postgres writer.")
+            logger.debug("No Postgres database configured - skipping Postgres writer.")
             return
 
         missing = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
         if missing:
             msg = f"PostgreSQL connection field '{missing[0]}' not configured."
-            logger.error(msg)
+            logger.error("Postgres connection is not fully configured.", extra={"missing_fields": missing})
             raise WriteError(msg)
 
         if not self._is_psycopg2_available():
@@ -191,7 +190,10 @@ class WriterPostgres(Writer, PostgresBase):
 
         if topic_name not in POSTGRES_WRITE_TOPICS:
             msg = f"Unknown topic for Postgres/{topic_name}"
-            logger.debug(msg)
+            logger.error(
+                "Postgres writer received an unsupported topic.",
+                extra={"topic": topic_name, "supported_topics": sorted(POSTGRES_WRITE_TOPICS)},
+            )
             raise WriteError(msg)
 
         try:
@@ -199,11 +201,14 @@ class WriterPostgres(Writer, PostgresBase):
         except (RuntimeError, PsycopgError, ValueError, KeyError) as e:
             self._close_connection()
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception(err_msg)
+            logger.exception("Postgres writer failed while inserting the message.", extra={"topic": topic_name})
             raise WriteError(err_msg) from e
 
     def _write_topic(self, connection: Any, topic_name: str, message: dict[str, Any]) -> None:
         """Execute the insert for the given topic inside a transaction."""
+        started_at = time.perf_counter()
+        logger.debug("Inserting message into Postgres.", extra={"topic": topic_name})
+
         with connection.cursor() as cursor:
             if topic_name == TOPIC_DLCHANGE:
                 self._insert_dlchange(cursor, message)
@@ -212,6 +217,11 @@ class WriterPostgres(Writer, PostgresBase):
             elif topic_name == TOPIC_TEST:
                 self._insert_test(cursor, message)
         connection.commit()
+
+        logger.debug(
+            "Postgres accepted the message.",
+            extra={"topic": topic_name, "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2)},
+        )
 
     @staticmethod
     def _is_psycopg2_available() -> bool:

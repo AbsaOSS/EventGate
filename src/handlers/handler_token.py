@@ -63,7 +63,10 @@ class HandlerToken:
             logger.debug("Token public keys are stale, refreshing now.")
             self.with_public_keys_queried()
         except RuntimeError:
-            logger.warning("Token public key refresh failed, using existing keys.")
+            logger.warning(
+                "Token public key refresh failed, using existing keys.",
+                extra={"public_key_count": len(self.public_keys)},
+            )
 
     def with_public_keys_queried(self) -> "HandlerToken":
         """Load token public keys from the configured URL.
@@ -92,12 +95,15 @@ class HandlerToken:
             self.public_keys = [
                 cast(RSAPublicKey, serialization.load_der_public_key(base64.b64decode(raw_key))) for raw_key in raw_keys
             ]
-            logger.debug("Loaded %d token public keys.", len(self.public_keys))
+            logger.info("Loaded token public keys.", extra={"public_key_count": len(self.public_keys)})
             self._last_loaded_at = datetime.now(timezone.utc)
 
             return self
         except (requests.RequestException, ValueError, KeyError, UnsupportedAlgorithm) as exc:
-            logger.exception("Failed to fetch or deserialize token public key.")
+            logger.exception(
+                "Failed to fetch or deserialize token public key.",
+                extra={"public_keys_url": self.public_keys_url},
+            )
             raise RuntimeError("Token public key initialization failed") from exc
 
     def decode_jwt(self, token_encoded: str) -> dict[str, Any]:
@@ -111,12 +117,17 @@ class HandlerToken:
         """
         self._refresh_keys_if_needed()
 
-        logger.debug("Decoding JWT.")
+        logger.debug("Decoding JWT.", extra={"public_key_count": len(self.public_keys)})
         for public_key in self.public_keys:
             try:
                 return jwt.decode(token_encoded, public_key, algorithms=["RS256"])
             except jwt.PyJWTError:
                 continue
+
+        logger.warning(
+            "JWT verification failed for all public keys.",
+            extra={"public_key_count": len(self.public_keys)},
+        )
         raise jwt.PyJWTError("Verification failed for all public keys")
 
     def get_token_provider_info(self) -> dict[str, Any]:

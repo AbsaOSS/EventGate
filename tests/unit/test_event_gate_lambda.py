@@ -43,7 +43,7 @@ def test_internal_error_path(event_gate_module, make_event):
 
 
 def test_post_invalid_json_body(event_gate_module, make_event):
-    # Invalid JSON triggers json.loads exception and returns 500 internal error
+    # Invalid JSON is rejected as a client error, not swallowed as an internal error
     event = make_event(
         "/topics/{topic_name}",
         method="POST",
@@ -52,9 +52,9 @@ def test_post_invalid_json_body(event_gate_module, make_event):
         headers={"Authorization": "Bearer token"},
     )
     resp = event_gate_module.lambda_handler(event)
-    assert 500 == resp["statusCode"]
+    assert 400 == resp["statusCode"]
     body = json.loads(resp["body"])
-    assert any(e["type"] == "internal" for e in body["errors"])  # internal error path
+    assert any(e["type"] == "validation" for e in body["errors"])  # validation error path
 
 
 def test_boto3_s3_client_default_ssl_verification():
