@@ -189,12 +189,12 @@ class WriterPostgres(Writer, PostgresBase):
         log_payload_at_trace(logger, "Postgres", topic_name, message)
 
         if topic_name not in POSTGRES_WRITE_TOPICS:
-            msg = f"Unknown topic for Postgres/{topic_name}"
-            logger.error(
-                "Postgres writer received an unsupported topic.",
-                extra={"topic": topic_name, "supported_topics": sorted(POSTGRES_WRITE_TOPICS)},
+            # no need to pollute the logs and no write should happen for these
+            logger.debug(
+                "Topic is not persisted by the Postgres writer - skipping.",
+                extra={"topic": topic_name, "postgres_topics": sorted(POSTGRES_WRITE_TOPICS)},
             )
-            raise WriteError(msg)
+            return
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)

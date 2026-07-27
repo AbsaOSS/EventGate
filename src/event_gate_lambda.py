@@ -86,6 +86,7 @@ logger.info(
 # Route to handler function mapping
 ROUTE_MAP: dict[str, Any] = {
     "/api": lambda _: handler_api.get_api(),
+    "/docs": lambda _: handler_api.get_docs(),
     "/token": lambda _: handler_token.get_token_provider_info(),
     "/health": lambda _: handler_health.get_health(),
     "/topics": lambda _: handler_topic.get_topics_list(),

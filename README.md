@@ -56,6 +56,7 @@ All responses are JSON unless otherwise noted. The POST endpoint requires a vali
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api` | none | Returns OpenAPI 3 definition (raw YAML) |
+| GET | `/docs` | none | Renders interactive Swagger UI for the OpenAPI spec |
 | GET | `/token` | none | 303 redirect to external token provider |
 | GET | `/health` | none | Returns service health and dependency status |
 | GET | `/topics` | none | Lists available topic names |

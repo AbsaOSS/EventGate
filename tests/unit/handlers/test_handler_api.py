@@ -54,3 +54,33 @@ def test_get_api_returns_correct_response(mocker):
     assert 200 == response["statusCode"]
     assert "application/yaml" == response["headers"]["Content-Type"]
     assert mock_content == response["body"]
+
+
+def test_get_docs_returns_200(mocker):
+    """Test get_docs returns status code 200."""
+    mocker.patch("builtins.open", mock_open(read_data="openapi: 3.0.0"))
+    handler = HandlerApi().with_api_definition_loaded()
+    response = handler.get_docs()
+
+    assert 200 == response["statusCode"]
+
+
+def test_get_docs_returns_html_content_type(mocker):
+    """Test get_docs returns text/html content type."""
+    mocker.patch("builtins.open", mock_open(read_data="openapi: 3.0.0"))
+    handler = HandlerApi().with_api_definition_loaded()
+    response = handler.get_docs()
+
+    assert "text/html" == response["headers"]["Content-Type"]
+
+
+def test_get_docs_body_contains_swagger_ui_markers(mocker):
+    """Test get_docs body contains Swagger UI markers and references ./api."""
+    mocker.patch("builtins.open", mock_open(read_data="openapi: 3.0.0"))
+    handler = HandlerApi().with_api_definition_loaded()
+    response = handler.get_docs()
+
+    body = response["body"]
+    assert "swagger-ui" in body
+    assert "SwaggerUIBundle" in body
+    assert "./api" in body

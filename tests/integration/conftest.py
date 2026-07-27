@@ -415,6 +415,10 @@ class EventGateTestClient(LambdaTestClient):
         """Get OpenAPI specification."""
         return self.invoke("/api", "GET")
 
+    def get_docs(self) -> Dict[str, Any]:
+        """Get Swagger UI documentation page."""
+        return self.invoke("/docs", "GET")
+
     def get_token(self) -> Dict[str, Any]:
         """Get token provider info."""
         return self.invoke("/token", "GET")

@@ -45,7 +45,7 @@ def formatted(record):
 @pytest.fixture(autouse=True)
 def clean_logger_state():
     """Keep the module level logger state from leaking between tests."""
-    observability._cold_start = True
+    observability._container_state["cold_start"] = True
     yield
     bind_request_context({})
     logger.set_correlation_id(None)

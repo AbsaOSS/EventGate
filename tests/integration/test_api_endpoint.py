@@ -42,3 +42,29 @@ class TestApiEndpoint:
         assert "openapi:" in body
         assert "paths:" in body
         assert "/topics" in body
+
+
+class TestDocsEndpoint:
+    """Tests for the /docs endpoint."""
+
+    def test_get_docs_returns_200(self, eventgate_client: EventGateTestClient) -> None:
+        """Test GET /docs returns successful response."""
+        response = eventgate_client.get_docs()
+
+        assert 200 == response["statusCode"]
+
+    def test_get_docs_returns_html_content_type(self, eventgate_client: EventGateTestClient) -> None:
+        """Test GET /docs returns text/html content type."""
+        response = eventgate_client.get_docs()
+
+        assert "Content-Type" in response["headers"]
+        assert "text/html" in response["headers"]["Content-Type"]
+
+    def test_get_docs_body_contains_swagger_ui(self, eventgate_client: EventGateTestClient) -> None:
+        """Test GET /docs body contains Swagger UI markers and references ./api."""
+        response = eventgate_client.get_docs()
+
+        body = response["body"]
+        assert "swagger" in body.lower()
+        assert "SwaggerUIBundle" in body
+        assert "./api" in body

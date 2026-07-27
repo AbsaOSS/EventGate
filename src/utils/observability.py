@@ -59,7 +59,8 @@ logger: Logger = Logger(
 # Keys appended for the duration of a single invocation; cleared at the start of the next one.
 _request_scoped_keys: set[str] = set()
 
-_cold_start = True
+# Mutable container so the flag can be flipped without a module level `global` statement.
+_container_state: dict[str, bool] = {"cold_start": True}
 
 
 def configure_root_logging() -> None:
@@ -146,18 +147,17 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
     Returns:
         The resolved correlation id (possibly an empty string).
     """
-    global _cold_start  # pylint: disable=global-statement
     _clear_request_keys()
 
     correlation_id = resolve_correlation_id(event)
     logger.set_correlation_id(correlation_id or None)
 
     append_request_keys(
-        cold_start=_cold_start,
+        cold_start=_container_state["cold_start"],
         resource=event.get("resource", ""),
         http_method=event.get("httpMethod", ""),
     )
-    _cold_start = False
+    _container_state["cold_start"] = False
 
     if context is not None:
         append_request_keys(
