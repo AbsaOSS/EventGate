@@ -63,7 +63,7 @@ def with_correlation_header(response: dict[str, Any], correlation_id: str) -> di
         return response
 
     headers = dict(response.get("headers") or {})
-    headers.setdefault(CORRELATION_ID_RESPONSE_HEADER, correlation_id)
+    headers[CORRELATION_ID_RESPONSE_HEADER] = correlation_id
     response["headers"] = headers
     return response
 

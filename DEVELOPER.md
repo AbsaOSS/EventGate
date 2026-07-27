@@ -222,7 +222,7 @@ Rules:
 
 - The message is a constant sentence ending with a period. Variable data goes into `extra`, never into the sentence.
   ```python
-  logger.warning("Request rejected: unknown topic.", extra={"topic": topic_name})
+  logger.warning("Request rejected: unknown topic.", extra={"known_topics": sorted(known_topics)})
   ```
 - Do not add `topic`, `user`, `resource`, `http_method`, `correlation_id` or the Lambda context to `extra`; they are bound once per request by `bind_request_context()` and `append_request_keys()`.
 - Every non-2xx response must produce exactly one log line explaining the cause.

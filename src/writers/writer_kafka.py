@@ -146,7 +146,7 @@ class WriterKafka(Writer):
                 captured_exception = e
 
             # Treat None (flush returns None in some stubs) as success equivalent to 0 pending
-            if (remaining is None or remaining == 0) and not errors:
+            if remaining is None or remaining == 0:
                 break
             if attempt < _MAX_RETRIES:
                 logger.warning(

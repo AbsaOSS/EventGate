@@ -139,7 +139,7 @@ class HandlerTopic:
                 self.handler_token.extract_token(event.get("headers", {})),
             )
 
-        logger.warning("Request rejected: unsupported HTTP method.", extra={"http_method": method})
+        logger.warning("Request rejected: unsupported HTTP method.")
         return build_error_response(404, "route", "Resource not found")
 
     def _get_topic_schema(self, topic_name: str) -> dict[str, Any]:

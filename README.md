@@ -162,13 +162,13 @@ Every non-2xx response has exactly one log line explaining the cause.
 
 Example CloudWatch Logs Insights queries:
 
-```
+```text
 fields @timestamp, level, message, status_code, duration_ms
 | filter correlation_id = "<id>"
 | sort @timestamp asc
 ```
 
-```
+```text
 fields @timestamp, topic, user, message
 | filter level = "WARNING" and status_code = 403
 | stats count() by user, topic

@@ -60,6 +60,15 @@ def test_dispatch_request_routes_and_stamps_the_correlation_id():
     assert "run-42" == resp["headers"][CORRELATION_ID_RESPONSE_HEADER]
 
 
+def test_dispatch_request_overwrites_a_handler_supplied_correlation_id():
+    """The id bound to the request wins over one a handler put on its own response."""
+    route_map = {"/health": lambda _: {"statusCode": 200, "headers": {CORRELATION_ID_RESPONSE_HEADER: "stale-id"}}}
+
+    resp = dispatch_request(make_event(), route_map, logger)
+
+    assert "run-42" == resp["headers"][CORRELATION_ID_RESPONSE_HEADER]
+
+
 def test_dispatch_request_logs_the_request_outcome(caplog):
     caplog.set_level(logging.INFO)
     route_map = {"/health": lambda _: {"statusCode": 503, "headers": {}}}
