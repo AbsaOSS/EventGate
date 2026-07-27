@@ -166,6 +166,15 @@ class WriterPostgres(Writer, PostgresBase):
         Raises:
             WriteError: If publishing fails.
         """
+        # Checked first: a topic this writer does not persist must never fail the request because
+        # of a Postgres configuration problem it is not involved in.
+        if topic_name not in POSTGRES_WRITE_TOPICS:
+            logger.debug(
+                "Topic is not persisted by the Postgres writer - skipping.",
+                extra={"topic": topic_name, "postgres_topics": sorted(POSTGRES_WRITE_TOPICS)},
+            )
+            return
+
         try:
             pg_config = self._pg_config
         except (RuntimeError, BotoCoreError, ClientError, ValueError, KeyError) as e:
@@ -187,14 +196,6 @@ class WriterPostgres(Writer, PostgresBase):
             raise WriteError("psycopg2 is not available for the configured Postgres writer.")
 
         log_payload_at_trace(logger, "Postgres", topic_name, message)
-
-        if topic_name not in POSTGRES_WRITE_TOPICS:
-            # no need to pollute the logs and no write should happen for these
-            logger.debug(
-                "Topic is not persisted by the Postgres writer - skipping.",
-                extra={"topic": topic_name, "postgres_topics": sorted(POSTGRES_WRITE_TOPICS)},
-            )
-            return
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)
