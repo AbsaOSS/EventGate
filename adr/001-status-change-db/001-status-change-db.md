@@ -35,7 +35,7 @@ CREATE TABLE job (
     platform_metadata    JSONB,
     input_arguments      JSONB,
     additional_context   JSONB,
-    attempt_number       INTEGER NOT NULL CHECK (attempt_number > 0),
+    attempt_number       INTEGER NOT NULL DEFAULT 1 CHECK (attempt_number > 0),
 
     -- Current lifecycle status
     status_type          TEXT CHECK (status_type IN ('WAITING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'KILLED')),
