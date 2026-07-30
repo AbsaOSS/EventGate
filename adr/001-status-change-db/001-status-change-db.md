@@ -46,24 +46,17 @@ CREATE TABLE job (
     created_at           TIMESTAMPTZ,
     started_at           TIMESTAMPTZ,
     finished_at          TIMESTAMPTZ,
-    last_updated_at      TIMESTAMPTZ NOT NULL,
-
-   CONSTRAINT fk_job_parent
-       FOREIGN KEY (parent_job_id)
-           REFERENCES job (job_id)
-           ON DELETE RESTRICT,
-
-   CONSTRAINT fk_job_initial
-       FOREIGN KEY (initial_job_id)
-           REFERENCES job (job_id)
-           ON DELETE RESTRICT
+    last_updated_at      TIMESTAMPTZ NOT NULL
 );
 ```
+
+Note: Indices and foreign key constraints were omitted. Logically, `parent_job_id` and `initial_job_id` should have a foreign key constraint on `job_id`. However, since events may arrive out-of-order, the foreign key is not guaranteed to exist at the time of insertion. Indices should be added later for performance reasons.
 
 ## Event insertion and aggregation
 
 ### Assumptions
-- Most events are received in order per `job_id`, but some events may be received out-of-order (during failures scenarios). The order of events is determined by the field `timestamp_event`. If an event is out-of-order, it means that an event with a higher `timestamp_event` has already been processed for the database insert / update.
+- Most events are received in order per `job_id`, but out-of-order arrival may be caused by transport layers (Kafka rebalance, retry, at-least-once redelivery). The order of events is determined by the field `timestamp_event`. If an event is out-of-order, it means that an event with a higher `timestamp_event` has already been processed for the database insert / update.
+- Producers are trusted to emit events with `timestamp_event` values that reflect the true event order for each `job_id`. A producer clock issue is not corrected by the merge strategy, i.e. is out of the scope of the current solution.
 - Duplicate events can occur and must be handled idempotently, i.e. duplicate events must not lead to two rows in the database table.
 - The `job` table stores the latest snapshot of the job's status, not historical versions.
 
