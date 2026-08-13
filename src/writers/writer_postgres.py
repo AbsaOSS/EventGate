@@ -167,9 +167,11 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - status_change.")
         ts = datetime.fromtimestamp(message["timestamp_event"] / 1000.0, tz=timezone.utc)
         event_type = message["event_type"]
+        # An unrecognized event_type leaves every timestamp below unset and still upserts a row,
+        # so this line is the only trace of why the stored record looks empty.
+        logger.debug("Sending to Postgres - status_change.", extra={"event_type": event_type})
 
         created_at: datetime | None = None
         started_at: datetime | None = None
