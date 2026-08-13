@@ -32,7 +32,7 @@ from src.utils.conf_path import CONF_DIR
 from src.utils.config_loader import TopicAccessMap, TopicKeyMap, load_access_config, load_topic_keys_config
 from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
 from src.utils.observability import append_request_keys
-from src.utils.utils import build_error_response
+from src.utils.utils import build_error_response, resolve_request_topic
 from src.writers.writer import WriteError, Writer
 
 logger = logging.getLogger(__name__)
@@ -111,20 +111,18 @@ class HandlerTopic:
         Returns:
             API Gateway response.
         """
-        path_parameters = event.get("pathParameters") or {}
-        raw_topic_name = path_parameters.get("topic_name")
-        if not raw_topic_name:
-            logger.warning("Request rejected: path parameter 'topic_name' is missing.")
-            return build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
+        topic_name, topic_error = resolve_request_topic(event)
+        if topic_error is not None:
+            return topic_error
 
-        topic_name = str(raw_topic_name).lower()
-        append_request_keys(topic=topic_name)
         method = event.get("httpMethod")
 
         if method == "GET":
             return self._get_topic_schema(topic_name)
         if method == "POST":
             try:
+                # A message is mandatory here, so an empty body must fail parsing. `/stats` differs
+                # on purpose: there the body only carries optional filters.
                 topic_message = json.loads(event.get("body") or "")
             except (json.JSONDecodeError, TypeError):
                 logger.warning("Request rejected: message body is not valid JSON.")

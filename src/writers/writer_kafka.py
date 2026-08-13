@@ -125,7 +125,7 @@ class WriterKafka(Writer):
 
         # Produce step
         try:
-            logger.debug("Sending message to Kafka.", extra={"topic": topic_name, "message_key": message_key})
+            logger.debug("Sending message to Kafka.", extra={"message_key": message_key})
             self._producer.produce(
                 topic_name,
                 key=message_key,
@@ -152,7 +152,6 @@ class WriterKafka(Writer):
                 logger.warning(
                     "Kafka flush pending, retrying.",
                     extra={
-                        "topic": topic_name,
                         "pending_messages": remaining,
                         "attempt": attempt,
                         "max_attempts": _MAX_RETRIES,
@@ -165,7 +164,6 @@ class WriterKafka(Writer):
             logger.warning(
                 "Kafka flush timed out with messages still pending.",
                 extra={
-                    "topic": topic_name,
                     "pending_messages": remaining,
                     "flush_timeout_sec": _KAFKA_FLUSH_TIMEOUT_SEC,
                 },
@@ -180,13 +178,13 @@ class WriterKafka(Writer):
             logger.error(
                 "Kafka writer failed.",
                 exc_info=captured_exception,
-                extra={"topic": topic_name, "writer_duration_ms": duration_ms, "writer_errors": errors},
+                extra={"writer_duration_ms": duration_ms, "writer_errors": errors},
             )
             raise WriteError(failure_text)
 
         logger.debug(
             "Kafka accepted the message.",
-            extra={"topic": topic_name, "writer_duration_ms": duration_ms, **delivery},
+            extra={"writer_duration_ms": duration_ms, **delivery},
         )
 
     def check_health(self) -> str | None:

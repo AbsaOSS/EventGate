@@ -171,7 +171,7 @@ class WriterPostgres(Writer, PostgresBase):
         if topic_name not in POSTGRES_WRITE_TOPICS:
             logger.debug(
                 "Topic is not persisted by the Postgres writer - skipping.",
-                extra={"topic": topic_name, "postgres_topics": sorted(POSTGRES_WRITE_TOPICS)},
+                extra={"postgres_topics": sorted(POSTGRES_WRITE_TOPICS)},
             )
             return
 
@@ -179,7 +179,7 @@ class WriterPostgres(Writer, PostgresBase):
             pg_config = self._pg_config
         except (RuntimeError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception("Postgres writer failed to load its configuration.", extra={"topic": topic_name})
+            logger.exception("Postgres writer failed to load its configuration.")
             raise WriteError(err_msg) from e
 
         if not pg_config.get("database"):
@@ -202,13 +202,13 @@ class WriterPostgres(Writer, PostgresBase):
         except (RuntimeError, PsycopgError, ValueError, KeyError) as e:
             self._close_connection()
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception("Postgres writer failed while inserting the message.", extra={"topic": topic_name})
+            logger.exception("Postgres writer failed while inserting the message.")
             raise WriteError(err_msg) from e
 
     def _write_topic(self, connection: Any, topic_name: str, message: dict[str, Any]) -> None:
         """Execute the insert for the given topic inside a transaction."""
         started_at = time.perf_counter()
-        logger.debug("Inserting message into Postgres.", extra={"topic": topic_name})
+        logger.debug("Inserting message into Postgres.")
 
         with connection.cursor() as cursor:
             if topic_name == TOPIC_DLCHANGE:
@@ -221,7 +221,7 @@ class WriterPostgres(Writer, PostgresBase):
 
         logger.debug(
             "Postgres accepted the message.",
-            extra={"topic": topic_name, "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2)},
+            extra={"writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2)},
         )
 
     @staticmethod

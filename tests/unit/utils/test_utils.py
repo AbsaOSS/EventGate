@@ -19,8 +19,9 @@ import logging
 
 import pytest
 
-from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER
-from src.utils.utils import build_error_response, dispatch_request
+from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, bind_request_context
+from src.utils.observability import logger as powertools_logger
+from src.utils.utils import build_error_response, dispatch_request, resolve_request_topic
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,14 @@ def make_event(resource="/health", method="GET", correlation_id="run-42"):
         "httpMethod": method,
         "headers": {"X-Correlation-ID": correlation_id},
     }
+
+
+@pytest.fixture(autouse=True)
+def clean_logger_state():
+    """`append_request_keys()` mutates module level logger state; drop it after every test."""
+    yield
+    bind_request_context({})
+    powertools_logger.set_correlation_id(None)
 
 
 ## build_error_response()
@@ -48,6 +57,37 @@ def test_build_error_response_structure():
     assert 1 == len(body["errors"])
     assert "topic" == body["errors"][0]["type"]
     assert "Topic not found" == body["errors"][0]["message"]
+
+
+## resolve_request_topic()
+def test_resolve_request_topic_normalizes_and_binds_the_topic(caplog):
+    caplog.set_level(logging.INFO)
+
+    topic_name, error = resolve_request_topic({"pathParameters": {"topic_name": "Public.CPS.ZA.Test"}})
+
+    assert "public.cps.za.test" == topic_name
+    assert error is None
+
+    logger.info("Probe.")
+    payload = json.loads(powertools_logger.registered_formatter.format(caplog.records[-1]))
+    assert "public.cps.za.test" == payload["topic"]
+
+
+@pytest.mark.parametrize(
+    "event", [{}, {"pathParameters": None}, {"pathParameters": {}}, {"pathParameters": {"topic_name": ""}}]
+)
+def test_resolve_request_topic_rejects_a_missing_path_parameter(caplog, event):
+    caplog.set_level(logging.WARNING)
+
+    topic_name, error = resolve_request_topic(event)
+
+    assert "" == topic_name
+    assert error is not None
+    assert 400 == error["statusCode"]
+    assert "validation" == json.loads(error["body"])["errors"][0]["type"]
+    assert any(
+        record.message == "Request rejected: path parameter 'topic_name' is missing." for record in caplog.records
+    )
 
 
 ## dispatch_request()

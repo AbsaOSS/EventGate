@@ -24,7 +24,7 @@ from typing import Any
 
 import boto3
 
-from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, bind_request_context
+from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, append_request_keys, bind_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,28 @@ def build_error_response(status: int, err_type: str, message: str) -> dict[str, 
             }
         ),
     }
+
+
+def resolve_request_topic(event: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    """Resolve the `topic_name` path parameter and bind it as a request scoped log key.
+    Shared by every `/{...}/{topic_name}` handler so the rejection message, the status code and
+    the normalization stay identical across lambdas.
+    Args:
+        event: API Gateway proxy event.
+    Returns:
+        Tuple of (topic_name, error_response). On success `topic_name` is the lowercased topic and
+        `error_response` is `None`; when the path parameter is missing `topic_name` is empty and
+        `error_response` holds the 400 response to return.
+    """
+    path_parameters = event.get("pathParameters") or {}
+    raw_topic_name = path_parameters.get("topic_name")
+    if not raw_topic_name:
+        logger.warning("Request rejected: path parameter 'topic_name' is missing.")
+        return "", build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
+
+    topic_name = str(raw_topic_name).lower()
+    append_request_keys(topic=topic_name)
+    return topic_name, None
 
 
 def with_correlation_header(response: dict[str, Any], correlation_id: str) -> dict[str, Any]:

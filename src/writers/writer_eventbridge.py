@@ -71,7 +71,7 @@ class WriterEventBridge(Writer):
 
         started_at = time.perf_counter()
         try:
-            logger.debug("Sending message to EventBridge.", extra={"topic": topic_name})
+            logger.debug("Sending message to EventBridge.")
             response = self._client.put_events(
                 Entries=[
                     {
@@ -91,7 +91,6 @@ class WriterEventBridge(Writer):
                 logger.error(
                     "EventBridge rejected entries.",
                     extra={
-                        "topic": topic_name,
                         "writer_duration_ms": duration_ms,
                         "failed_entry_count": failed_count,
                         "failed_entries": failed_repr,
@@ -103,7 +102,6 @@ class WriterEventBridge(Writer):
             logger.debug(
                 "EventBridge accepted the message.",
                 extra={
-                    "topic": topic_name,
                     "writer_duration_ms": duration_ms,
                     "event_id": entries[0].get("EventId"),
                 },
@@ -112,7 +110,6 @@ class WriterEventBridge(Writer):
             logger.exception(
                 "EventBridge put_events call failed.",
                 extra={
-                    "topic": topic_name,
                     "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
                 },
             )

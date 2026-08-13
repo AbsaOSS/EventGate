@@ -240,10 +240,12 @@ def test_rejects_unknown_topic(caplog):
     assert "Request rejected: unknown topic." == caplog.records[-1].message
 ```
 
-Keys bound with `append_request_keys()` live on the Powertools formatter rather than on the `LogRecord`. To assert on them, render the record:
+Keys bound with `append_request_keys()` live on the Powertools formatter rather than on the `LogRecord`. To assert on them, render the record with the Powertools logger (`registered_formatter` exists only there, not on a `logging.getLogger()` instance):
 
 ```python
-payload = json.loads(logger.registered_formatter.format(caplog.records[-1]))
+from src.utils.observability import logger as powertools_logger
+
+payload = json.loads(powertools_logger.registered_formatter.format(caplog.records[-1]))
 assert "run-42" == payload["correlation_id"]
 ```
 

@@ -23,8 +23,7 @@ from typing import Any
 
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
-from src.utils.observability import append_request_keys
-from src.utils.utils import build_error_response
+from src.utils.utils import build_error_response, resolve_request_topic
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +54,9 @@ class HandlerStats:
         Returns:
             API Gateway response dict.
         """
-        path_params = event.get("pathParameters") or {}
-        topic_name = path_params.get("topic_name", "")
-        if not topic_name:
-            logger.warning("Request rejected: path parameter 'topic_name' is missing.")
-            return build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
-        topic_name = topic_name.lower()
-        append_request_keys(topic=topic_name)
+        topic_name, topic_error = resolve_request_topic(event)
+        if topic_error is not None:
+            return topic_error
 
         logger.debug("Handling POST topic stats.")
 
@@ -78,7 +73,8 @@ class HandlerStats:
                 400, "validation", f"Stats are only supported for topics '{', '.join(SUPPORTED_STATS_TOPICS)}'."
             )
 
-        # Parse request body
+        # Parse request body. Every field is optional and defaulted, so an absent body is a valid
+        # "no filters" query - unlike `/topics`, where the body carries the message itself.
         try:
             body = json.loads(event.get("body") or "{}")
         except (json.JSONDecodeError, TypeError):
