@@ -232,6 +232,8 @@ Rules:
   ```
 - Do not add `topic`, `user`, `resource`, `http_method`, `correlation_id` or the Lambda context to `extra`; they are bound once per request by `bind_request_context()` and `append_request_keys()`.
 - Every non-2xx response must produce exactly one log line explaining the cause.
+- Every request produces exactly one `INFO` line: `Request completed.`, emitted by `dispatch_request()`. Handlers do not emit their own `INFO` outcome lines; they attach outcome fields with `append_request_keys()` (e.g. `writers_ok`, `message_key`, `row_count`) so the completion line carries them.
+- Every failed request produces exactly one `ERROR` record (the aggregated dispatch failure); per-writer failure detail is logged at `WARNING`. This keeps `level = "ERROR"` metric filters counting failures, not log lines.
 - Levels: `TRACE` payloads, `DEBUG` steps, `INFO` request outcomes, `WARNING` rejected requests and soft failures, `ERROR` failures that need action. See the level table in [README](./README.md#logging--correlation).
 - Never log tokens, passwords or full message payloads outside `TRACE`. `TRACE` payload logging goes through `log_payload_at_trace()`, which redacts and size caps the payload.
 - `logger.exception()` is only valid inside an `except` block. Outside one, pass the captured exception: `logger.error("...", exc_info=exc)`.

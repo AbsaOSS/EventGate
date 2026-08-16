@@ -262,7 +262,7 @@ class WriterPostgres(Writer, PostgresBase):
         if not self._is_psycopg2_available():
             raise WriteError("psycopg2 is not available for the configured Postgres writer.")
 
-        log_payload_at_trace(logger, "Postgres", topic_name, message)
+        log_payload_at_trace(logger, "Postgres", message)
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)

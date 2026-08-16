@@ -67,7 +67,7 @@ class WriterEventBridge(Writer):
             self._client = boto3.client("events")
             logger.debug("EventBridge client initialized.")
 
-        log_payload_at_trace(logger, "EventBridge", topic_name, message)
+        log_payload_at_trace(logger, "EventBridge", message)
 
         started_at = time.perf_counter()
         try:

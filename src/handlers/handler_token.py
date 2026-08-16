@@ -124,7 +124,9 @@ class HandlerToken:
             except jwt.PyJWTError:
                 continue
 
-        logger.warning(
+        # DEBUG on purpose: the rejection itself is logged once by the calling handler, this line
+        # only adds the key count for debugging key-rollover issues.
+        logger.debug(
             "JWT verification failed for all public keys.",
             extra={"public_key_count": len(self.public_keys)},
         )

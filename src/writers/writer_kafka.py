@@ -106,7 +106,7 @@ class WriterKafka(Writer):
                 logger.debug("Kafka producer not initialized - skipping Kafka writer.")
                 return
 
-        log_payload_at_trace(logger, "Kafka", topic_name, message)
+        log_payload_at_trace(logger, "Kafka", message)
 
         errors: list[str] = []
         captured_exception: KafkaException | None = None

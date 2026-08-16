@@ -29,7 +29,7 @@ def test_log_payload_skipped_when_trace_not_enabled():
     logger = MagicMock()
     logger.isEnabledFor.return_value = False
 
-    log_payload_at_trace(logger, "TestWriter", "test.topic", {"key": "value"})
+    log_payload_at_trace(logger, "TestWriter", {"key": "value"})
 
     logger.isEnabledFor.assert_called_once_with(TRACE_LEVEL)
     logger.trace.assert_not_called()
@@ -47,7 +47,9 @@ def test_trace_eventbridge(caplog):
 
     writer.write("topic.eb", {"k": 1})
 
-    assert any("EventBridge payload" in rec.message for rec in caplog.records)
+    assert any(
+        "Writer payload." == rec.message and "EventBridge" == getattr(rec, "writer", None) for rec in caplog.records
+    )
 
 
 def test_trace_kafka(caplog):
@@ -69,7 +71,7 @@ def test_trace_kafka(caplog):
 
     writer.write("topic.kf", {"k": 2})
 
-    assert any("Kafka payload" in rec.message for rec in caplog.records)
+    assert any("Writer payload." == rec.message and "Kafka" == getattr(rec, "writer", None) for rec in caplog.records)
 
 
 def test_trace_postgres(caplog, monkeypatch):
@@ -117,4 +119,6 @@ def test_trace_postgres(caplog, monkeypatch):
     message = {"event_id": "e", "tenant_id": "t", "source_app": "a", "environment": "dev", "timestamp": 1}
     writer.write("public.cps.za.test", message)
 
-    assert any("Postgres payload" in rec.message for rec in caplog.records)
+    assert any(
+        "Writer payload." == rec.message and "Postgres" == getattr(rec, "writer", None) for rec in caplog.records
+    )

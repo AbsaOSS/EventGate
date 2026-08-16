@@ -139,7 +139,7 @@ Environment variables:
 
 ## Logging & Correlation
 
-Both lambdas emit structured JSON logs through [AWS Lambda Powertools](https://docs.aws.amazon.com/powertools/python/latest/core/logger/). Every line carries the service name, log level, the Lambda execution context (`function_name`, `function_request_id`, `cold_start`) and a `correlation_id`.
+Both lambdas emit structured JSON logs through [AWS Lambda Powertools](https://docs.aws.amazon.com/powertools/python/latest/core/logger/). Every line carries the service name, log level, `function_request_id`, `cold_start` and a `correlation_id`. Static execution facts (`function_name`, `function_memory_size`, `function_arn`) are logged once per container on the cold start line `Lambda execution context.` instead of being repeated on every record.
 
 The correlation id is resolved per request in this order:
 1. The `X-Correlation-ID` request header, when it matches `^[A-Za-z0-9._:-]{1,128}$`.
@@ -154,11 +154,11 @@ Log levels used by the service:
 |-----------|-----------------------------------------------------------------------------------------------|
 | `TRACE`   | Full message payloads, redacted and size capped. Never enable by default.                      |
 | `DEBUG`   | Configuration loading, lazy initialization, per-writer send attempts, connection reuse.        |
-| `INFO`    | One line per request outcome, cold start initialization, accepted messages, stats query results.|
-| `WARNING` | Rejected requests (auth, authorization, validation), degraded health, Kafka flush retries.     |
-| `ERROR`   | Writer failures, partial fan-out failures, failed queries, unhandled request errors.           |
+| `INFO`    | Exactly one `Request completed.` line per request, carrying the outcome fields (`status_code`, `duration_ms`, and e.g. `writers_ok`, `message_key`, `row_count`); cold start initialization. |
+| `WARNING` | Rejected requests (auth, authorization, validation), degraded health, Kafka flush retries, individual writer failures. |
+| `ERROR`   | Partial fan-out failures (one aggregated line per failed request), failed queries, unhandled request errors. |
 
-Every non-2xx response has exactly one log line explaining the cause.
+Every non-2xx response has exactly one log line explaining the cause, and every failed request produces exactly one `ERROR` record — per-writer failure detail is reported at `WARNING`.
 
 Example CloudWatch Logs Insights queries:
 

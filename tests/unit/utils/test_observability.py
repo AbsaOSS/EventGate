@@ -122,6 +122,28 @@ def test_bind_request_context_reports_cold_start_once(caplog):
     assert second["cold_start"] is False
 
 
+def test_lambda_execution_context_is_logged_once_and_not_bound_per_line(caplog):
+    caplog.set_level(logging.INFO)
+
+    bind_request_context({}, FakeLambdaContext())
+    logging.getLogger("src.utils.utils").info("Request completed.")
+
+    context_lines = [r for r in caplog.records if r.message == "Lambda execution context."]
+    assert 1 == len(context_lines)
+    assert "eventgate" == context_lines[0].function_name
+    assert 512 == context_lines[0].function_memory_size
+    assert FakeLambdaContext.invoked_function_arn == context_lines[0].function_arn
+
+    payload = formatted(caplog.records[-1])
+    assert "aws-request-id-1" == payload["function_request_id"]
+    assert "function_name" not in payload
+    assert "function_arn" not in payload
+    assert "function_memory_size" not in payload
+
+    bind_request_context({}, FakeLambdaContext())
+    assert 1 == len([r for r in caplog.records if r.message == "Lambda execution context."])
+
+
 def test_bind_request_context_tolerates_missing_lambda_context(caplog):
     caplog.set_level(logging.INFO)
 

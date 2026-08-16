@@ -152,20 +152,29 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
     correlation_id = resolve_correlation_id(event)
     logger.set_correlation_id(correlation_id or None)
 
+    cold_start = _container_state["cold_start"]
+    _container_state["cold_start"] = False
+
     append_request_keys(
-        cold_start=_container_state["cold_start"],
+        cold_start=cold_start,
         resource=event.get("resource", ""),
         http_method=event.get("httpMethod", ""),
     )
-    _container_state["cold_start"] = False
 
     if context is not None:
-        append_request_keys(
-            function_name=getattr(context, "function_name", None),
-            function_request_id=getattr(context, "aws_request_id", None),
-            function_memory_size=getattr(context, "memory_limit_in_mb", None),
-            function_arn=getattr(context, "invoked_function_arn", None),
-        )
+        append_request_keys(function_request_id=getattr(context, "aws_request_id", None))
+        if cold_start:
+            # Static per-deployment facts are logged once per container instead of being bound
+            # to every line; the log stream already identifies the function, so repeating them
+            # would only inflate every record.
+            logger.info(
+                "Lambda execution context.",
+                extra={
+                    "function_name": getattr(context, "function_name", None),
+                    "function_memory_size": getattr(context, "memory_limit_in_mb", None),
+                    "function_arn": getattr(context, "invoked_function_arn", None),
+                },
+            )
 
     return correlation_id
 

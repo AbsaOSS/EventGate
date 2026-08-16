@@ -231,6 +231,7 @@ class HandlerTopic:
                 extra={
                     "writers_ok": written_by,
                     "writers_failed": [error["type"] for error in errors],
+                    "writer_errors": errors,
                     "writer_count": len(self.writers),
                     "message_key": message_key,
                 },
@@ -241,7 +242,10 @@ class HandlerTopic:
                 "body": json.dumps({"success": False, "statusCode": 500, "errors": errors}),
             }
 
-        logger.info("Message accepted.", extra={"writers_ok": written_by, "message_key": message_key})
+        # The outcome fields are appended to the request context so the single INFO line emitted
+        # by `dispatch_request()` ("Request completed.") carries them; no second INFO line here.
+        append_request_keys(message_key=message_key, writers_ok=written_by)
+        logger.debug("Message accepted.")
         return {
             "statusCode": 202,
             "headers": {"Content-Type": "application/json"},
@@ -280,7 +284,9 @@ class HandlerTopic:
                 )
             except WriteError as exc:
                 errors.append({"type": writer_name, "message": str(exc)})
-                logger.error(
+                # WARNING on purpose: the request-level ERROR is emitted once by the caller with
+                # every failed writer folded in, so an alert on ERROR counts one failure once.
+                logger.warning(
                     "Writer failed to publish the message.",
                     extra={
                         "writer": writer_name,

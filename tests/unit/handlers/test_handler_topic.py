@@ -23,6 +23,7 @@ import jwt
 import pytest
 
 from src.handlers.handler_topic import HandlerTopic
+from src.utils.observability import logger as powertools_logger
 from src.writers.writer import WriteError
 
 
@@ -543,6 +544,7 @@ def test_partial_writer_failure_reports_both_sides(event_gate_module, make_event
     assert 1 == len(dispatch_failures)
     assert ["postgres"] == dispatch_failures[0].writers_failed
     assert ["eventbridge", "kafka"] == sorted(dispatch_failures[0].writers_ok)
+    assert ["down"] == [error["message"] for error in dispatch_failures[0].writer_errors]
 
 
 def test_accepted_message_is_logged(event_gate_module, make_event, valid_payload, caplog):
@@ -561,7 +563,12 @@ def test_accepted_message_is_logged(event_gate_module, make_event, valid_payload
         )
         resp = event_gate_module.lambda_handler(event)
 
-    accepted = [r for r in caplog.records if r.message == "Message accepted."]
+    completed = [r for r in caplog.records if r.message == "Request completed."]
     assert 202 == resp["statusCode"]
-    assert 1 == len(accepted)
-    assert ["eventbridge", "kafka", "postgres"] == sorted(accepted[0].writers_ok)
+    assert 1 == len(completed)
+
+    # The outcome fields live on the formatter (request scoped keys), not on the LogRecord.
+    payload = json.loads(powertools_logger.registered_formatter.format(completed[0]))
+    assert 202 == payload["status_code"]
+    assert ["eventbridge", "kafka", "postgres"] == sorted(payload["writers_ok"])
+    assert "message_key" in payload

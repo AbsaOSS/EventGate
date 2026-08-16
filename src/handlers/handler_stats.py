@@ -23,6 +23,7 @@ from typing import Any
 
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
+from src.utils.observability import append_request_keys
 from src.utils.utils import build_error_response, resolve_request_topic
 
 logger = logging.getLogger(__name__)
@@ -119,15 +120,15 @@ class HandlerStats:
             )
             return build_error_response(500, "database", "Stats query failed.")
 
-        logger.info(
-            "Stats query completed.",
-            extra={
-                "query_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
-                "row_count": len(rows),
-                "has_more": pagination.get("has_more"),
-                "limit": pagination.get("limit"),
-            },
+        # The outcome fields are appended to the request context so the single INFO line emitted
+        # by `dispatch_request()` ("Request completed.") carries them; no second INFO line here.
+        append_request_keys(
+            query_duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+            row_count=len(rows),
+            has_more=pagination.get("has_more"),
+            limit=pagination.get("limit"),
         )
+        logger.debug("Stats query completed.")
 
         return {
             "statusCode": 200,
