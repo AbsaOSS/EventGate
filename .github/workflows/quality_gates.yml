@@ -170,6 +170,8 @@ jobs:
         uses: red-gate/setup-flyway@e024a17cd0890383f6996ed7edbded24c54ed86c
         with:
           version: '13.3.0'
+          edition: community
+          i-agree-to-the-eula: true
 
       - name: Run integration tests
         run: pytest tests/integration/ -v --tb=short --log-cli-level=INFO
