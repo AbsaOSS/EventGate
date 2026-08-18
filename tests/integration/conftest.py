@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -37,12 +38,13 @@ from moto import mock_aws
 from testcontainers.kafka import KafkaContainer
 from testcontainers.postgres import PostgresContainer
 
-from tests.integration.schemas.postgres_schema import SCHEMA_SQL
 from tests.integration.utils.jwt_helper import create_test_jwt_keypair, generate_token
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
+FLYWAY_CONFIG = PROJECT_ROOT / "flyway.toml"
+TEST_ROLE_PASSWORD = "changeme"
 
 
 # Mock JWT Provider (runs in-process via threading)
@@ -165,6 +167,40 @@ def _convert_dsn(dsn: str) -> str:
     return dsn.replace("postgresql+psycopg2://", "postgresql://")
 
 
+def _run_flyway_migrate(dsn: str) -> None:
+    """Apply Flyway migrations from `database/migrations` to the given database.
+    Runs the same migrations used for real environments so integration tests
+    validate the migrations as the single source of truth for the schema.
+    Args:
+        dsn: psycopg2-style DSN of the target database.
+    Raises:
+        RuntimeError: If the `flyway migrate` command fails.
+    """
+    parsed = urlparse(dsn)
+    jdbc_url = f"jdbc:postgresql://{parsed.hostname}:{parsed.port}{parsed.path}"
+    command = [
+        "flyway",
+        f"-configFiles={FLYWAY_CONFIG}",
+        f"-workingDirectory={PROJECT_ROOT}",
+        f"-url={jdbc_url}",
+        f"-user={parsed.username}",
+        f"-password={parsed.password}",
+        "migrate",
+    ]
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "FLYWAY_PLACEHOLDERS_EVENTGATE_OWNER_PASSWORD": TEST_ROLE_PASSWORD,
+            "FLYWAY_PLACEHOLDERS_EVENTGATE_WRITER_PASSWORD": TEST_ROLE_PASSWORD,
+            "FLYWAY_PLACEHOLDERS_EVENTGATE_READER_PASSWORD": TEST_ROLE_PASSWORD,
+        }
+    )
+    flyway_process = subprocess.run(command, capture_output=True, text=True, check=False, env=environment)
+    if flyway_process.returncode != 0:
+        raise RuntimeError(f"Flyway migrate failed:\n{flyway_process.stdout}\n{flyway_process.stderr}")
+    logger.debug("Flyway migrate output:\n%s", flyway_process.stdout)
+
+
 @pytest.fixture(scope="session")
 def postgres_container() -> Generator[str, None, None]:
     """PostgreSQL container with initialized schema."""
@@ -192,11 +228,10 @@ def postgres_container() -> Generator[str, None, None]:
     if conn is None:
         raise TimeoutError(f"Timed out waiting for Postgres to become available after 5 attempts: {last_exc}")
 
-    conn.autocommit = True
-    with conn.cursor() as cursor:
-        cursor.execute(SCHEMA_SQL)
     conn.close()
-    logger.debug("PostgreSQL schema initialized.")
+    logger.debug("Postgres ready, applying Flyway migrations.")
+    _run_flyway_migrate(dsn)
+    logger.debug("PostgreSQL schema initialized via Flyway.")
 
     yield dsn
 

@@ -1,4 +1,4 @@
-name: Python Check
+name: Quality Gates
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: static-python-check-${{ github.ref }}
+  group: quality-gates-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       python_changed: ${{ steps.changes.outputs.python_changed }}
+      database_changed: ${{ steps.changes.outputs.database_changed }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -28,26 +29,33 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check if Python files changed
+      - name: Check if Python or database files changed
         id: changes
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          
+
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             CHANGED_FILES=$(gh api \
               "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-              --jq '.[].filename | select(endswith(".py") or (startswith("requirements") and endswith(".txt")))')
+              --paginate \
+              --jq '.[].filename')
           else
-            CHANGED_FILES=$(git diff --name-only "${{ github.sha }}~1" "${{ github.sha }}" -- '*.py' 'requirements*.txt')
+            CHANGED_FILES=$(git diff --name-only "${{ github.sha }}~1" "${{ github.sha }}")
           fi
 
-          if [[ -n "$CHANGED_FILES" ]]; then
+          if grep -Eq '(^|/)[^/]+\.py$|^requirements[^/]*\.txt$' <<< "$CHANGED_FILES"; then
             echo "python_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "python_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^database/|^flyway\.toml$' <<< "$CHANGED_FILES"; then
+            echo "database_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "database_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   pylint-analysis:
@@ -139,7 +147,7 @@ jobs:
   integration-tests:
     name: Pytest Integration Tests
     needs: detect
-    if: needs.detect.outputs.python_changed == 'true'
+    if: needs.detect.outputs.python_changed == 'true' || needs.detect.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -152,13 +160,24 @@ jobs:
       - name: Set up dev Python environment
         uses: ./.github/actions/setup-dev-python-env
 
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Flyway
+        uses: red-gate/setup-flyway@e024a17cd0890383f6996ed7edbded24c54ed86c
+        with:
+          version: '13.3.0'
+
       - name: Run integration tests
         run: pytest tests/integration/ -v --tb=short --log-cli-level=INFO
 
   noop:
     name: No Operation
     needs: detect
-    if: needs.detect.outputs.python_changed != 'true'
+    if: needs.detect.outputs.python_changed != 'true' && needs.detect.outputs.database_changed != 'true'
     runs-on: ubuntu-latest
     steps:
       - run: echo "No changes in the *.py files — passing."

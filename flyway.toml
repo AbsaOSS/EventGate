@@ -1,0 +1,33 @@
+#
+# Copyright 2026 ABSA Group Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Flyway configuration for EventGate database migrations.
+# Lives at the project root alongside pyproject.toml, per project convention
+# for top-level config. Paths below are relative to the repo root.
+
+[flyway]
+locations = ["filesystem:database/migrations"]
+sqlMigrationSuffixes = [".ddl", ".sql"]
+
+# Adopt the known legacy database: on a non-empty database without Flyway
+# history, record a baseline at 1.4.0.0.
+baselineOnMigrate = true
+baselineVersion = "1.4.0.0"
+
+[environments.default]
+url = "jdbc:postgresql://localhost:5432/eventgate_db"
+user = "postgres"
+password = "changeme"
