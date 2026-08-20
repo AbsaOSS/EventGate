@@ -22,11 +22,6 @@
 locations = ["filesystem:database/migrations"]
 sqlMigrationSuffixes = [".ddl", ".sql"]
 
-# Adopt the known legacy database: on a non-empty database without Flyway
-# history, record a baseline at 1.4.0.0.
-baselineOnMigrate = true
-baselineVersion = "1.4.0.0"
-
 [environments.default]
 url = "jdbc:postgresql://localhost:5432/eventgate_db"
 user = "postgres"

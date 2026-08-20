@@ -6,8 +6,8 @@ same migrations build local, CI (integration tests), and real environments.
 
 ## Layout
 
-```
-flyway.toml                              # Flyway configuration (locations, baseline, placeholders) — repo root
+```text
+flyway.toml                            # Flyway configuration (locations, baseline, placeholders) — repo root
 database/
 ├── README.md
 └── migrations/
@@ -60,13 +60,20 @@ docker kill eventgate_db && docker rm eventgate_db
 
 ## Adopting an existing database
 
-`flyway.toml` (repo root) sets `baselineOnMigrate = true` with `baselineVersion = 1.4.0.0`. On a
-database that already contains the tables but has no Flyway history (i.e. production), the first
-`flyway migrate` records the baseline and applies `V1.4.0.1+` on top.
+On a database that already contains the tables but has no Flyway history (i.e. production), a
+plain `flyway migrate` fails because Flyway sees existing objects it didn't create. The first
+migration against such a database must instead pass baseline flags explicitly, one time only:
+
+```zsh
+flyway -baselineOnMigrate=true -baselineVersion=1.4.0.0 migrate
+```
+
+This records a baseline at `1.4.0.0` in `flyway_schema_history` and then applies `V1.4.0.1+` on
+top.
 
 Before the first production migration:
 
 1. Compare the deployed schema with `V1.4.0.2__initial_schema.ddl`.
 2. Back up the database and cluster roles.
 3. Confirm the migration account can create roles and change ownership of every EventGate table.
-4. Run `flyway info`, then `flyway migrate` with all role-password placeholders supplied from secrets.
+4. Run `flyway info`, then the baseline command above with all role-password placeholders supplied from secrets.
