@@ -36,7 +36,8 @@ class WriterEventBridge(Writer):
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
-        self._client: Optional["boto3.client"] = None
+        # boto3 clients are generated dynamically, so no precise static type exists.
+        self._client: Optional[Any] = None
         self._entries: list[dict[str, Any]] = []
         self.event_bus_arn: str = config.get("event_bus_arn", "")
         logger.debug("Initialized EventBridge writer.")

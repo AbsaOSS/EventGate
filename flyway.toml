@@ -13,3 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+# Flyway configuration for EventGate database migrations.
+# Lives at the project root alongside pyproject.toml, per project convention
+# for top-level config. Paths below are relative to the repo root.
+
+[flyway]
+locations = ["filesystem:database/migrations"]
+sqlMigrationSuffixes = [".ddl", ".sql"]
+
+[environments.default]
+url = "jdbc:postgresql://localhost:5432/eventgate_db"
+user = "postgres"
+password = "changeme"
