@@ -18,10 +18,13 @@
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
 import boto3
+
+from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, append_request_keys, bind_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -48,37 +51,85 @@ def build_error_response(status: int, err_type: str, message: str) -> dict[str, 
     }
 
 
+def resolve_request_topic(event: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    """Resolve the `topic_name` path parameter and bind it as a request scoped log key.
+    Shared by every `/{...}/{topic_name}` handler so the rejection message, the status code and
+    the normalization stay identical across lambdas.
+    Args:
+        event: API Gateway proxy event.
+    Returns:
+        Tuple of (topic_name, error_response). On success `topic_name` is the lowercased topic and
+        `error_response` is `None`; when the path parameter is missing `topic_name` is empty and
+        `error_response` holds the 400 response to return.
+    """
+    path_parameters = event.get("pathParameters") or {}
+    raw_topic_name = path_parameters.get("topic_name")
+    if not raw_topic_name:
+        logger.warning("Request rejected: path parameter 'topic_name' is missing.")
+        return "", build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
+
+    topic_name = str(raw_topic_name).lower()
+    append_request_keys(topic=topic_name)
+    return topic_name, None
+
+
+def with_correlation_header(response: dict[str, Any], correlation_id: str) -> dict[str, Any]:
+    """Add the correlation id header to a response so callers can quote it when reporting issues.
+    Args:
+        response: API Gateway response dictionary.
+        correlation_id: Correlation id of the current request. Ignored when empty.
+    Returns:
+        The response with the correlation header set.
+    """
+    if not correlation_id or not isinstance(response, dict):
+        return response
+
+    headers = dict(response.get("headers") or {})
+    headers[CORRELATION_ID_RESPONSE_HEADER] = correlation_id
+    response["headers"] = headers
+    return response
+
+
 def dispatch_request(
     event: dict[str, Any],
     route_map: dict[str, Callable[..., dict[str, Any]]],
     request_logger: logging.Logger,
+    context: Any = None,
 ) -> dict[str, Any]:
     """Dispatch an API Gateway event to the matching route handler.
+    Binds the request context to the logger, logs the request outcome and stamps the response
+    with the correlation id.
     Args:
         event: API Gateway proxy event.
         route_map: Mapping of resource paths to handler callables.
         request_logger: Logger instance for error reporting.
+        context: AWS Lambda context object, when available.
     Returns:
         API Gateway response dictionary.
     """
+    started_at = time.perf_counter()
+    correlation_id = bind_request_context(event, context)
+    resource = str(event.get("resource", "")).lower()
+
     try:
-        resource = event.get("resource", "").lower()
         route_function = route_map.get(resource)
+        if route_function is None:
+            request_logger.warning("No route matched the requested resource.")
+            response = build_error_response(404, "route", "Resource not found.")
+        else:
+            request_logger.debug("Dispatching request to the route handler.")
+            response = route_function(event)
+    except Exception:  # pylint: disable=broad-exception-caught
+        # Boundary handler: any escaping exception must become a stable 500 with a logged cause,
+        # otherwise API Gateway returns an opaque 502 and the traceback is unstructured.
+        request_logger.exception("Unhandled error while processing the request.")
+        response = build_error_response(500, "internal", "Unexpected server error.")
 
-        if route_function:
-            return route_function(event)
+    duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    status_code = response.get("statusCode") if isinstance(response, dict) else None
+    request_logger.info("Request completed.", extra={"status_code": status_code, "duration_ms": duration_ms})
 
-        return build_error_response(404, "route", "Resource not found.")
-    except (
-        KeyError,
-        json.JSONDecodeError,
-        ValueError,
-        AttributeError,
-        TypeError,
-        RuntimeError,
-    ) as request_exc:
-        request_logger.exception("Request processing error: %s.", request_exc)
-        return build_error_response(500, "internal", "Unexpected server error.")
+    return with_correlation_header(response, correlation_id)
 
 
 def load_postgres_config(secret_name: str, secret_region: str) -> dict[str, Any]:

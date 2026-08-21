@@ -18,7 +18,9 @@ Python style
 - Use type aliases for complex types
 - Use built-in generics for type hints
 - Use `logging.getLogger(__name__)`, not print
-- Lazy % formatting in logging: `logger.info("msg %s", var)`
+- Structured logging: constant message + data in `extra`: `logger.info("Message accepted.", extra={"writer": name})`
+- Do not re-log `topic`, `user`, `resource`, `http_method` or the Lambda context; they are bound per request in `src/utils/observability.py`
+- `logger.exception()` only inside an `except` block; outside it pass `exc_info=exc` to `logger.error()`
 - F-strings in exceptions: `raise ValueError(f"Error {var}")`
 - All imports at top of file (never inside functions)
 - Apache 2.0 license header in every .py file (including `__init__.py`)
@@ -27,6 +29,8 @@ Python style
 - Use single backticks in docstrings (`value`), never double backticks (`` ``value`` ``)
 - Do not use `# -----------` separator comments to divide sections
 - End all log messages with a period: `logger.info("Message.")`
+- Every non-2xx response must produce exactly one log line explaining the cause
+- Levels: TRACE payloads, DEBUG steps, INFO request outcomes, WARNING rejected requests, ERROR actionable failures
 
 Patterns
 - `__init__` methods must not raise exceptions; defer validation and connection to first use (lazy init)

@@ -15,6 +15,7 @@
 #
 
 import json
+import logging
 import re
 from unittest.mock import patch, mock_open, MagicMock
 
@@ -22,6 +23,7 @@ import jwt
 import pytest
 
 from src.handlers.handler_topic import HandlerTopic
+from src.utils.observability import logger as powertools_logger
 from src.writers.writer import WriteError
 
 
@@ -434,3 +436,139 @@ def test_post_permission_denied(
         body = json.loads(resp["body"])
         assert "permission" == body["errors"][0]["type"]
         assert expected_fragment in body["errors"][0]["message"]
+
+
+## request rejection logging
+def logged_messages(caplog, level):
+    """Collect log messages captured at a single level."""
+    return [record.message for record in caplog.records if record.levelno == level]
+
+
+def test_post_missing_topic_path_parameter_is_rejected(event_gate_module, make_event, caplog):
+    caplog.set_level(logging.WARNING)
+    event = make_event("/topics/{topic_name}", method="POST", body={"a": 1})
+
+    resp = event_gate_module.lambda_handler(event)
+
+    assert 400 == resp["statusCode"]
+    assert "Request rejected: path parameter 'topic_name' is missing." in logged_messages(caplog, logging.WARNING)
+
+
+def test_post_non_object_body_is_rejected(event_gate_module, make_event, caplog):
+    caplog.set_level(logging.WARNING)
+    event = make_event("/topics/{topic_name}", method="POST", topic="public.cps.za.test", body="[1, 2]")
+
+    resp = event_gate_module.lambda_handler(event)
+
+    assert 400 == resp["statusCode"]
+    assert "Request rejected: message body is not a JSON object." in logged_messages(caplog, logging.WARNING)
+
+
+def test_unsupported_method_is_rejected(event_gate_module, make_event, caplog):
+    caplog.set_level(logging.WARNING)
+    event = make_event("/topics/{topic_name}", method="PUT", topic="public.cps.za.test")
+
+    resp = event_gate_module.lambda_handler(event)
+
+    assert 404 == resp["statusCode"]
+    assert "Request rejected: unsupported HTTP method." in logged_messages(caplog, logging.WARNING)
+
+
+def test_invalid_token_is_logged(event_gate_module, make_event, valid_payload, caplog):
+    caplog.set_level(logging.WARNING)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", side_effect=jwt.PyJWTError("nope")):
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+
+    assert 401 == resp["statusCode"]
+    assert "Request rejected: token verification failed." in logged_messages(caplog, logging.WARNING)
+
+
+def test_unauthorized_user_is_logged(event_gate_module, make_event, valid_payload, caplog):
+    caplog.set_level(logging.WARNING)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "UnknownUser"}):
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+
+    assert 403 == resp["statusCode"]
+    assert "Request rejected: user is not authorized for the topic." in logged_messages(caplog, logging.WARNING)
+
+
+def test_schema_validation_failure_is_logged(event_gate_module, make_event, caplog):
+    caplog.set_level(logging.WARNING)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": {}}
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body={"event_id": "e1"},
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+
+    assert 400 == resp["statusCode"]
+    assert "Request rejected: message does not match the topic schema." in logged_messages(caplog, logging.WARNING)
+
+
+def test_partial_writer_failure_reports_both_sides(event_gate_module, make_event, valid_payload, caplog):
+    caplog.set_level(logging.ERROR)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": {}}
+        for name, writer in event_gate_module.handler_topic.writers.items():
+            writer.write = MagicMock(side_effect=WriteError("down") if name == "postgres" else None)
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+
+    dispatch_failures = [r for r in caplog.records if r.message == "Message dispatch failed for at least one writer."]
+    assert 500 == resp["statusCode"]
+    assert 1 == len(dispatch_failures)
+    assert ["postgres"] == dispatch_failures[0].writers_failed
+    assert ["eventbridge", "kafka"] == sorted(dispatch_failures[0].writers_ok)
+    assert ["down"] == [error["message"] for error in dispatch_failures[0].writer_errors]
+
+
+def test_accepted_message_is_logged(event_gate_module, make_event, valid_payload, caplog):
+    caplog.set_level(logging.INFO)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": {}}
+        for writer in event_gate_module.handler_topic.writers.values():
+            writer.write = MagicMock(return_value=None)
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        resp = event_gate_module.lambda_handler(event)
+
+    completed = [r for r in caplog.records if r.message == "Request completed."]
+    assert 202 == resp["statusCode"]
+    assert 1 == len(completed)
+
+    # The outcome fields live on the formatter (request scoped keys), not on the LogRecord.
+    payload = json.loads(powertools_logger.registered_formatter.format(completed[0]))
+    assert 202 == payload["status_code"]
+    assert ["eventbridge", "kafka", "postgres"] == sorted(payload["writers_ok"])
+    assert "message_key" in payload

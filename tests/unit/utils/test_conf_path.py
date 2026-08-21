@@ -39,7 +39,7 @@ def test_env_var_invalid_directory_falls_back_parent(monkeypatch):
     conf_dir, invalid = conf_path_module.resolve_conf_dir()
     # Should fall back to repository conf directory /conf
     expected_root_conf = (Path(conf_path_module.__file__).resolve().parent.parent.parent / "conf").resolve()
-    assert Path(conf_dir).resolve() == expected_root_conf
+    assert expected_root_conf == Path(conf_dir).resolve()
     assert invalid == os.path.abspath(missing_path)
 
 
@@ -78,7 +78,8 @@ def test_current_dir_conf_used_when_parent_missing():
     mod = _load_isolated_conf_path(build)
     try:
         conf_dir, invalid = mod.resolve_conf_dir()
-        assert conf_dir.endswith("pkg/conf")  # current directory conf chosen
+        expected_current_conf = (Path(mod.__file__).resolve().parent / "conf").resolve()
+        assert expected_current_conf == Path(conf_dir).resolve()  # current directory conf chosen
         assert invalid is None
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
@@ -97,7 +98,7 @@ def test_fallback_parent_conf_even_if_missing():
         conf_dir, invalid = mod.resolve_conf_dir()
         # Parent conf path returned even though it does not exist
         expected_root_conf = (Path(mod.__file__).resolve().parent.parent.parent / "conf").resolve()
-        assert Path(conf_dir).resolve() == expected_root_conf
+        assert expected_root_conf == Path(conf_dir).resolve()
         assert invalid is None
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
@@ -118,7 +119,8 @@ def test_invalid_env_uses_current_conf_when_parent_missing(monkeypatch):
         bad_path = "/definitely/not/there/abc123"
         monkeypatch.setenv("CONF_DIR", bad_path)
         conf_dir, invalid = mod.resolve_conf_dir()
-        assert conf_dir.endswith("pkg_invalid_current/conf")
+        expected_current_conf = (Path(mod.__file__).resolve().parent / "conf").resolve()
+        assert expected_current_conf == Path(conf_dir).resolve()
         assert invalid == os.path.abspath(bad_path)
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]
@@ -139,7 +141,7 @@ def test_invalid_env_all_missing_fallback_parent(monkeypatch):
         monkeypatch.setenv("CONF_DIR", bad_path)
         conf_dir, invalid = mod.resolve_conf_dir()
         expected_root_conf = (Path(mod.__file__).resolve().parent.parent.parent / "conf").resolve()
-        assert Path(conf_dir).resolve() == expected_root_conf
+        assert expected_root_conf == Path(conf_dir).resolve()
         assert invalid == os.path.abspath(bad_path)
     finally:
         mod._tmp.cleanup()  # type: ignore[attr-defined]

@@ -1,3 +1,4 @@
+aws-lambda-powertools==3.31.1
 cryptography==50.0.0
 jsonschema==4.26.0
 PyJWT==2.13.0

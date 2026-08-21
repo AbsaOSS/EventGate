@@ -106,23 +106,35 @@ class WriterKafka(Writer):
                 logger.debug("Kafka producer not initialized - skipping Kafka writer.")
                 return
 
-        log_payload_at_trace(logger, "Kafka", topic_name, message)
+        log_payload_at_trace(logger, "Kafka", message)
 
         errors: list[str] = []
-        has_exception = False
+        captured_exception: KafkaException | None = None
+        delivery: dict[str, Any] = {}
+        started_at = time.perf_counter()
+
+        def delivery_report(err: Any, msg: Any) -> None:
+            """Collect the Kafka delivery outcome for logging and error reporting."""
+            if err is not None:
+                errors.append(str(err))
+                return
+            try:
+                delivery.update({"kafka_partition": msg.partition(), "kafka_offset": msg.offset()})
+            except (AttributeError, TypeError):  # producer stubs may not expose message metadata
+                pass
 
         # Produce step
         try:
-            logger.debug("Sending to Kafka %s.", topic_name)
+            logger.debug("Sending message to Kafka.", extra={"message_key": message_key})
             self._producer.produce(
                 topic_name,
                 key=message_key,
                 value=json.dumps(message).encode("utf-8"),
-                callback=lambda err, msg: (errors.append(str(err)) if err is not None else None),
+                callback=delivery_report,
             )
         except KafkaException as e:
             errors.append(f"Produce exception: {e}")
-            has_exception = True
+            captured_exception = e
 
         # Flush step (always attempted)
         remaining: int | None = None
@@ -131,27 +143,49 @@ class WriterKafka(Writer):
                 remaining = self._flush_with_timeout(_KAFKA_FLUSH_TIMEOUT_SEC)
             except KafkaException as e:
                 errors.append(f"Flush exception: {e}")
-                has_exception = True
+                captured_exception = e
 
             # Treat None (flush returns None in some stubs) as success equivalent to 0 pending
-            if (remaining is None or remaining == 0) and not errors:
+            if remaining is None or remaining == 0:
                 break
             if attempt < _MAX_RETRIES:
                 logger.warning(
-                    "Kafka flush pending (%s message(s) remain) attempt %d/%d.", remaining, attempt, _MAX_RETRIES
+                    "Kafka flush pending, retrying.",
+                    extra={
+                        "pending_messages": remaining,
+                        "attempt": attempt,
+                        "max_attempts": _MAX_RETRIES,
+                    },
                 )
                 time.sleep(_RETRY_BACKOFF_SEC)
 
         # Warn if messages still pending after retries
         if isinstance(remaining, int) and remaining > 0:
             logger.warning(
-                "Kafka flush timeout after %ss: %d message(s) still pending.", _KAFKA_FLUSH_TIMEOUT_SEC, remaining
+                "Kafka flush timed out with messages still pending.",
+                extra={
+                    "pending_messages": remaining,
+                    "flush_timeout_sec": _KAFKA_FLUSH_TIMEOUT_SEC,
+                },
             )
+
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
 
         if errors:
             failure_text = "Kafka writer failed: " + "; ".join(errors)
-            (logger.exception if has_exception else logger.error)(failure_text)
+            # logger.exception() is only valid inside an except block; outside it the traceback is
+            # taken from sys.exc_info() and would be empty, so pass the captured exception instead.
+            logger.error(
+                "Kafka writer failed.",
+                exc_info=captured_exception,
+                extra={"writer_duration_ms": duration_ms, "writer_errors": errors},
+            )
             raise WriteError(failure_text)
+
+        logger.debug(
+            "Kafka accepted the message.",
+            extra={"writer_duration_ms": duration_ms, **delivery},
+        )
 
     def check_health(self) -> str | None:
         """Check Kafka writer health.

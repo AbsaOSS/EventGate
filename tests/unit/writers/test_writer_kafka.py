@@ -140,8 +140,8 @@ def test_write_flush_retries_until_success(monkeypatch, caplog):
     # It should break as soon as remaining == 0 (after flush call returning 0)
     assert producer.flush_calls == 5  # sequence consumed until 0
     # Warnings logged for attempts before success (flush_calls -1) because last attempt didn't warn
-    warn_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("attempt 1" in m or "attempt 2" in m for m in warn_messages)
+    warn_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert [1, 2, 3, 4] == [r.attempt for r in warn_records]
 
 
 def test_write_timeout_warning_when_remaining_after_retries(monkeypatch, caplog):
@@ -152,9 +152,10 @@ def test_write_timeout_warning_when_remaining_after_retries(monkeypatch, caplog)
     writer._producer = producer
     writer.write("topic", {"f": 6})
     timeout_warnings = [
-        r.message for r in caplog.records if "timeout" in r.message
-    ]  # final warning should mention timeout
+        r for r in caplog.records if r.message == "Kafka flush timed out with messages still pending."
+    ]  # final warning reports the pending messages
     assert timeout_warnings, "Expected timeout warning logged"
+    assert 2 == timeout_warnings[0].pending_messages
     assert producer.flush_calls == 3  # retried 3 times
 
 
