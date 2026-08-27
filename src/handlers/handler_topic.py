@@ -286,8 +286,11 @@ class HandlerTopic:
                 errors.append({"type": writer_name, "message": str(exc)})
                 # WARNING on purpose: the request-level ERROR is emitted once by the caller with
                 # every failed writer folded in, so an alert on ERROR counts one failure once.
+                # The traceback rides on this line because the caller runs outside the `except`
+                # block and can no longer reach it.
                 logger.warning(
                     "Writer failed to publish the message.",
+                    exc_info=True,
                     extra={
                         "writer": writer_name,
                         "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),

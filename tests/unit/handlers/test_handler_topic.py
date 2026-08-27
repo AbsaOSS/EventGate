@@ -547,6 +547,30 @@ def test_partial_writer_failure_reports_both_sides(event_gate_module, make_event
     assert ["down"] == [error["message"] for error in dispatch_failures[0].writer_errors]
 
 
+def test_writer_failure_warning_carries_the_traceback(event_gate_module, make_event, valid_payload, caplog):
+    caplog.set_level(logging.WARNING)
+    with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
+        event_gate_module.handler_topic.access_config["public.cps.za.test"] = {"TestUser": {}}
+        for name, writer in event_gate_module.handler_topic.writers.items():
+            writer.write = MagicMock(side_effect=WriteError("down") if name == "postgres" else None)
+
+        event = make_event(
+            "/topics/{topic_name}",
+            method="POST",
+            topic="public.cps.za.test",
+            body=valid_payload,
+            headers={"Authorization": "Bearer token"},
+        )
+        event_gate_module.lambda_handler(event)
+
+    writer_failures = [r for r in caplog.records if r.message == "Writer failed to publish the message."]
+    assert 1 == len(writer_failures)
+    # The caller emits its ERROR outside the `except` block, so this is the only line that can
+    # carry the traceback of the underlying writer failure.
+    assert writer_failures[0].exc_info is not None
+    assert WriteError is writer_failures[0].exc_info[0]
+
+
 def test_accepted_message_is_logged(event_gate_module, make_event, valid_payload, caplog):
     caplog.set_level(logging.INFO)
     with patch.object(event_gate_module.handler_token, "decode_jwt", return_value={"sub": "TestUser"}):
