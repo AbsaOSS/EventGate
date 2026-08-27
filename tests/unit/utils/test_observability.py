@@ -22,7 +22,7 @@ import pytest
 from src.utils import observability
 from src.utils.logging_levels import TRACE_LEVEL
 from src.utils.observability import (
-    append_request_keys,
+    append_request_context,
     bind_request_context,
     configure_root_logging,
     logger,
@@ -155,11 +155,11 @@ def test_bind_request_context_tolerates_missing_lambda_context(caplog):
     assert "function_request_id" not in payload
 
 
-def test_request_keys_do_not_leak_into_the_next_invocation(caplog):
+def test_request_log_keys_do_not_leak_into_the_next_invocation(caplog):
     caplog.set_level(logging.INFO)
 
     bind_request_context({"resource": "/topics/{topic_name}"}, None)
-    append_request_keys(topic="test", user="someone")
+    append_request_context(topic="test", user="someone")
     logging.getLogger("src.handlers.handler_topic").info("Message accepted.")
     assert "test" == formatted(caplog.records[-1])["topic"]
 

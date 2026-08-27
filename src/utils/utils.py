@@ -24,7 +24,7 @@ from typing import Any
 
 import boto3
 
-from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, append_request_keys, bind_request_context
+from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, append_request_context, bind_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def resolve_request_topic(event: dict[str, Any]) -> tuple[str, dict[str, Any] | 
         return "", build_error_response(400, "validation", "Missing path parameter 'topic_name'.")
 
     topic_name = str(raw_topic_name).lower()
-    append_request_keys(topic=topic_name)
+    append_request_context(topic=topic_name)
     return topic_name, None
 
 

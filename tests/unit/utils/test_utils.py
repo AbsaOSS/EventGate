@@ -37,7 +37,7 @@ def make_event(resource="/health", method="GET", correlation_id="run-42"):
 
 @pytest.fixture(autouse=True)
 def clean_logger_state():
-    """`append_request_keys()` mutates module level logger state; drop it after every test."""
+    """`append_request_context()` mutates module level logger state; drop it after every test."""
     yield
     bind_request_context({})
     powertools_logger.set_correlation_id(None)

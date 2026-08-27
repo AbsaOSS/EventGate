@@ -31,7 +31,7 @@ from src.handlers.handler_token import HandlerToken
 from src.utils.conf_path import CONF_DIR
 from src.utils.config_loader import TopicAccessMap, TopicKeyMap, load_access_config, load_topic_keys_config
 from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
-from src.utils.observability import append_request_keys
+from src.utils.observability import append_request_context
 from src.utils.utils import build_error_response, resolve_request_topic
 from src.writers.writer import WriteError, Writer
 
@@ -192,7 +192,7 @@ class HandlerTopic:
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         user = token.get("sub")
-        append_request_keys(user=user)
+        append_request_context(user=user)
 
         authorized_user = self._resolve_authorized_user(topic_name, user)
         if authorized_user is None:
@@ -200,7 +200,7 @@ class HandlerTopic:
             return build_error_response(403, "auth", f"User '{user}' is not authorized for topic '{topic_name}'")
 
         # Log under the configured spelling of the user, since the token casing may differ.
-        append_request_keys(user=authorized_user)
+        append_request_context(user=authorized_user)
 
         allowed, perm_error = self._validate_user_permissions(topic_name, authorized_user, topic_message)
         if not allowed:
@@ -223,13 +223,13 @@ class HandlerTopic:
             return build_error_response(400, "validation", exc.message)
 
         message_key = self._resolve_message_key(topic_name, topic_message)
-        errors, written_by = self._write_to_all(topic_name, topic_message, message_key)
+        writers_ok, errors = self._write_to_all(topic_name, topic_message, message_key)
 
         if errors:
             logger.error(
                 "Message dispatch failed for at least one writer.",
                 extra={
-                    "writers_ok": written_by,
+                    "writers_ok": writers_ok,
                     "writers_failed": [error["type"] for error in errors],
                     "writer_errors": errors,
                     "writer_count": len(self.writers),
@@ -244,7 +244,7 @@ class HandlerTopic:
 
         # The outcome fields are appended to the request context so the single INFO line emitted
         # by `dispatch_request()` ("Request completed.") carries them; no second INFO line here.
-        append_request_keys(message_key=message_key, writers_ok=written_by)
+        append_request_context(message_key=message_key, writers_ok=writers_ok)
         logger.debug("Message accepted.")
         return {
             "statusCode": 202,
@@ -257,24 +257,24 @@ class HandlerTopic:
         topic_name: str,
         topic_message: dict[str, Any],
         message_key: str,
-    ) -> tuple[list[dict[str, str]], list[str]]:
+    ) -> tuple[list[str], list[dict[str, str]]]:
         """Dispatch a message to every configured writer, collecting per-writer outcomes.
         Args:
             topic_name: Target topic name.
             topic_message: Message payload.
             message_key: Resolved transport key.
         Returns:
-            Tuple of (errors, written_by) where `errors` holds one entry per failing writer and
-            `written_by` lists the writers that accepted the message.
+            Tuple of (writers_ok, errors) where `writers_ok` lists the writers that accepted the
+            message and `errors` holds one entry per failing writer.
         """
+        writers_ok: list[str] = []
         errors: list[dict[str, str]] = []
-        written_by: list[str] = []
 
         for writer_name, writer in self.writers.items():
             started_at = time.perf_counter()
             try:
                 writer.write(topic_name, topic_message, message_key)
-                written_by.append(writer_name)
+                writers_ok.append(writer_name)
                 logger.debug(
                     "Writer accepted the message.",
                     extra={
@@ -295,7 +295,7 @@ class HandlerTopic:
                     },
                 )
 
-        return errors, written_by
+        return writers_ok, errors
 
     def _resolve_authorized_user(self, topic_name: str, user: str | None) -> str | None:
         """Match a token user to a configured user for a topic, ignoring case.

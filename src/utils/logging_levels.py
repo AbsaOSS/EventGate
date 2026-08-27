@@ -22,7 +22,6 @@ configured level from the environment. The level is registered with the standard
 Powertools as well.
 """
 
-from __future__ import annotations
 import logging
 import os
 

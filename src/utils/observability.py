@@ -22,8 +22,6 @@ Module loggers keep using `logging.getLogger(__name__)`; the Powertools handler
 is attached to the root logger, so their records are formatted and enriched too.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import re
@@ -56,8 +54,9 @@ logger: Logger = Logger(
     log_uncaught_exceptions=True,
 )
 
-# Keys appended for the duration of a single invocation; cleared at the start of the next one.
-_request_scoped_keys: set[str] = set()
+# Names of the log keys bound for the duration of a single invocation; cleared at the start of
+# the next one so a warm container does not leak context between requests.
+_request_context_key_names: set[str] = set()
 
 # Mutable container so the flag can be flipped without a module level `global` statement.
 _container_state: dict[str, bool] = {"cold_start": True}
@@ -90,8 +89,7 @@ def init_lambda_logging(module_name: str) -> logging.Logger:
     configure_root_logging()
     module_logger = logging.getLogger(module_name)
 
-    rejected_level = invalid_log_level()
-    if rejected_level:
+    if rejected_level := invalid_log_level():
         module_logger.warning(
             "Invalid log level configured; defaulting to INFO.",
             extra={"log_level": rejected_level},
@@ -109,34 +107,34 @@ def resolve_correlation_id(event: dict[str, Any]) -> str:
         API Gateway request id, otherwise an empty string.
     """
     headers = event.get("headers") or {}
-    lowered = {str(key).lower(): value for key, value in headers.items()}
+    lowered_headers = {str(key).lower(): value for key, value in headers.items()}
 
     for header in (CORRELATION_ID_HEADER, REQUEST_ID_HEADER):
-        candidate = lowered.get(header)
-        if isinstance(candidate, str) and CORRELATION_ID_PATTERN.fullmatch(candidate.strip()):
-            return candidate.strip()
+        header_value = lowered_headers.get(header)
+        if isinstance(header_value, str) and CORRELATION_ID_PATTERN.fullmatch(header_value.strip()):
+            return header_value.strip()
 
     request_context = event.get("requestContext") or {}
     api_request_id = request_context.get("requestId")
     return str(api_request_id) if api_request_id else ""
 
 
-def append_request_keys(**keys: Any) -> None:
-    """Append structured keys for the current invocation only.
+def append_request_context(**context_keys: Any) -> None:
+    """Append structured log context for the current invocation only.
     Args:
-        **keys: Key/value pairs added to every subsequent log line of this invocation.
+        **context_keys: Key/value pairs added to every subsequent log line of this invocation.
     """
-    if not keys:
+    if not context_keys:
         return
-    _request_scoped_keys.update(keys)
-    logger.append_keys(**keys)
+    _request_context_key_names.update(context_keys)
+    logger.append_keys(**context_keys)
 
 
-def _clear_request_keys() -> None:
-    """Drop keys appended during the previous invocation of a warm container."""
-    if _request_scoped_keys:
-        logger.remove_keys(list(_request_scoped_keys))
-        _request_scoped_keys.clear()
+def _clear_request_context() -> None:
+    """Drop the context appended during the previous invocation of a warm container."""
+    if _request_context_key_names:
+        logger.remove_keys(list(_request_context_key_names))
+        _request_context_key_names.clear()
 
 
 def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
@@ -147,7 +145,7 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
     Returns:
         The resolved correlation id (possibly an empty string).
     """
-    _clear_request_keys()
+    _clear_request_context()
 
     correlation_id = resolve_correlation_id(event)
     logger.set_correlation_id(correlation_id or None)
@@ -155,14 +153,14 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
     cold_start = _container_state["cold_start"]
     _container_state["cold_start"] = False
 
-    append_request_keys(
+    append_request_context(
         cold_start=cold_start,
         resource=event.get("resource", ""),
         http_method=event.get("httpMethod", ""),
     )
 
     if context is not None:
-        append_request_keys(function_request_id=getattr(context, "aws_request_id", None))
+        append_request_context(function_request_id=getattr(context, "aws_request_id", None))
         if cold_start:
             # Static per-deployment facts are logged once per container instead of being bound
             # to every line; the log stream already identifies the function, so repeating them
@@ -187,7 +185,7 @@ __all__ = [
     "NOISY_LOGGERS",
     "REQUEST_ID_HEADER",
     "TRACE_LEVEL",
-    "append_request_keys",
+    "append_request_context",
     "bind_request_context",
     "configure_root_logging",
     "configured_log_level",
