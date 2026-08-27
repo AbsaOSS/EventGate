@@ -29,21 +29,45 @@ Do not use `copy_config_to_registered_loggers()`: it sets `propagate = False` on
 
 Do not use `inject_lambda_context` decorator: it raises `AttributeError` when Lambda context is `None`, as in unit and integration tests invoking `lambda_handler`. `bind_request_context()` supplies equivalent binding and tolerates missing context.
 
-### Log-level policy
+### Logging strategy
 
-| Level | Content |
-|---|---|
-| `TRACE` | Full message payloads, redacted and size-capped. Never enabled by default. |
-| `DEBUG` | Configuration loading, lazy initialization, per-writer send attempts, connection reuse. |
-| `INFO` | One line per request outcome, cold-start initialization, accepted messages, stats query results. |
-| `WARNING` | Rejected requests—auth, authorization, validation—degraded health, Kafka flush retries. |
-| `ERROR` | Writer failures, partial fan-out failures, failed queries, unhandled request errors. |
+Guiding rule: **log volume tracks trouble, not traffic.** A request that works costs a fixed, small number of lines no matter how much work it did. A request that fails spends as many lines as needed to explain itself. Steady-state cost stays flat as traffic grows, and detail is bought on demand instead of paid for continuously.
 
-Every non-2xx response must produce exactly one log line explaining cause.
+Three rules implement this on the happy path.
+
+**1. One `INFO` line per request.** `dispatch_request()` emits `Request completed.` with `status_code` and `duration_ms` after every invocation, success or failure. Handlers emit no `INFO` outcome line of their own. Count holds regardless of writer count, message size, or result-set size.
+
+**2. Outcome data rides on that line as fields, not as extra lines.** Handlers attach results through `append_request_context()`—`writers_ok`, `message_key`, `row_count`, `has_more`—so completion line carries them. Recording one more fact about a request must not cost one more line. Prefer new key over new log call.
+
+**3. Step detail is `DEBUG` and stays off in production.** Per-writer sends, connection reuse, configuration loading, token refresh, schema resolution. Answers "how did this request get here", which matters while investigating and is worthless at steady state.
+
+Failure path inverts the budget. Rejections and soft failures log at `WARNING`, one per rejected request or failed sub-step, reason always in fields. Every non-2xx response produces exactly one line explaining cause, so support answers "why was my request rejected" without reproducing it.
+
+Exactly one `ERROR` per failed request: the aggregated dispatch failure, listing every failing writer in a single record. Per-writer failure detail stays at `WARNING` so an alarm on `level = "ERROR"` counts failed requests, not log lines. That per-writer `WARNING` carries `exc_info=True`, because the aggregated `ERROR` is emitted after `_write_to_all()` returns—outside the `except` block—and can no longer reach the traceback.
+
+| Level | Content | Expected frequency |
+|---|---|---|
+| `TRACE` | Full message payloads, redacted and size-capped. | Never enabled by default. |
+| `DEBUG` | Per-step detail: writer sends, config loading, connection reuse, token refresh, routing. | Off in production. |
+| `INFO` | Request outcome (`Request completed.`); lifecycle events—lambda initialization, cold-start context, Postgres connection established, token public keys loaded. | Once per request, plus lifecycle lines that are tied to container or connection age, not to request count. |
+| `WARNING` | Rejected requests—auth, authorization, validation—degraded health, per-writer failures, Kafka flush retries. | Once per rejection or failed sub-step. |
+| `ERROR` | Aggregated dispatch failure, unhandled request errors, misconfiguration preventing service. | Once per failed request. |
+
+Known gap: writer modules still log at `ERROR` before raising `WriteError`, so a failed write currently produces two `ERROR` records—the writer's and the aggregate. Downgrading writer-internal logs to `WARNING` is tracked separately.
 
 Cap third-party loggers (`boto3`, `botocore`, `urllib3`, `s3transfer`, `aiosql`, `confluent_kafka`) at `WARNING` so `DEBUG` and `TRACE` remain readable.
 
 Retain custom numeric `TRACE` level (`5`). Register it with standard `logging` before constructing Powertools `Logger`; pass level numerically so Powertools validates it. Unit test pins behavior: unrecognized level silently falls back to `INFO`, disabling payload logging.
+
+### Raising detail when something is wrong
+
+Production runs at `INFO`. When one line per request is not enough:
+
+- Set `LOG_LEVEL=DEBUG` on the function to replay step detail. Third-party capping keeps output readable, which is what made `DEBUG` unusable before this ADR.
+- Set `LOG_LEVEL=TRACE` for redacted, size-capped payloads. Never leave enabled.
+- Set `POWERTOOLS_LOGGER_SAMPLE_RATE` to collect `DEBUG` detail for a fraction of production traffic without paying for it on every request.
+
+Correlation ID is what makes a quiet default workable: one ID joins every line of an invocation and ties them to caller's own ID, so a request is reconstructed from few lines rather than many.
 
 ### Correlation-ID contract
 
@@ -63,7 +87,8 @@ Return resolved ID in `X-Correlation-ID` response header for every success and e
 - `dispatch_request()` catches `Exception` at boundary instead of fixed list of six exception types. Escaping `psycopg2.Error` or `KafkaException` now becomes structured error rather than runtime traceback and opaque API Gateway `502`. `SystemExit` still propagates; `/terminate` remains unaffected.
 - Malformed request body on `POST /topics/{topic_name}` returns `400 validation`, not `500 internal`.
 - Callers receive additive `X-Correlation-ID` response header; response body contract unchanged.
-- CloudWatch cost rises slightly. `INFO` emits roughly one to three lines per invocation. `POWERTOOLS_LOGGER_SAMPLE_RATE` allows sampled production `DEBUG` detail.
+- CloudWatch cost rises, but by a bounded amount: `INFO` emits one line per invocation plus a few initialization lines per container, instead of nothing. Cost scales with request count only—not with message size, writer count, or result-set size—so it stays predictable as traffic grows.
+- Adding a fact to a request is free in line count but not in line width. The completion line grows as handlers attach keys, which is the intended trade: one wider record beats several narrow ones for CloudWatch Logs Insights queries.
 
 ### Not in scope
 
