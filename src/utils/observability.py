@@ -29,9 +29,12 @@ from typing import Any
 
 from aws_lambda_powertools import Logger
 
-from src.utils.logging_levels import TRACE_LEVEL, configured_log_level, invalid_log_level, resolve_log_level
+from src.utils.logging_levels import TRACE_LEVEL, configured_log_level, resolve_log_level
 
 DEFAULT_SERVICE_NAME = "eventgate"
+
+# Attribute carrying the invocation id on the AWS Lambda context object.
+AWS_REQUEST_ID = "aws_request_id"
 
 # Header accepted from callers so that an upstream request id can be carried through EventGate.
 CORRELATION_ID_HEADER = "x-correlation-id"
@@ -46,9 +49,11 @@ CORRELATION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 # Third-party loggers that flood the log group when the service runs at DEBUG or TRACE.
 NOISY_LOGGERS = ("boto3", "botocore", "urllib3", "s3transfer", "aiosql", "confluent_kafka")
 
+_INITIAL_LOG_LEVEL, _ = resolve_log_level()
+
 logger: Logger = Logger(
     service=os.environ.get("POWERTOOLS_SERVICE_NAME", DEFAULT_SERVICE_NAME),
-    level=resolve_log_level(),
+    level=_INITIAL_LOG_LEVEL,
     use_rfc3339=True,
     utc=True,
     log_uncaught_exceptions=True,
@@ -68,7 +73,7 @@ def configure_root_logging() -> None:
     Replaces handlers installed by the Lambda runtime so that records are not emitted twice,
     and caps noisy third-party loggers at WARNING so `LOG_LEVEL=DEBUG` stays readable.
     """
-    log_level = resolve_log_level()
+    log_level, _ = resolve_log_level()
 
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
@@ -89,7 +94,7 @@ def init_lambda_logging(module_name: str) -> logging.Logger:
     configure_root_logging()
     module_logger = logging.getLogger(module_name)
 
-    if rejected_level := invalid_log_level():
+    if rejected_level := resolve_log_level()[1]:
         module_logger.warning(
             "Invalid log level configured; defaulting to INFO.",
             extra={"log_level": rejected_level},
@@ -160,7 +165,7 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
     )
 
     if context is not None:
-        append_request_context(function_request_id=getattr(context, "aws_request_id", None))
+        append_request_context(function_request_id=getattr(context, AWS_REQUEST_ID, None))
         if cold_start:
             # Static per-deployment facts are logged once per container instead of being bound
             # to every line; the log stream already identifies the function, so repeating them
@@ -178,6 +183,7 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
 
 
 __all__ = [
+    "AWS_REQUEST_ID",
     "CORRELATION_ID_HEADER",
     "CORRELATION_ID_PATTERN",
     "CORRELATION_ID_RESPONSE_HEADER",

@@ -54,22 +54,18 @@ def configured_log_level() -> str:
     return (os.environ.get("POWERTOOLS_LOG_LEVEL") or os.environ.get("LOG_LEVEL") or "INFO").strip().upper()
 
 
-def resolve_log_level() -> int:
+def resolve_log_level() -> tuple[int, str | None]:
     """Resolve the configured log level to a numeric logging level.
     Returns:
-        The numeric level for the configured name, or `logging.INFO` when it is unknown.
-    """
-    level = logging.getLevelName(configured_log_level())
-    return level if isinstance(level, int) else logging.INFO
-
-
-def invalid_log_level() -> str | None:
-    """Report a configured log level that could not be resolved.
-    Returns:
-        The rejected level name, or `None` when the configured level is valid.
+        Tuple of (level, rejected). `level` is the numeric level for the configured name, falling
+        back to `logging.INFO` when the name is unknown; `rejected` is that unusable name, or
+        `None` when the configured level resolved cleanly.
     """
     configured = configured_log_level()
-    return None if isinstance(logging.getLevelName(configured), int) else configured
+    level = logging.getLevelName(configured)
+    if isinstance(level, int):
+        return level, None
+    return logging.INFO, configured
 
 
-__all__ = ["TRACE_LEVEL", "configured_log_level", "invalid_log_level", "resolve_log_level"]
+__all__ = ["TRACE_LEVEL", "configured_log_level", "resolve_log_level"]
