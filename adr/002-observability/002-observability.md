@@ -91,7 +91,9 @@ Given that rule, the call to use follows from where the code sits and which leve
 | Outside `except`, exception captured earlier | `logger.error(msg, exc_info=captured_exc)` |
 | Error state found by inspection, no exception exists | plain `logger.error(msg, extra={...})`, no `exc_info` |
 
-`logger.exception()` hardcodes `ERROR`. That is why mixed usage across the codebase is not an inconsistency to normalize away: per-writer failures sit at `WARNING` precisely to keep the `ERROR` count equal to the failed-request count, and `WARNING` is unreachable through `logger.exception()`. Row three exists because `logger.exception()` outside an `except` block reads an empty `sys.exc_info()` and logs no traceback at all; `writer_kafka` collects the exception across its produce and flush steps, then logs once after both. Its `exc_info=captured_exception` is `None` when the failure arrived through the delivery callback rather than a raised exception—intended, since `exc_info=None` correctly omits a traceback that does not exist. It must not be "fixed" to `exc_info=True`.
+`logger.exception()` hardcodes `ERROR`. That is why mixed usage across the codebase is not an inconsistency to normalize away: per-writer failures sit at `WARNING` precisely to keep the `ERROR` count equal to the failed-request count, and `WARNING` is unreachable through `logger.exception()`.
+
+Row three exists because `logger.exception()` outside an `except` block reads an empty `sys.exc_info()` and logs no traceback at all. It applies wherever a step collects failures across several `try` blocks and reports once at the end. Such a captured exception is legitimately `None`—a step can fail through a callback or a timeout rather than a raised exception—and `exc_info=None` correctly omits a traceback that does not exist, so it must not be "corrected" to `exc_info=True`.
 
 ### Raising detail when something is wrong
 
@@ -99,7 +101,6 @@ Production runs at `INFO`. When one line per request is not enough:
 
 - Set `LOG_LEVEL=DEBUG` on the function to replay step detail. Third-party capping keeps output readable, which is what made `DEBUG` unusable before this ADR.
 - Set `LOG_LEVEL=TRACE` for redacted, size-capped payloads. Never leave enabled.
-
 - Set `POWERTOOLS_LOGGER_SAMPLE_RATE` to collect `DEBUG` detail for a fraction of production traffic without paying for it on every request.
 
 Sampling needs two things wired, and `refresh_sampled_log_level()` supplies both from `bind_request_context()`. Powertools draws the lottery when the `Logger` is constructed and re-draws it only from `refresh_sample_rate_calculation()`, which ships inside the rejected `inject_lambda_context` decorator; calling it per invocation is what makes the draw per request instead of per container. The draw then sets the level of the Powertools logger alone, so the outcome is mirrored onto the root logger—otherwise module loggers, which resolve their level from root, drop their `DEBUG` records before the shared handler sees them. Mirroring takes the lower of the two levels, because sampling may only add detail: a run already at `TRACE` is left alone rather than pulled up to `DEBUG`.
@@ -144,8 +145,8 @@ Return resolved ID in `X-Correlation-ID` response header for every success and e
 ## Related Tickets
 
 * [#193](https://github.com/AbsaOSS/EventGate/issues/193)
-* [#219](https://github.com/AbsaOSS/EventGate/issues/219) — log ownership: a raising frame must not log the traceback
-* [#220](https://github.com/AbsaOSS/EventGate/issues/220) — Kafka flush timeout returns `202` with delivery unconfirmed
+* [#219](https://github.com/AbsaOSS/EventGate/issues/219)
+* [#220](https://github.com/AbsaOSS/EventGate/issues/220)
 
 ## References
 
