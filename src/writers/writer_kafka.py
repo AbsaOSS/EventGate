@@ -120,8 +120,11 @@ class WriterKafka(Writer):
                 return
             try:
                 delivery.update({"kafka_partition": msg.partition(), "kafka_offset": msg.offset()})
-            except (AttributeError, TypeError):  # producer stubs may not expose message metadata
-                pass
+            except (AttributeError, TypeError):
+                # The delivery succeeded; only the partition/offset detail is unavailable, because
+                # not every producer implementation exposes message metadata. Swallowing this keeps
+                # a successful write from being reported as a failure over a missing log field.
+                logger.debug("Kafka delivery metadata unavailable.", exc_info=True)
 
         # Produce step
         try:
