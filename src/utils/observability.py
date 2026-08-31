@@ -84,6 +84,37 @@ def configure_root_logging() -> None:
         logging.getLogger(noisy_logger).setLevel(max(log_level, logging.WARNING))
 
 
+def refresh_sampled_log_level() -> int:
+    """Re-draw the `DEBUG` sampling decision and mirror the outcome onto the root logger.
+
+    Powertools draws the `POWERTOOLS_LOGGER_SAMPLE_RATE` lottery when the `Logger` is built and
+    re-draws it only from `refresh_sample_rate_calculation()`, which ships inside the
+    `inject_lambda_context` decorator this module deliberately does not use. Calling it per
+    invocation is what makes the draw per request rather than per container.
+
+    The draw sets the level of the Powertools logger alone. Module loggers resolve their effective
+    level from the root logger, so the outcome has to be mirrored there or their `DEBUG` records
+    are dropped before the shared handler sees them.
+
+    Returns:
+        The level now in force on the root logger.
+    """
+    logger.refresh_sample_rate_calculation()
+
+    configured_level, _ = resolve_log_level()
+    # Powertools sets `DEBUG` unconditionally when a request is sampled. Sampling may only add
+    # detail, so a run configured at `TRACE` must not be pulled up to `DEBUG`.
+    sampled_level = min(logger.level, configured_level)
+
+    root_logger = logging.getLogger()
+    if root_logger.level != sampled_level:
+        root_logger.setLevel(sampled_level)
+        for noisy_logger in NOISY_LOGGERS:
+            logging.getLogger(noisy_logger).setLevel(max(sampled_level, logging.WARNING))
+
+    return sampled_level
+
+
 def init_lambda_logging(module_name: str) -> logging.Logger:
     """Configure logging for a lambda entry point.
     Args:
@@ -151,6 +182,7 @@ def bind_request_context(event: dict[str, Any], context: Any = None) -> str:
         The resolved correlation id (possibly an empty string).
     """
     _clear_request_context()
+    refresh_sampled_log_level()
 
     correlation_id = resolve_correlation_id(event)
     logger.set_correlation_id(correlation_id or None)
@@ -196,6 +228,7 @@ __all__ = [
     "configure_root_logging",
     "configured_log_level",
     "init_lambda_logging",
+    "refresh_sampled_log_level",
     "logger",
     "resolve_correlation_id",
 ]

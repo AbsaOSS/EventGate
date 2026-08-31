@@ -188,3 +188,75 @@ def test_configure_root_logging_caps_noisy_loggers(monkeypatch):
     assert TRACE_LEVEL == logging.getLogger().level
     for noisy_logger in observability.NOISY_LOGGERS:
         assert logging.WARNING == logging.getLogger(noisy_logger).level
+
+
+## refresh_sampled_log_level()
+@pytest.fixture
+def restore_sampling_rate():
+    """Restore the sampling rate the module level logger was constructed with."""
+    original_rate = logger.sampling_rate
+    yield
+    logger.sampling_rate = original_rate
+
+
+def test_unsampled_request_keeps_the_configured_level(monkeypatch, restore_sampling_rate):
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.delenv("POWERTOOLS_LOG_LEVEL", raising=False)
+    configure_root_logging()
+    logger.sampling_rate = 0
+
+    assert logging.INFO == observability.refresh_sampled_log_level()
+    assert logging.INFO == logging.getLogger().level
+
+
+def test_sampled_request_lowers_the_root_level_to_debug(monkeypatch, restore_sampling_rate):
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.delenv("POWERTOOLS_LOG_LEVEL", raising=False)
+    configure_root_logging()
+    logger.sampling_rate = 1
+
+    # Module loggers resolve their level from the root logger, so the sampled outcome only
+    # reaches `src.*` records if it is mirrored there.
+    assert logging.DEBUG == observability.refresh_sampled_log_level()
+    assert logging.DEBUG == logging.getLogger().level
+    assert logging.getLogger("src.writers.writer_kafka").isEnabledFor(logging.DEBUG)
+
+
+def test_sampling_never_raises_the_level_of_a_trace_run(monkeypatch, restore_sampling_rate):
+    monkeypatch.setenv("LOG_LEVEL", "TRACE")
+    monkeypatch.delenv("POWERTOOLS_LOG_LEVEL", raising=False)
+    configure_root_logging()
+    logger.sampling_rate = 1
+
+    # Powertools sets DEBUG unconditionally when a request is sampled; sampling may only add
+    # detail, so a TRACE run must not be pulled up to DEBUG.
+    assert TRACE_LEVEL == observability.refresh_sampled_log_level()
+    assert TRACE_LEVEL == logging.getLogger().level
+
+
+def test_sampled_request_keeps_noisy_loggers_capped(monkeypatch, restore_sampling_rate):
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.delenv("POWERTOOLS_LOG_LEVEL", raising=False)
+    configure_root_logging()
+    logger.sampling_rate = 1
+
+    observability.refresh_sampled_log_level()
+
+    for noisy_logger in observability.NOISY_LOGGERS:
+        assert logging.WARNING == logging.getLogger(noisy_logger).level
+
+
+def test_bind_request_context_redraws_the_sample_per_invocation(monkeypatch, restore_sampling_rate):
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.delenv("POWERTOOLS_LOG_LEVEL", raising=False)
+    configure_root_logging()
+
+    logger.sampling_rate = 1
+    bind_request_context({"resource": "/topics/{topic_name}"}, None)
+    assert logging.DEBUG == logging.getLogger().level
+
+    # The draw is per request, not per container: the next invocation of a warm container
+    # re-evaluates it instead of inheriting the previous outcome.
+    logger.sampling_rate = 0
+    bind_request_context({"resource": "/topics/{topic_name}"}, None)
+    assert logging.INFO == logging.getLogger().level
