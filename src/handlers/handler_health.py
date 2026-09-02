@@ -68,14 +68,14 @@ class HandlerHealth:
         uptime_seconds = int((datetime.now(timezone.utc) - self.start_time).total_seconds())
 
         if not failures:
-            logger.debug("Health check passed.")
+            logger.debug("Health check passed.", extra={"dependencies": statuses})
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"status": "ok", "uptime_seconds": uptime_seconds, "dependencies": statuses}),
             }
 
-        logger.debug("Health check degraded: %s.", failures)
+        logger.warning("Health check degraded.", extra={"failures": failures, "dependencies": statuses})
         return {
             "statusCode": 503,
             "headers": {"Content-Type": "application/json"},

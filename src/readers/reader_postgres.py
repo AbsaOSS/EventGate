@@ -113,6 +113,11 @@ class ReaderPostgres(PostgresBase):
         ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
+        started_at = time.perf_counter()
+        logger.debug(
+            "Running stats query.",
+            extra={"ts_start": ts_start, "ts_end": ts_end, "cursor": cursor, "limit": limit},
+        )
         try:
             col_names, raw_rows = self._execute_with_retry(
                 lambda conn: self._run_stats_query(conn, ts_start, ts_end, cursor, limit)
@@ -139,7 +144,14 @@ class ReaderPostgres(PostgresBase):
             "limit": limit,
         }
 
-        logger.debug("Stats query returned %d rows.", len(rows))
+        logger.debug(
+            "Stats query returned rows.",
+            extra={
+                "row_count": len(rows),
+                "has_more": has_more,
+                "query_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            },
+        )
         return rows, pagination
 
     def _run_stats_query(

@@ -43,7 +43,7 @@ def load_config(conf_dir: str) -> dict[str, Any]:
     config_path = os.path.join(conf_dir, "config.json")
     with open(config_path, "r", encoding="utf-8") as file:
         config: dict[str, Any] = json.load(file)
-    logger.debug("Loaded main configuration from %s.", config_path)
+    logger.debug("Loaded main configuration.", extra={"config_path": config_path})
     return config
 
 
@@ -141,7 +141,7 @@ def load_access_config(config: dict[str, Any], aws_s3: ServiceResource) -> Topic
         Normalized mapping of topic names to per-user permission constraints.
     """
     access_path: str = config["access_config"]
-    logger.debug("Loading access configuration from %s.", access_path)
+    logger.debug("Loading access configuration.", extra={"access_path": access_path})
     access_data = _load_json_from_path(access_path, aws_s3)
 
     logger.debug("Loaded access configuration.")
@@ -176,7 +176,7 @@ def load_topic_keys_config(config: dict[str, Any], aws_s3: ServiceResource) -> T
         logger.debug("No topic_keys_config configured. Using empty topic key mapping.")
         return {}
 
-    logger.debug("Loading topic key configuration from %s.", topic_keys_path)
+    logger.debug("Loading topic key configuration.", extra={"topic_keys_path": topic_keys_path})
     topic_key_data = _load_json_from_path(topic_keys_path, aws_s3)
 
     logger.debug("Loaded topic key configuration.")
@@ -205,5 +205,5 @@ def load_topic_names(conf_dir: str) -> list[str]:
         if os.path.isfile(schema_path):
             topics.append(topic_name)
 
-    logger.debug("Discovered %d topic(s) from %s.", len(topics), schemas_dir)
+    logger.debug("Discovered topics.", extra={"topic_count": len(topics), "schemas_dir": schemas_dir})
     return topics

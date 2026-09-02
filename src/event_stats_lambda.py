@@ -16,24 +16,25 @@
 
 """AWS Lambda entry point for the EventStats service."""
 
-import os
+import logging
+import time
 from typing import Any
 
 from src.handlers.handler_health import HandlerHealth
 from src.handlers.handler_stats import HandlerStats
 from src.readers.reader_postgres import ReaderPostgres
-from src.utils.conf_path import CONF_DIR, INVALID_CONF_ENV
+from src.utils.conf_path import CONF_DIR, log_configuration_source
 from src.utils.config_loader import load_topic_names
-from src.utils.logging_levels import init_root_logger
+from src.utils.observability import configured_log_level, init_lambda_logging
 from src.utils.utils import dispatch_request
 
-logger = init_root_logger(__name__)
-logger.debug("Initialized EventStats logger with level %s.", os.environ.get("LOG_LEVEL", "INFO"))
+logger = init_lambda_logging(__name__)
+
+_INIT_STARTED_AT = time.perf_counter()
+logger.info("Initializing EventStats lambda.", extra={"log_level": configured_log_level()})
 
 # Load main configuration
-logger.debug("Using CONF_DIR=%s.", CONF_DIR)
-if INVALID_CONF_ENV:
-    logger.warning("CONF_DIR env var set to non-existent path: %s; fell back to %s.", INVALID_CONF_ENV, CONF_DIR)
+log_configuration_source(logger)
 
 # Load topic names.
 topic_names = load_topic_names(CONF_DIR)
@@ -46,6 +47,14 @@ reader_postgres = ReaderPostgres()
 handler_stats = HandlerStats(topics, reader_postgres)
 handler_health = HandlerHealth({"postgres_reader": reader_postgres})
 
+logger.info(
+    "EventStats lambda initialized.",
+    extra={
+        "init_duration_ms": round((time.perf_counter() - _INIT_STARTED_AT) * 1000, 2),
+        "topics": sorted(topics),
+    },
+)
+
 # Route to handler function mapping
 ROUTE_MAP: dict[str, Any] = {
     "/stats/{topic_name}": handler_stats.handle_request,
@@ -53,12 +62,12 @@ ROUTE_MAP: dict[str, Any] = {
 }
 
 
-def lambda_handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     """AWS Lambda entry point for EventStats. Dispatches based on API Gateway proxy resource field.
     Args:
         event: The event data from API Gateway.
-        _context: The mandatory context argument for AWS Lambda invocation (unused).
+        context: The AWS Lambda context object, used to enrich logs with the execution context.
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     """
-    return dispatch_request(event, ROUTE_MAP, logger)
+    return dispatch_request(event, ROUTE_MAP, logger, context)

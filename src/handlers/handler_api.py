@@ -46,10 +46,10 @@ class HandlerApi:
             if not self.api_spec:
                 raise ValueError("API specification file is empty")
 
-            logger.debug("Loaded API definition from %s.", api_path)
+            logger.debug("Loaded API definition.", extra={"api_path": api_path})
             return self
         except (FileNotFoundError, PermissionError, ValueError) as exc:
-            logger.exception("Failed to load or read API specification from %s.", api_path)
+            logger.exception("Failed to load or read the API specification.", extra={"api_path": api_path})
             raise RuntimeError("API specification initialization failed") from exc
 
     def get_api(self) -> dict[str, Any]:
