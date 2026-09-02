@@ -104,7 +104,7 @@ def refresh_sampled_log_level() -> int:
     configured_level, _ = resolve_log_level()
     # Powertools sets `DEBUG` unconditionally when a request is sampled. Sampling may only add
     # detail, so a run configured at `TRACE` must not be pulled up to `DEBUG`.
-    sampled_level = min(logger.level, configured_level)
+    sampled_level = min(logger.log_level, configured_level)
 
     root_logger = logging.getLogger()
     if root_logger.level != sampled_level:
