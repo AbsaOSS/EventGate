@@ -59,7 +59,9 @@ def _load_json_from_path(path: str, aws_s3: ServiceResource) -> dict[str, Any]:
         name_parts = path.split("/")
         bucket_name = name_parts[2]
         bucket_object_key = "/".join(name_parts[3:])
-        return json.loads(aws_s3.Bucket(bucket_name).Object(bucket_object_key).get()["Body"].read().decode("utf-8"))
+        bucket = aws_s3.Bucket(bucket_name)  # type: ignore[attr-defined]
+        s3_object = bucket.Object(bucket_object_key)
+        return json.loads(s3_object.get()["Body"].read().decode("utf-8"))
 
     with open(path, "r", encoding="utf-8") as file:
         return json.load(file)

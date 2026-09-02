@@ -1,23 +1,21 @@
-#
-# Copyright 2026 ABSA Group Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+/*
+ * Copyright 2026 ABSA Group Limited
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-"""PostgreSQL schema for integration tests."""
+-- Initial EventGate schema.
 
-SCHEMA_SQL = """
--- Table matching WriterPostgres._postgres_run_write columns
+-- Run header rows for the runs topic.
 CREATE TABLE IF NOT EXISTS public_cps_za_runs (
     event_id VARCHAR(255) NOT NULL,
     job_ref VARCHAR(255) NOT NULL,
@@ -29,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_runs (
     timestamp_end BIGINT
 );
 
--- Table matching WriterPostgres._postgres_run_write job rows
+-- Per-job rows belonging to a run.
 CREATE TABLE IF NOT EXISTS public_cps_za_runs_jobs (
     internal_id SERIAL PRIMARY KEY,
     event_id VARCHAR(255) NOT NULL,
@@ -42,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_runs_jobs (
     additional_info JSONB
 );
 
--- Table matching WriterPostgres._postgres_edla_write columns
+-- Data lake change events.
 CREATE TABLE IF NOT EXISTS public_cps_za_dlchange (
     event_id VARCHAR(255) NOT NULL,
     tenant_id VARCHAR(255) NOT NULL,
@@ -59,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_dlchange (
     additional_info JSONB
 );
 
--- Table matching WriterPostgres._postgres_test_write columns
+-- Test topic events.
 CREATE TABLE IF NOT EXISTS public_cps_za_test (
     event_id VARCHAR(255) NOT NULL,
     tenant_id VARCHAR(255) NOT NULL,
@@ -69,7 +67,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_test (
     additional_info JSONB
 );
 
--- Table for test_status_change_writer
+-- Aggregated latest status per job (see ADR 001).
 CREATE TABLE IF NOT EXISTS public_cps_za_status_change_aggregated_job (
     job_id               UUID PRIMARY KEY,
     job_group_id         UUID,
@@ -97,4 +95,3 @@ CREATE TABLE IF NOT EXISTS public_cps_za_status_change_aggregated_job (
     finished_at          TIMESTAMPTZ,
     last_updated_at      TIMESTAMPTZ NOT NULL
 );
-"""
