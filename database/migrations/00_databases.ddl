@@ -18,7 +18,7 @@
 -- Flyway connects to an existing database, so it cannot create the database it migrates.
 -- This script is intentionally NOT prefixed with `V`, so Flyway ignores it.
 
-CREATE DATABASE eventgate_db
+CREATE DATABASE eventgate
     WITH
     ENCODING = 'UTF8'
     CONNECTION LIMIT = -1;
