@@ -23,6 +23,6 @@ locations = ["filesystem:database/migrations"]
 sqlMigrationSuffixes = [".ddl", ".sql"]
 
 [environments.default]
-url = "jdbc:postgresql://localhost:5432/eventgate_db"
+url = "jdbc:postgresql://localhost:5432/eventgate"
 user = "postgres"
 password = "changeme"
