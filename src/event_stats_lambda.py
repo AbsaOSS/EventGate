@@ -19,6 +19,7 @@
 import os
 from typing import Any
 
+from src.handlers.handler_named_query import HandlerNamedQuery
 from src.handlers.handler_health import HandlerHealth
 from src.handlers.handler_stats import HandlerStats
 from src.readers.reader_postgres import ReaderPostgres
@@ -44,11 +45,13 @@ reader_postgres = ReaderPostgres()
 
 # Initialize EventStats handlers
 handler_stats = HandlerStats(topics, reader_postgres)
+handler_named_query = HandlerNamedQuery(topics, reader_postgres)
 handler_health = HandlerHealth({"postgres_reader": reader_postgres})
 
 # Route to handler function mapping
 ROUTE_MAP: dict[str, Any] = {
     "/stats/{topic_name}": handler_stats.handle_request,
+    "/stats/{topic_name}/query/{query_name}": handler_named_query.handle_request,
     "/health": lambda _: handler_health.get_health(),
 }
 

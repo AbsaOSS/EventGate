@@ -91,6 +91,10 @@ class TestEventStatsLambdaRouteMap:
         """Test that /stats/{topic_name} is in ROUTE_MAP."""
         assert "/stats/{topic_name}" in event_stats_module.ROUTE_MAP
 
+    def test_route_map_contains_named_query(self, event_stats_module) -> None:
+        """Test that /stats/{topic_name}/query/{query_name} is in ROUTE_MAP."""
+        assert "/stats/{topic_name}/query/{query_name}" in event_stats_module.ROUTE_MAP
+
     def test_route_map_contains_health(self, event_stats_module) -> None:
         """Test that /health is in ROUTE_MAP."""
         assert "/health" in event_stats_module.ROUTE_MAP

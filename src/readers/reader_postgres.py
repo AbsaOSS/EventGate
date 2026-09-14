@@ -25,8 +25,10 @@ from pathlib import Path
 from typing import Any
 
 import aiosql
+import psycopg2.extensions
 from botocore.exceptions import BotoCoreError, ClientError
 
+from src.readers.named_query_registry import SUPPORTED_QUERIES
 from src.utils.constants import (
     POSTGRES_DEFAULT_LIMIT,
     POSTGRES_DEFAULT_WINDOW_MS,
@@ -51,6 +53,8 @@ class ReaderQueries:
 
     get_stats: str
     get_stats_with_cursor: str
+    get_runs_jobs_detail: str
+    get_runs_jobs_detail_with_cursor: str
 
 
 class ReaderPostgres(PostgresBase):
@@ -73,6 +77,10 @@ class ReaderPostgres(PostgresBase):
         return ReaderQueries(
             get_stats=queries.get_stats.sql,  # pylint: disable=no-member
             get_stats_with_cursor=queries.get_stats_with_cursor.sql,  # pylint: disable=no-member
+            get_runs_jobs_detail=queries.get_runs_jobs_detail.sql,  # pylint: disable=no-member
+            get_runs_jobs_detail_with_cursor=(
+                queries.get_runs_jobs_detail_with_cursor.sql  # pylint: disable=no-member
+            ),
         )
 
     def read_stats(
@@ -144,7 +152,7 @@ class ReaderPostgres(PostgresBase):
 
     def _run_stats_query(
         self,
-        connection: Any,
+        connection: psycopg2.extensions.connection,
         ts_start: int,
         ts_end: int,
         cursor: int | None,
@@ -176,6 +184,168 @@ class ReaderPostgres(PostgresBase):
                 logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
                 self._close_connection()
         return col_names, raw_rows
+
+    def read_named_query(
+        self,
+        query_name: str,
+        timestamp_start: int | None = None,
+        timestamp_end: int | None = None,
+        cursor: int | None = None,
+        limit: int = POSTGRES_DEFAULT_LIMIT,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Execute a predefined named query with keyset pagination.
+        Args:
+            query_name: Registered named query identifier (see `SUPPORTED_QUERIES`).
+            timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
+            timestamp_end: End of time window in epoch milliseconds (default to *now*).
+            cursor: Last `internal_id` from previous page (keyset pagination).
+            limit: Maximum number of rows per page.
+        Returns:
+            Tuple of (rows, pagination), where each row is a dict with raw and
+            computed columns and pagination contains cursor info.
+        Raises:
+            RuntimeError: On unknown query name or database connectivity/query errors.
+        """
+        query = SUPPORTED_QUERIES.get(query_name)
+        if query is None:
+            raise RuntimeError(f"Unknown named query: {query_name}.")
+
+        try:
+            config = self._pg_config
+        except (BotoCoreError, ClientError, ValueError, KeyError) as exc:
+            raise RuntimeError(f"PostgreSQL configuration error: {exc}") from exc
+
+        if not config.get("database"):
+            raise RuntimeError("PostgreSQL config missing: database.")
+
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
+        if missing:
+            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
+
+        limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
+        now_ms = int(time.time() * 1000)
+        ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
+        ts_end = timestamp_end if timestamp_end is not None else now_ms
+
+        sql = getattr(self._queries, query.sql_key)
+        sql_with_cursor = getattr(self._queries, query.sql_key_with_cursor)
+
+        try:
+            col_names, raw_rows = self._execute_with_retry(
+                lambda conn: self._run_named_query(conn, sql, sql_with_cursor, ts_start, ts_end, cursor, limit)
+            )
+        except PsycopgError as exc:
+            self._close_connection()
+            raise RuntimeError(f"Database query error: {exc}") from exc
+
+        rows = [dict(zip(col_names, row, strict=True)) for row in raw_rows]
+
+        has_more = len(rows) > limit
+        if has_more:
+            rows = rows[:limit]
+
+        next_cursor: int | None = None
+        if has_more and rows:
+            next_cursor = rows[-1]["internal_id"]
+
+        rows = [self._format_runs_jobs_detail_row(row) for row in rows]
+
+        pagination: dict[str, Any] = {
+            "cursor": next_cursor,
+            "has_more": has_more,
+            "limit": limit,
+        }
+
+        logger.debug("Named query %s returned %d rows.", query_name, len(rows))
+        return rows, pagination
+
+    def _run_named_query(
+        self,
+        connection: psycopg2.extensions.connection,
+        sql: str,
+        sql_with_cursor: str,
+        ts_start: int,
+        ts_end: int,
+        cursor: int | None,
+        limit: int,
+    ) -> RawQueryResult:
+        """Execute a named SQL query and return column names and raw rows."""
+        try:
+            with connection.cursor() as db_cursor:
+                if cursor is not None:
+                    db_cursor.execute(
+                        sql_with_cursor,
+                        {"ts_start": ts_start, "ts_end": ts_end, "cursor_id": cursor, "lim": limit + 1},
+                    )
+                else:
+                    db_cursor.execute(
+                        sql,
+                        {"ts_start": ts_start, "ts_end": ts_end, "lim": limit + 1},
+                    )
+                if db_cursor.description is None:
+                    raise RuntimeError("Named query returned no result description.")
+                col_names = [desc[0] for desc in db_cursor.description]
+                raw_rows = db_cursor.fetchall()
+        finally:
+            # PostgreSQL (psycopg2) wraps every statement, including SELECT, in an implicit transaction.
+            # Without an explicit commit or rollback, the connection stays "idle in transaction".
+            try:
+                connection.rollback()
+            except PsycopgError:
+                logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
+                self._close_connection()
+        return col_names, raw_rows
+
+    @staticmethod
+    def _format_runs_jobs_detail_row(row: dict[str, Any]) -> dict[str, Any]:
+        """Add computed columns to a `runs_jobs_detail` result row.
+        Args:
+            row: Raw database row dict.
+        Returns:
+            Row dict enriched with computed fields.
+        """
+        ts_start = row.get("timestamp_start")
+        ts_end = row.get("timestamp_end")
+
+        # run_date: date portion of the job-level timestamp_start (DD-MM-YYYY, UTC).
+        if ts_start is not None:
+            row["run_date"] = datetime.fromtimestamp(ts_start / 1000, tz=timezone.utc).strftime("%d-%m-%Y")
+        else:
+            row["run_date"] = None
+
+        # run_status: message reclassification on all rows, else the raw status.
+        status = str(row.get("status", "")).lower()
+        message = str(row.get("message") or "").lower()
+        if "no data" in message:
+            row["run_status"] = "no data received"
+        elif "no records to send" in message:
+            row["run_status"] = "no data produced"
+        elif "timeout" in message:
+            row["run_status"] = "timeout"
+        else:
+            row["run_status"] = status
+
+        # formatted_tenant
+        row["formatted_tenant"] = str(row.get("tenant_id", "")).lower()
+
+        # elapsed_time: difference in milliseconds between job end and start.
+        if ts_start is not None and ts_end is not None:
+            row["elapsed_time"] = ts_end - ts_start
+        else:
+            row["elapsed_time"] = None
+
+        # start_time / end_time: formatted job timestamps (UTC).
+        if ts_start is not None:
+            row["start_time"] = datetime.fromtimestamp(ts_start / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            row["start_time"] = None
+
+        if ts_end is not None:
+            row["end_time"] = datetime.fromtimestamp(ts_end / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            row["end_time"] = None
+
+        return row
 
     @staticmethod
     def _format_row(row: dict[str, Any]) -> dict[str, Any]:
