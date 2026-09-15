@@ -37,6 +37,7 @@ from src.utils.constants import (
     REQUIRED_CONNECTION_FIELDS,
 )
 from src.utils.postgres_base import PsycopgError, PostgresBase
+from src.utils.utils import Pagination, QueryRow
 from src.writers.writer import HealthCheckError
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ class ReaderPostgres(PostgresBase):
         timestamp_end: int | None = None,
         cursor: int | None = None,
         limit: int = POSTGRES_DEFAULT_LIMIT,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    ) -> tuple[list[QueryRow], Pagination]:
         """Query run/job statistics with keyset pagination.
         Args:
             timestamp_start: Start of time window in epoch milliseconds.
@@ -146,7 +147,7 @@ class ReaderPostgres(PostgresBase):
 
         rows = [self._format_row(row) for row in rows]
 
-        pagination: dict[str, Any] = {
+        pagination: Pagination = {
             "cursor": next_cursor,
             "has_more": has_more,
             "limit": limit,
@@ -204,7 +205,7 @@ class ReaderPostgres(PostgresBase):
         timestamp_end: int | None = None,
         cursor: int | None = None,
         limit: int = POSTGRES_DEFAULT_LIMIT,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    ) -> tuple[list[QueryRow], Pagination]:
         """Execute a predefined named query with keyset pagination.
         Args:
             query_name: Registered named query identifier (see `SUPPORTED_QUERIES`).
@@ -262,7 +263,7 @@ class ReaderPostgres(PostgresBase):
 
         rows = [self._format_runs_jobs_detail_row(row) for row in rows]
 
-        pagination: dict[str, Any] = {
+        pagination: Pagination = {
             "cursor": next_cursor,
             "has_more": has_more,
             "limit": limit,

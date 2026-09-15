@@ -24,7 +24,7 @@ from typing import Any
 from src.readers.named_query_registry import SUPPORTED_QUERIES
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
-from src.utils.utils import build_error_response
+from src.utils.utils import build_error_response, build_success_response
 
 logger = logging.getLogger(__name__)
 
@@ -87,19 +87,7 @@ class HandlerNamedQuery:
             logger.exception("Named query %s failed for topic %s.", query_name, topic_name)
             return build_error_response(500, "database", "Named query failed.")
 
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(
-                {
-                    "success": True,
-                    "statusCode": 200,
-                    "data": rows,
-                    "pagination": pagination,
-                },
-                default=str,
-            ),
-        }
+        return build_success_response(rows, pagination)
 
     def _validate_event_path_params(self, topic_name: str, query_name: str) -> dict[str, Any] | None:
         """Validate the `topic_name`/`query_name` path parameters.

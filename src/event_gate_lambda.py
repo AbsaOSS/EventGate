@@ -16,7 +16,6 @@
 
 """AWS Lambda entry point for the EventGate service."""
 
-import logging
 import sys
 import time
 from typing import Any

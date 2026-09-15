@@ -16,7 +16,6 @@
 
 """AWS Lambda entry point for the EventStats service."""
 
-import logging
 import time
 from typing import Any
 

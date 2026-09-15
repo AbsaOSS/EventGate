@@ -20,13 +20,23 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypedDict
 
 import boto3
 
 from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, append_request_context, bind_request_context
 
 logger = logging.getLogger(__name__)
+
+type QueryRow = dict[str, Any]
+
+
+class Pagination(TypedDict):
+    """Keyset pagination metadata for a paginated query result."""
+
+    cursor: int | None
+    has_more: bool
+    limit: int
 
 
 def build_error_response(status: int, err_type: str, message: str) -> dict[str, Any]:
@@ -47,6 +57,29 @@ def build_error_response(status: int, err_type: str, message: str) -> dict[str, 
                 "statusCode": status,
                 "errors": [{"type": err_type, "message": message}],
             }
+        ),
+    }
+
+
+def build_success_response(data: list[QueryRow], pagination: Pagination) -> dict[str, Any]:
+    """Build a standardized JSON success response body for a paginated query result.
+    Args:
+        data: The rows returned by the query.
+        pagination: Pagination metadata (e.g. `cursor`, `has_more`, `limit`).
+    Returns:
+        A dictionary compatible with API Gateway Lambda Proxy integration.
+    """
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(
+            {
+                "success": True,
+                "statusCode": 200,
+                "data": data,
+                "pagination": pagination,
+            },
+            default=str,
         ),
     }
 

@@ -24,7 +24,7 @@ from typing import Any
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
 from src.utils.observability import append_request_context
-from src.utils.utils import build_error_response, resolve_request_topic
+from src.utils.utils import build_error_response, build_success_response, resolve_request_topic
 
 logger = logging.getLogger(__name__)
 
@@ -130,16 +130,4 @@ class HandlerStats:
         )
         logger.debug("Stats query completed.")
 
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(
-                {
-                    "success": True,
-                    "statusCode": 200,
-                    "data": rows,
-                    "pagination": pagination,
-                },
-                default=str,
-            ),
-        }
+        return build_success_response(rows, pagination)
