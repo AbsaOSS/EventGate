@@ -22,6 +22,7 @@ Resolution order:
 4. Fallback to <project_root>/conf even if missing (subsequent file operations will raise)
 """
 
+import logging
 import os
 
 
@@ -72,4 +73,18 @@ def resolve_conf_dir(env_var: str = "CONF_DIR"):
 
 CONF_DIR, INVALID_CONF_ENV = resolve_conf_dir()
 
-__all__ = ["resolve_conf_dir", "CONF_DIR", "INVALID_CONF_ENV"]
+
+def log_configuration_source(target_logger: logging.Logger) -> None:
+    """Report which configuration directory the service resolved.
+    Args:
+        target_logger: Logger of the calling entry point.
+    """
+    target_logger.debug("Using configuration directory.", extra={"conf_dir": CONF_DIR})
+    if INVALID_CONF_ENV:
+        target_logger.warning(
+            "CONF_DIR env var points to a non-existent path; falling back.",
+            extra={"invalid_conf_dir": INVALID_CONF_ENV, "conf_dir": CONF_DIR},
+        )
+
+
+__all__ = ["resolve_conf_dir", "log_configuration_source", "CONF_DIR", "INVALID_CONF_ENV"]

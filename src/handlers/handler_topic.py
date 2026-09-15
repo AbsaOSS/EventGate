@@ -19,6 +19,7 @@
 import json
 import logging
 import os
+import time
 from typing import Any
 
 import jwt
@@ -30,7 +31,8 @@ from src.handlers.handler_token import HandlerToken
 from src.utils.conf_path import CONF_DIR
 from src.utils.config_loader import TopicAccessMap, TopicKeyMap, load_access_config, load_topic_keys_config
 from src.utils.constants import TOPIC_DLCHANGE, TOPIC_RUNS, TOPIC_STATUS_CHANGE, TOPIC_TEST
-from src.utils.utils import build_error_response
+from src.utils.observability import append_request_context
+from src.utils.utils import build_error_response, resolve_request_topic
 from src.writers.writer import WriteError, Writer
 
 logger = logging.getLogger(__name__)
@@ -68,7 +70,7 @@ class HandlerTopic:
             The current instance with loaded topic schemas.
         """
         topic_schemas_dir = os.path.join(CONF_DIR, "topic_schemas")
-        logger.debug("Loading topic schemas from %s.", topic_schemas_dir)
+        logger.debug("Loading topic schemas.", extra={"topic_schemas_dir": topic_schemas_dir})
 
         with open(os.path.join(topic_schemas_dir, "runs.json"), "r", encoding="utf-8") as file:
             self.topics[TOPIC_RUNS] = json.load(file)
@@ -79,7 +81,7 @@ class HandlerTopic:
         with open(os.path.join(topic_schemas_dir, "status_change.json"), "r", encoding="utf-8") as file:
             self.topics[TOPIC_STATUS_CHANGE] = json.load(file)
 
-        logger.debug("Loaded topic schemas successfully.")
+        logger.debug("Loaded topic schemas.", extra={"topics": sorted(self.topics)})
         return self
 
     def with_load_topic_keys_config(self) -> "HandlerTopic":
@@ -109,17 +111,33 @@ class HandlerTopic:
         Returns:
             API Gateway response.
         """
-        topic_name = event["pathParameters"]["topic_name"].lower()
+        topic_name, topic_error = resolve_request_topic(event)
+        if topic_error is not None:
+            return topic_error
+
         method = event.get("httpMethod")
 
         if method == "GET":
             return self._get_topic_schema(topic_name)
         if method == "POST":
+            try:
+                # A message is mandatory here, so an empty body must fail parsing. `/stats` differs
+                # on purpose: there the body only carries optional filters.
+                topic_message = json.loads(event.get("body") or "")
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Request rejected: message body is not valid JSON.")
+                return build_error_response(400, "validation", "Request body must be valid JSON.")
+            if not isinstance(topic_message, dict):
+                logger.warning("Request rejected: message body is not a JSON object.")
+                return build_error_response(400, "validation", "Request body must be a JSON object.")
+
             return self._post_topic_message(
                 topic_name,
-                json.loads(event["body"]),
+                topic_message,
                 self.handler_token.extract_token(event.get("headers", {})),
             )
+
+        logger.warning("Request rejected: unsupported HTTP method.")
         return build_error_response(404, "route", "Resource not found")
 
     def _get_topic_schema(self, topic_name: str) -> dict[str, Any]:
@@ -129,9 +147,10 @@ class HandlerTopic:
         Returns:
             API Gateway response with topic schema or error.
         """
-        logger.debug("Handling GET TopicSchema(%s).", topic_name)
+        logger.debug("Handling GET topic schema.")
 
         if topic_name not in self.topics:
+            logger.warning("Request rejected: unknown topic.", extra={"known_topics": sorted(self.topics)})
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         return {
@@ -153,7 +172,7 @@ class HandlerTopic:
             jwt.PyJWTError: If token decoding fails.
             ValidationError: If message validation fails.
         """
-        logger.debug("Handling POST TopicMessage(%s).", topic_name)
+        logger.debug("Handling POST topic message.")
 
         if not self.access_config:
             logger.error("Access configuration not loaded.")
@@ -161,46 +180,61 @@ class HandlerTopic:
 
         try:
             token: dict[str, Any] = self.handler_token.decode_jwt(token_encoded)
-        except jwt.PyJWTError:  # type: ignore[attr-defined]
+        except jwt.PyJWTError as exc:  # type: ignore[attr-defined]
+            logger.warning(
+                "Request rejected: token verification failed.",
+                extra={"auth_error": type(exc).__name__, "token_present": bool(token_encoded)},
+            )
             return build_error_response(401, "auth", "Invalid or missing token")
 
         if topic_name not in self.topics:
+            logger.warning("Request rejected: unknown topic.", extra={"known_topics": sorted(self.topics)})
             return build_error_response(404, "topic", f"Topic '{topic_name}' not found")
 
         user = token.get("sub")
+        append_request_context(user=user)
+
         authorized_user = self._resolve_authorized_user(topic_name, user)
         if authorized_user is None:
+            logger.warning("Request rejected: user is not authorized for the topic.")
             return build_error_response(403, "auth", f"User '{user}' is not authorized for topic '{topic_name}'")
+
+        # Log under the configured spelling of the user, since the token casing may differ.
+        append_request_context(user=authorized_user)
 
         allowed, perm_error = self._validate_user_permissions(topic_name, authorized_user, topic_message)
         if not allowed:
+            logger.warning("Request rejected: user permissions do not allow the message.", extra={"reason": perm_error})
             return build_error_response(
                 403,
                 "permission",
                 perm_error or f"Permission denied for user '{authorized_user}' for POST to topic '{topic_name}'",
             )
 
-        logger.debug("Authorized user '%s' for topic '%s'.", authorized_user, topic_name)
+        logger.debug("User authorized for the topic.")
 
         try:
             validate(instance=topic_message, schema=self.topics[topic_name])
         except ValidationError as exc:
+            logger.warning(
+                "Request rejected: message does not match the topic schema.",
+                extra={"validation_path": str(exc.json_path), "validator": str(exc.validator)},
+            )
             return build_error_response(400, "validation", exc.message)
 
         message_key = self._resolve_message_key(topic_name, topic_message)
-        errors = []
-        for writer_name, writer in self.writers.items():
-            try:
-                writer.write(topic_name, topic_message, message_key)
-            except WriteError as exc:
-                errors.append({"type": writer_name, "message": str(exc)})
+        writers_ok, errors = self._write_to_all(topic_name, topic_message, message_key)
 
         if errors:
             logger.error(
-                "POST to topic '%s' failed: %d of %d writer(s) reported errors.",
-                topic_name,
-                len(errors),
-                len(self.writers),
+                "Message dispatch failed for at least one writer.",
+                extra={
+                    "writers_ok": writers_ok,
+                    "writers_failed": [error["type"] for error in errors],
+                    "writer_errors": errors,
+                    "writer_count": len(self.writers),
+                    "message_key": message_key,
+                },
             )
             return {
                 "statusCode": 500,
@@ -208,12 +242,63 @@ class HandlerTopic:
                 "body": json.dumps({"success": False, "statusCode": 500, "errors": errors}),
             }
 
-        logger.info("Message accepted for topic '%s' from user '%s'.", topic_name, authorized_user)
+        # The outcome fields are appended to the request context so the single INFO line emitted
+        # by `dispatch_request()` ("Request completed.") carries them; no second INFO line here.
+        append_request_context(message_key=message_key, writers_ok=writers_ok)
+        logger.debug("Message accepted.")
         return {
             "statusCode": 202,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"success": True, "statusCode": 202}),
         }
+
+    def _write_to_all(
+        self,
+        topic_name: str,
+        topic_message: dict[str, Any],
+        message_key: str,
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Dispatch a message to every configured writer, collecting per-writer outcomes.
+        Args:
+            topic_name: Target topic name.
+            topic_message: Message payload.
+            message_key: Resolved transport key.
+        Returns:
+            Tuple of (writers_ok, errors) where `writers_ok` lists the writers that accepted the
+            message and `errors` holds one entry per failing writer.
+        """
+        writers_ok: list[str] = []
+        errors: list[dict[str, str]] = []
+
+        for writer_name, writer in self.writers.items():
+            started_at = time.perf_counter()
+            try:
+                writer.write(topic_name, topic_message, message_key)
+                writers_ok.append(writer_name)
+                logger.debug(
+                    "Writer accepted the message.",
+                    extra={
+                        "writer": writer_name,
+                        "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                    },
+                )
+            except WriteError as exc:
+                errors.append({"type": writer_name, "message": str(exc)})
+                # WARNING on purpose: the request-level ERROR is emitted once by the caller with
+                # every failed writer folded in, so an alert on ERROR counts one failure once.
+                # The traceback rides on this line because the caller runs outside the `except`
+                # block and can no longer reach it.
+                logger.warning(
+                    "Writer failed to publish the message.",
+                    exc_info=True,
+                    extra={
+                        "writer": writer_name,
+                        "writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                        "writer_error": str(exc),
+                    },
+                )
+
+        return writers_ok, errors
 
     def _resolve_authorized_user(self, topic_name: str, user: str | None) -> str | None:
         """Match a token user to a configured user for a topic, ignoring case.
@@ -273,11 +358,11 @@ class HandlerTopic:
 
         key_value = message.get(key_field)
         if key_value is None:
-            logger.warning("Topic key field '%s' missing for topic '%s'.", key_field, topic_name)
+            logger.warning("Topic key field is missing from the message.", extra={"key_field": key_field})
             return ""
 
         if isinstance(key_value, (dict, list)):
-            logger.warning("Topic key field '%s' for topic '%s' is not scalar.", key_field, topic_name)
+            logger.warning("Topic key field is not a scalar value.", extra={"key_field": key_field})
             return ""
 
         return str(key_value)

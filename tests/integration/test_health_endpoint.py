@@ -17,6 +17,7 @@
 
 import json
 
+from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER
 from tests.integration.conftest import EventGateTestClient
 
 
@@ -44,3 +45,26 @@ class TestHealthEndpoint:
         assert "uptime_seconds" in body
         assert isinstance(body["uptime_seconds"], (int, float))
         assert body["uptime_seconds"] >= 0
+
+
+class TestCorrelationId:
+    """Tests for the request correlation id contract."""
+
+    def test_caller_correlation_id_is_returned(self, eventgate_client: EventGateTestClient) -> None:
+        """Test a caller supplied correlation id is echoed back in the response headers."""
+        response = eventgate_client.invoke("/health", "GET", headers={"X-Correlation-ID": "run-42"})
+
+        assert "run-42" == response["headers"][CORRELATION_ID_RESPONSE_HEADER]
+
+    def test_malformed_correlation_id_is_not_echoed(self, eventgate_client: EventGateTestClient) -> None:
+        """Test a malformed correlation id is rejected instead of being written back."""
+        response = eventgate_client.invoke("/health", "GET", headers={"X-Correlation-ID": "bad value\ninjected"})
+
+        assert CORRELATION_ID_RESPONSE_HEADER not in response["headers"]
+
+    def test_error_responses_carry_the_correlation_id(self, eventgate_client: EventGateTestClient) -> None:
+        """Test the correlation id is present on error responses too."""
+        response = eventgate_client.invoke("/unknown", "GET", headers={"X-Correlation-ID": "run-43"})
+
+        assert 404 == response["statusCode"]
+        assert "run-43" == response["headers"][CORRELATION_ID_RESPONSE_HEADER]

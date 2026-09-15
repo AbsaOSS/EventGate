@@ -49,10 +49,17 @@ TO eventgate_writer;
 -- Writer needs the SERIAL sequence (public_cps_za_runs_jobs.internal_id) to insert.
 GRANT USAGE, SELECT ON SEQUENCE public.public_cps_za_runs_jobs_internal_id_seq TO eventgate_writer;
 
--- Default privileges
-ALTER DEFAULT PRIVILEGES FOR ROLE eventgate_owner IN SCHEMA public
+-- Default privileges for objects the owner creates in the future.
+-- Executed as eventgate_owner: on managed Postgres (Aurora/RDS) the migration user is not a true superuser
+-- and holds only non-inherited membership in eventgate_owner, so "ALTER DEFAULT PRIVILEGES FOR ROLE eventgate_owner"
+-- is refused. SET ROLE assumes the owner identity, for which membership suffices.
+SET ROLE eventgate_owner;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT ON TABLES TO eventgate_reader;
-ALTER DEFAULT PRIVILEGES FOR ROLE eventgate_owner IN SCHEMA public
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE ON TABLES TO eventgate_writer;
-ALTER DEFAULT PRIVILEGES FOR ROLE eventgate_owner IN SCHEMA public
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO eventgate_writer;
+
+RESET ROLE;

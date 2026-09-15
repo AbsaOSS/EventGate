@@ -18,6 +18,7 @@
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import cached_property
@@ -84,7 +85,6 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - dlchange.")
         cursor.execute(
             self._queries.insert_dlchange,
             {
@@ -112,7 +112,6 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload (includes jobs array).
         """
-        logger.debug("Sending to Postgres - runs.")
         cursor.execute(
             self._queries.insert_run,
             {
@@ -126,6 +125,7 @@ class WriterPostgres(Writer, PostgresBase):
                 "timestamp_end": message["timestamp_end"],
             },
         )
+        logger.debug("Inserting run jobs.", extra={"job_count": len(message["jobs"])})
         for job in message["jobs"]:
             cursor.execute(
                 self._queries.insert_run_job,
@@ -147,7 +147,6 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - test.")
         cursor.execute(
             self._queries.insert_test,
             {
@@ -168,9 +167,11 @@ class WriterPostgres(Writer, PostgresBase):
             cursor: Database cursor.
             message: Event payload.
         """
-        logger.debug("Sending to Postgres - status_change.")
         ts = datetime.fromtimestamp(message["timestamp_event"] / 1000.0, tz=timezone.utc)
         event_type = message["event_type"]
+        # An unrecognized event_type leaves every timestamp below unset and still upserts a row,
+        # so this line is the only trace of why the stored record looks empty.
+        logger.debug("Sending to Postgres - status_change.", extra={"event_type": event_type})
 
         created_at: datetime | None = None
         started_at: datetime | None = None
@@ -232,43 +233,50 @@ class WriterPostgres(Writer, PostgresBase):
         Raises:
             WriteError: If publishing fails.
         """
+        # Checked first: a topic this writer does not persist must never fail the request because
+        # of a Postgres configuration problem it is not involved in.
+        if topic_name not in POSTGRES_WRITE_TOPICS:
+            logger.debug(
+                "Topic is not persisted by the Postgres writer - skipping.",
+                extra={"postgres_topics": sorted(POSTGRES_WRITE_TOPICS)},
+            )
+            return
+
         try:
             pg_config = self._pg_config
         except (RuntimeError, BotoCoreError, ClientError, ValueError, KeyError) as e:
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception(err_msg)
+            logger.exception("Postgres writer failed to load its configuration.")
             raise WriteError(err_msg) from e
 
         if not pg_config.get("database"):
-            logger.debug("No Postgres - skipping Postgres writer.")
+            logger.debug("No Postgres database configured - skipping Postgres writer.")
             return
 
         missing = [field for field in REQUIRED_CONNECTION_FIELDS if not pg_config.get(field)]
         if missing:
             msg = f"PostgreSQL connection field '{missing[0]}' not configured."
-            logger.error(msg)
+            logger.error("Postgres connection is not fully configured.", extra={"missing_fields": missing})
             raise WriteError(msg)
 
         if not self._is_psycopg2_available():
             raise WriteError("psycopg2 is not available for the configured Postgres writer.")
 
-        log_payload_at_trace(logger, "Postgres", topic_name, message)
-
-        if topic_name not in POSTGRES_WRITE_TOPICS:
-            msg = f"Unknown topic for Postgres/{topic_name}"
-            logger.debug(msg)
-            return  # no need to pollute the logs and no write should happen for these
+        log_payload_at_trace(logger, "Postgres", message)
 
         try:
             self._execute_with_retry(lambda conn: self._write_topic(conn, topic_name, message), retry=False)
         except (RuntimeError, PsycopgError, ValueError, KeyError) as e:
             self._close_connection()
             err_msg = f"The Postgres writer failed with unknown error: {e!s}"
-            logger.exception(err_msg)
+            logger.exception("Postgres writer failed while inserting the message.")
             raise WriteError(err_msg) from e
 
     def _write_topic(self, connection: Any, topic_name: str, message: dict[str, Any]) -> None:
         """Execute the insert for the given topic inside a transaction."""
+        started_at = time.perf_counter()
+        logger.debug("Inserting message into Postgres.")
+
         with connection.cursor() as cursor:
             if topic_name == TOPIC_DLCHANGE:
                 self._insert_dlchange(cursor, message)
@@ -279,6 +287,11 @@ class WriterPostgres(Writer, PostgresBase):
             elif topic_name == TOPIC_STATUS_CHANGE:
                 self._upsert_status_change(cursor, message)
         connection.commit()
+
+        logger.debug(
+            "Postgres accepted the message.",
+            extra={"writer_duration_ms": round((time.perf_counter() - started_at) * 1000, 2)},
+        )
 
     @staticmethod
     def _is_psycopg2_available() -> bool:

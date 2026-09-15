@@ -127,7 +127,10 @@ class PostgresBase:
         if options:
             connect_kwargs["options"] = options
         self._connection = psycopg2.connect(**connect_kwargs)
-        logger.debug("New PostgreSQL connection established.")
+        logger.info(
+            "New PostgreSQL connection established.",
+            extra={"database": pg_config["database"], "host": pg_config["host"], "port": pg_config["port"]},
+        )
         return self._connection
 
     def _close_connection(self) -> None:
@@ -138,7 +141,7 @@ class PostgresBase:
             try:
                 conn_to_close.close()
             except (PsycopgError, OSError):
-                logger.debug("Failed to close PostgreSQL connection.")
+                logger.debug("Failed to close PostgreSQL connection.", exc_info=True)
 
     def _execute_with_retry[T](self, operation: Callable[..., T], *, retry: bool = True) -> T:
         """Run `operation(connection)` with one retry on `OperationalError`.
@@ -161,5 +164,8 @@ class PostgresBase:
                 last_exc = exc
                 self._close_connection()
                 if attempt < max_attempts - 1:
-                    logger.warning("PostgreSQL connection lost, reconnecting.")
+                    logger.warning(
+                        "PostgreSQL connection lost, reconnecting.",
+                        extra={"attempt": attempt + 1, "max_attempts": max_attempts},
+                    )
         raise RuntimeError(f"Database connection failed after {max_attempts} attempts: {last_exc}") from last_exc

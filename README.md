@@ -128,10 +128,51 @@ Supporting configs:
 - `topic_schemas/*.json` – each file contains a JSON Schema for a topic. In the current code these are explicitly loaded inside `event_gate_lambda.py`. (Future enhancement: auto-discover or index file.)
 
 Environment variables:
-- `LOG_LEVEL` (optional) – defaults to `INFO`.
+- `LOG_LEVEL` (optional) – defaults to `INFO`. Accepts `TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`. An unknown value falls back to `INFO` and is reported with a warning.
+- `POWERTOOLS_LOG_LEVEL` (optional) – takes precedence over `LOG_LEVEL`.
+- `POWERTOOLS_SERVICE_NAME` (optional) – value of the `service` key in every log line. Defaults to `eventgate`.
+- `TRACE_REDACT_KEYS` (optional) – comma separated message keys redacted from `TRACE` payload logs. Defaults to `password,secret,token,key,apikey,api_key`.
+- `TRACE_MAX_BYTES` (optional) – maximum size of a logged `TRACE` payload. Defaults to `10000`.
 - `CONF_DIR` (optional) – directory containing `config.json` and `access.json`. Defaults to `conf`.
 - `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, database, user, password). Required for Postgres writer and stats reader.
 - `POSTGRES_SECRET_REGION` (optional) – AWS region of the Secrets Manager secret. Must be set together with `POSTGRES_SECRET_NAME`.
+
+## Logging & Correlation
+
+Both lambdas emit structured JSON logs through [AWS Lambda Powertools](https://docs.aws.amazon.com/powertools/python/latest/core/logger/). Every line carries the service name, log level, `function_request_id`, `cold_start` and a `correlation_id`. Static execution facts (`function_name`, `function_memory_size`, `function_arn`) are logged once per container on the cold start line `Lambda execution context.` instead of being repeated on every record.
+
+The correlation id is resolved per request in this order:
+1. The `X-Correlation-ID` request header, when it matches `^[A-Za-z0-9._:-]{1,128}$`.
+2. The `X-Request-ID` request header, with the same constraint.
+3. The API Gateway request id (`requestContext.requestId`).
+
+Callers that already have a run or job id should send it as `X-Correlation-ID` so their logs and EventGate logs can be joined. The resolved id is returned in the `X-Correlation-ID` response header of every response, including errors.
+
+Log levels used by the service:
+
+| Level     | Content                                                                                       |
+|-----------|-----------------------------------------------------------------------------------------------|
+| `TRACE`   | Full message payloads, redacted and size capped. Never enable by default.                      |
+| `DEBUG`   | Configuration loading, lazy initialization, per-writer send attempts, connection reuse.        |
+| `INFO`    | Exactly one `Request completed.` line per request, carrying the outcome fields (`status_code`, `duration_ms`, and e.g. `writers_ok`, `message_key`, `row_count`); cold start initialization. |
+| `WARNING` | Rejected requests (auth, authorization, validation), degraded health, Kafka flush retries, individual writer failures. |
+| `ERROR`   | Partial fan-out failures (one aggregated line per failed request), failed queries, unhandled request errors. |
+
+Every non-2xx response has exactly one log line explaining the cause, and every failed request produces exactly one `ERROR` record — per-writer failure detail is reported at `WARNING`.
+
+Example CloudWatch Logs Insights queries:
+
+```text
+fields @timestamp, level, message, status_code, duration_ms
+| filter correlation_id = "<id>"
+| sort @timestamp asc
+```
+
+```text
+fields @timestamp, topic, user, message
+| filter level = "WARNING" and status_code = 403
+| stats count() by user, topic
+```
 
 ## Local Development & Testing
 

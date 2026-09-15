@@ -45,7 +45,7 @@ Requires the Flyway CLI (needs a JDK 17+) and Docker.
 
 ```zsh
 # 1. Start a local Postgres docker container
-docker run --name=eventgate_db -e POSTGRES_PASSWORD=changeme -e POSTGRES_DB=eventgate_db -p 5432:5432 -d postgres:16
+docker run --name=eventgate_db -e POSTGRES_PASSWORD=changeme -e POSTGRES_DB=eventgate -p 5432:5432 -d postgres:16
 
 # 2. Apply the migrations (run from the repo root, where flyway.toml lives)
 export FLYWAY_PLACEHOLDERS_EVENTGATE_OWNER_PASSWORD=changeme

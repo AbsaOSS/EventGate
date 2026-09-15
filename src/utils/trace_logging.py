@@ -26,13 +26,15 @@ from src.utils.logging_levels import TRACE_LEVEL
 from src.utils.safe_serialization import safe_serialize_for_log
 
 
-def log_payload_at_trace(logger: logging.Logger, writer_name: str, topic_name: str, message: dict[str, Any]) -> None:
+def log_payload_at_trace(logger: logging.Logger, writer_name: str, message: dict[str, Any]) -> None:
     """Log message payload at TRACE level with safe serialization.
+
+    The topic is not repeated here; it is already bound to every log line of the
+    request by `resolve_request_topic()`.
 
     Args:
         logger: Logger instance to use for logging.
         writer_name: Name of the writer (e.g., "EventBridge", "Kafka", "Postgres").
-        topic_name: Topic name being written to.
         message: Message payload to log.
     """
     if not logger.isEnabledFor(TRACE_LEVEL):
@@ -42,10 +44,10 @@ def log_payload_at_trace(logger: logging.Logger, writer_name: str, topic_name: s
         safe_payload = safe_serialize_for_log(message)
         if safe_payload:
             logger.trace(  # type: ignore[attr-defined]
-                "%s payload topic=%s payload=%s", writer_name, topic_name, safe_payload
+                "Writer payload.", extra={"writer": writer_name, "payload": safe_payload}
             )
     except (TypeError, ValueError):  # pragma: no cover - defensive serialization guard
-        logger.trace("%s payload topic=%s <unserializable>", writer_name, topic_name)  # type: ignore[attr-defined]
+        logger.trace("Writer payload is not serializable.", extra={"writer": writer_name})  # type: ignore[attr-defined]
 
 
 __all__ = ["log_payload_at_trace"]

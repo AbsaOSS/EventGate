@@ -228,6 +228,19 @@ def test_write_unknown_topic_skips_silently(reset_env, monkeypatch):
     assert 0 == len(store)
 
 
+def test_write_unknown_topic_ignores_broken_postgres_configuration(reset_env, monkeypatch):
+    """A topic Postgres does not persist must not fail because Postgres itself is misconfigured."""
+    writer = WriterPostgres({})
+    monkeypatch.setattr(
+        type(writer),
+        "_pg_config",
+        property(lambda self: (_ for _ in ()).throw(RuntimeError("secret unavailable"))),
+    )
+    monkeypatch.setattr(pb, "psycopg2", None)
+
+    writer.write("public.cps.za.unknown", {})
+
+
 def test_write_success_known_topic(reset_env, monkeypatch):
     store = []
     monkeypatch.setattr(pb, "psycopg2", DummyPsycopg(store))
