@@ -25,15 +25,6 @@ from src.handlers.handler_stats import HandlerStats
 
 
 @pytest.fixture
-def topics() -> dict[str, dict[str, Any]]:
-    """Minimal topics dict matching HandlerTopic.topics."""
-    return {
-        "public.cps.za.runs": {"type": "object", "properties": {}},
-        "public.cps.za.test": {"type": "object", "properties": {}},
-    }
-
-
-@pytest.fixture
 def mock_reader() -> MagicMock:
     """Mock ReaderPostgres."""
     mock = MagicMock()

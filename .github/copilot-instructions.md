@@ -51,6 +51,7 @@ Testing
 - No real API/DB calls in unit tests
 - Use `mocker.patch("module.dependency")` or `mocker.patch.object(Class, "method")`
 - Assert pattern: `assert expected == actual`
+- Pylint is disabled for `tests/`. Do not add any `# pylint: disable=...` comments in test files
 
 Quality gates (run after changes, fix only if below threshold)
 - Run all quality gates at once: `make qa`

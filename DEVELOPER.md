@@ -27,6 +27,8 @@ EventGate ships two Lambda functions:
 ## Prerequisites
 - Python 3.13 (current required runtime)
 - Docker (for local integration tests using testcontainers)
+- Flyway CLI 13.x, Community edition (for local integration tests).
+  Requires a JDK 17+ (CI uses temurin 21). See [database/README.md](database/README.md).
 
 ## Set Up Python Environment
 ```shell
