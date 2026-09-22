@@ -535,3 +535,22 @@ class EventStatsTestClient(LambdaTestClient):
             headers=headers,
             path_parameters={"topic_name": topic_name},
         )
+
+    def post_named_query(
+        self,
+        topic_name: str,
+        query_name: str,
+        body: Dict[str, Any],
+        token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Execute a predefined named query for a topic."""
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return self.invoke(
+            "/stats/{topic_name}/query/{query_name}",
+            "POST",
+            body=body,
+            headers=headers,
+            path_parameters={"topic_name": topic_name, "query_name": query_name},
+        )

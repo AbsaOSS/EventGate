@@ -149,3 +149,12 @@ def valid_payload():
         "environment": "dev",
         "timestamp": 123,
     }
+
+
+@pytest.fixture
+def topics() -> dict[str, dict]:
+    """Minimal topics dict matching HandlerTopic.topics."""
+    return {
+        "public.cps.za.runs": {"type": "object", "properties": {}},
+        "public.cps.za.test": {"type": "object", "properties": {}},
+    }

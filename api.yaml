@@ -328,6 +328,144 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /stats/{topic_name}/query/{query_name}:
+    post:
+      summary: Execute a predefined named query
+      description: >
+        Runs a curated, server-side named query by name and returns its
+        paginated result set.
+      security: []
+      parameters:
+        - name: topic_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the topic to query
+        - name: query_name
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [runs_jobs_detail]
+          description: Identifier of the named query to run
+      requestBody:
+        description: Query parameters including time window, pagination cursor, and limit
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timestamp_start:
+                  type: integer
+                  nullable: true
+                  description: Start of time window in epoch milliseconds (default now - 7 days)
+                  example: 1704067200000
+                timestamp_end:
+                  type: integer
+                  nullable: true
+                  description: End of time window in epoch milliseconds (default now)
+                  example: 1706745600000
+                cursor:
+                  type: integer
+                  nullable: true
+                  description: Last internal_id from previous page (keyset pagination)
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000
+                  default: 50
+                  description: Maximum number of records per page
+      responses:
+        '200':
+          description: Paginated named-query result set with computed fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  statusCode:
+                    type: integer
+                    example: 200
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_id:
+                          type: string
+                        job_ref:
+                          type: string
+                        tenant_id:
+                          type: string
+                        internal_id:
+                          type: integer
+                        catalog_id:
+                          type: string
+                        status:
+                          type: string
+                        run_date:
+                          type: string
+                          description: Date of the job-level timestamp_start (DD-MM-YYYY, UTC)
+                        run_status:
+                          type: string
+                          description: >
+                            Computed status bucket. Message reclassification is applied to
+                            every row (no data received, no data produced, timeout), else the
+                            raw status is preserved (succeeded, failed, killed, skipped).
+                        formatted_tenant:
+                          type: string
+                          description: Lowercase tenant_id
+                        elapsed_time:
+                          type: integer
+                          nullable: true
+                          description: Difference in milliseconds between job end and start
+                        start_time:
+                          type: string
+                          description: Formatted job start (YYYY-MM-DD HH:MM:SS UTC)
+                        end_time:
+                          type: string
+                          description: Formatted job end (YYYY-MM-DD HH:MM:SS UTC)
+                      additionalProperties: true
+                  pagination:
+                    type: object
+                    properties:
+                      cursor:
+                        type: integer
+                        nullable: true
+                      has_more:
+                        type: boolean
+                      limit:
+                        type: integer
+        '400':
+          description: Invalid parameters, unsupported topic, or unknown query_name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User not authorized for topic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Database query error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /terminate:
     post:
       summary: Terminates lambda environment
