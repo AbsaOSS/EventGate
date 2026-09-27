@@ -161,13 +161,13 @@ jobs:
         uses: ./.github/actions/setup-dev-python-env
 
       - name: Set up Java
-        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Flyway
-        uses: red-gate/setup-flyway@e024a17cd0890383f6996ed7edbded24c54ed86c
+        uses: red-gate/setup-flyway@85d1712c775f0f2bcf70523d0caf1df46a4761d5
         with:
           version: '13.3.0'
           edition: community
