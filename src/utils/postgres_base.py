@@ -129,7 +129,12 @@ class PostgresBase:
         self._connection = psycopg2.connect(**connect_kwargs)
         logger.info(
             "New PostgreSQL connection established.",
-            extra={"database": pg_config["database"], "host": pg_config["host"], "port": pg_config["port"]},
+            extra={
+                "database": pg_config["database"],
+                "host": pg_config["host"],
+                "port": pg_config["port"],
+                "user": pg_config["user"],
+            },
         )
         return self._connection
 
