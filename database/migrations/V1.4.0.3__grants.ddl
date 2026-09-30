@@ -47,7 +47,9 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
 TO eventgate_writer;
 
 -- Writer needs the SERIAL sequence (public_cps_za_runs_jobs.internal_id) to insert.
+GRANT USAGE, SELECT ON SEQUENCE public.public_cps_za_runs_internal_id_seq TO eventgate_writer;
 GRANT USAGE, SELECT ON SEQUENCE public.public_cps_za_runs_jobs_internal_id_seq TO eventgate_writer;
+GRANT USAGE, SELECT ON SEQUENCE public.public_cps_za_dlchange_internal_id_seq TO eventgate_writer;
 
 -- Default privileges for objects the owner creates in the future.
 -- Executed as eventgate_owner: on managed Postgres (Aurora/RDS) the migration user is not a true superuser
