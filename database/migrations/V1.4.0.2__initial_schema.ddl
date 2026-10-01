@@ -17,6 +17,7 @@
 
 -- Run header rows for the runs topic.
 CREATE TABLE IF NOT EXISTS public_cps_za_runs (
+    internal_id SERIAL PRIMARY KEY,
     event_id VARCHAR(255) NOT NULL,
     job_ref VARCHAR(255) NOT NULL,
     tenant_id VARCHAR(255) NOT NULL,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS public_cps_za_runs_jobs (
 
 -- Data lake change events.
 CREATE TABLE IF NOT EXISTS public_cps_za_dlchange (
+    internal_id SERIAL PRIMARY KEY,
     event_id VARCHAR(255) NOT NULL,
     tenant_id VARCHAR(255) NOT NULL,
     source_app VARCHAR(255) NOT NULL,

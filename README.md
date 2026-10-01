@@ -135,7 +135,7 @@ Environment variables:
 - `TRACE_REDACT_KEYS` (optional) – comma separated message keys redacted from `TRACE` payload logs. Defaults to `password,secret,token,key,apikey,api_key`.
 - `TRACE_MAX_BYTES` (optional) – maximum size of a logged `TRACE` payload. Defaults to `10000`.
 - `CONF_DIR` (optional) – directory containing `config.json` and `access.json`. Defaults to `conf`.
-- `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, database, user, password). Required for Postgres writer and stats reader.
+- `POSTGRES_SECRET_NAME` (optional) – AWS Secrets Manager secret name holding PostgreSQL connection credentials (host, port, database, user, password). Each Lambda should point at its own least-privilege role's secret (see `database/README.md` for the role/grant reference).
 - `POSTGRES_SECRET_REGION` (optional) – AWS region of the Secrets Manager secret. Must be set together with `POSTGRES_SECRET_NAME`.
 
 ## Logging & Correlation
@@ -206,7 +206,7 @@ Configured via `kafka_bootstrap_server`. (Future: support auth properties / TLS 
 Publishes events to the configured `event_bus_arn` using put events API.
 
 ### Postgres Writer
-Writes enriched event data (runs + jobs) into PostgreSQL tables. Connection credentials are loaded from AWS Secrets Manager using the `POSTGRES_SECRET_NAME` and `POSTGRES_SECRET_REGION` environment variables.
+Writes enriched event data (runs + jobs) into PostgreSQL tables. Connection credentials are loaded from AWS Secrets Manager using the `POSTGRES_SECRET_NAME` and `POSTGRES_SECRET_REGION` environment variables, which should reference the `eventgate_writer` role's secret (see `database/README.md`).
 
 ## Troubleshooting
 | Symptom | Possible Cause | Action |
