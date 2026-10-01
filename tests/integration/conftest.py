@@ -311,23 +311,30 @@ def lambda_handler_factory(
     os.environ["LOG_LEVEL"] = "DEBUG"
     os.environ["AWS_DEFAULT_REGION"] = mock_aws_services["region"]
 
-    # Store PostgreSQL credentials in mocked Secrets Manager so WriterPostgres can find them.
+    # Store PostgreSQL credentials in mocked Secrets Manager so WriterPostgres/ReaderPostgres can
+    # find them. Mirror production: each Lambda gets its own secret for its own least-privilege
+    # role (eventgate_writer / eventgate_reader), created by Flyway's V1.4.0.1__create_roles.ddl.
     parsed_dsn = urlparse(postgres_container)
-    pg_secret = {
-        "database": parsed_dsn.path.lstrip("/"),
-        "host": parsed_dsn.hostname,
-        "port": parsed_dsn.port,
-        "user": parsed_dsn.username,
-        "password": parsed_dsn.password,
-    }
+
+    def _pg_secret_for_role(role_user: str) -> str:
+        secret = {
+            "database": parsed_dsn.path.lstrip("/"),
+            "host": parsed_dsn.hostname,
+            "port": parsed_dsn.port,
+            "user": role_user,
+            "password": TEST_ROLE_PASSWORD,
+        }
+        return json.dumps(secret)
+
     sm_client = boto3.client(
         "secretsmanager",
         region_name=mock_aws_services["region"],
     )
-    sm_client.create_secret(Name="eventgate/postgres", SecretString=json.dumps(pg_secret))
-    os.environ["POSTGRES_SECRET_NAME"] = "eventgate/postgres"
+    sm_client.create_secret(Name="eventgate/writer", SecretString=_pg_secret_for_role("eventgate_writer"))
+    sm_client.create_secret(Name="eventgate/reader", SecretString=_pg_secret_for_role("eventgate_reader"))
     os.environ["POSTGRES_SECRET_REGION"] = mock_aws_services["region"]
-    logger.debug("PostgreSQL secret stored in moto Secrets Manager.")
+    os.environ["POSTGRES_SECRET_NAME"] = "eventgate/writer"
+    logger.debug("PostgreSQL writer/reader secrets stored in moto Secrets Manager.")
 
     # Create test config with container URLs.
     test_config_dir = PROJECT_ROOT / "tests" / "integration" / ".tmp_conf"
@@ -406,7 +413,9 @@ def stats_lambda_handler(
     ``lambda_handler_factory`` to trigger that setup, then import the
     stats Lambda module.
     """
-    # lambda_handler_factory has already set up the env; import stats Lambda.
+    # lambda_handler_factory has already set up the env, but pointed POSTGRES_SECRET_NAME at the
+    # eventgate_writer secret for WriterPostgres, so changing it now for the eventgate_reader instead.
+    os.environ["POSTGRES_SECRET_NAME"] = "eventgate/reader"
     from src.event_stats_lambda import lambda_handler as stats_handler
 
     return stats_handler
