@@ -128,6 +128,46 @@ class TestNamedQueryRunStatus:
         assert {"timeout", "no data received", "no data produced"}.issubset(statuses)
 
 
+class TestNamedQueryAggregation:
+    """End-to-end for the dedicated runs_jobs_detail_aggregation named query."""
+
+    _AGG_QUERY = "runs_jobs_detail_aggregation"
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seed_events(self, eventgate_client: EventGateTestClient, valid_token: str) -> None:
+        """Seed a mix of succeeded/failed jobs to aggregate over."""
+        _post_job(eventgate_client, valid_token, "succeeded", None, "cq-aggregation-test")
+        _post_job(eventgate_client, valid_token, "succeeded", None, "cq-aggregation-test")
+        _post_job(eventgate_client, valid_token, "failed", "boom", "cq-aggregation-test")
+
+    def test_returns_populated_aggregations(self, stats_client: EventStatsTestClient) -> None:
+        """Test that totals/success_rate/timeline reflect the seeded jobs, with no data/pagination keys."""
+        response = stats_client.post_named_query("public.cps.za.runs", self._AGG_QUERY, {})
+
+        assert 200 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert True is body["success"]
+        assert "aggregations" in body
+        assert "data" not in body
+        assert "pagination" not in body
+
+        aggregations = body["aggregations"]
+        assert aggregations["total_runs"] >= 3
+        assert aggregations["succeeded"] >= 2
+        assert aggregations["failed"] >= 1
+        timeline = aggregations["timeline"]
+        assert timeline["bucket"] in ("hour", "day")
+        assert sum(entry["total"] for entry in timeline["entries"]) == aggregations["total_runs"]
+
+    def test_cursor_or_limit_returns_400(self, stats_client: EventStatsTestClient) -> None:
+        """Test that cursor/limit are rejected for the aggregation query (not silently ignored)."""
+        response = stats_client.post_named_query("public.cps.za.runs", self._AGG_QUERY, {"limit": 10})
+
+        assert 400 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert "limit" in body["errors"][0]["message"]
+
+
 class TestNamedQueryPagination:
     """Keyset pagination for runs_jobs_detail."""
 

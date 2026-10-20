@@ -251,6 +251,154 @@ class TestReadNamedQuery:
             reader.read_named_query(query_name="does_not_exist")
 
 
+class TestReadAggregations:
+    """Tests for read_aggregations execution."""
+
+    def test_build_aggregations_shapes_populated_rows(self) -> None:
+        """Test that _build_aggregations shapes summary/timeline rows into a typed result."""
+        summary_row = {
+            "total_runs": 2,
+            "total_tenants": 1,
+            "total_catalogs": 1,
+            "succeeded": 1,
+            "failed": 1,
+            "avg_duration_ms": 1800000.0,
+        }
+        timeline_rows = [{"bucket_start": 1704067200000, "total": 2, "succeeded": 1, "failed": 1}]
+
+        aggregations = ReaderPostgres._build_aggregations(
+            ts_start=1704067200000,
+            ts_end=1704070800000,
+            bucket="hour",
+            summary_row=summary_row,
+            timeline_rows=timeline_rows,
+        )
+
+        assert 1704067200000 == aggregations.window.timestamp_start
+        assert 1704070800000 == aggregations.window.timestamp_end
+        assert 2 == aggregations.total_runs
+        assert 1 == aggregations.total_tenants
+        assert 1 == aggregations.total_catalogs
+        assert 1 == aggregations.succeeded
+        assert 1 == aggregations.failed
+        assert 50.0 == aggregations.success_rate
+        assert 1800000 == aggregations.avg_duration_ms
+        assert "hour" == aggregations.timeline.bucket
+        assert 1 == len(aggregations.timeline.entries)
+        assert 1704067200000 == aggregations.timeline.entries[0].bucket_start
+        assert 2 == aggregations.timeline.entries[0].total
+
+    def test_build_aggregations_zeroes_empty_window(self) -> None:
+        """Test that an empty summary/timeline still produces a fully-populated, zeroed result."""
+        summary_row = {
+            "total_runs": 0,
+            "total_tenants": 0,
+            "total_catalogs": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "avg_duration_ms": None,
+        }
+
+        aggregations = ReaderPostgres._build_aggregations(
+            ts_start=1704067200000, ts_end=1704070800000, bucket="hour", summary_row=summary_row, timeline_rows=[]
+        )
+
+        assert 0 == aggregations.total_runs
+        assert 0.0 == aggregations.success_rate
+        assert aggregations.avg_duration_ms is None
+        assert [] == aggregations.timeline.entries
+
+    @pytest.mark.parametrize(
+        "window_ms, expected_bucket, expected_fragment",
+        [
+            pytest.param(24 * 60 * 60 * 1000, "hour", "date_trunc('hour'", id="7_day_or_less_is_hourly"),
+            pytest.param(30 * 24 * 60 * 60 * 1000, "day", "date_trunc('day'", id="over_7_days_is_daily"),
+        ],
+    )
+    def test_window_length_selects_timeline_bucket(
+        self,
+        reader: ReaderPostgres,
+        pg_secret: dict[str, Any],
+        window_ms: int,
+        expected_bucket: str,
+        expected_fragment: str,
+    ) -> None:
+        """Test that the window length picks the hourly vs. daily timeline SQL variant."""
+        mock_conn = _make_mock_multi_query_connection(
+            [
+                (
+                    [
+                        ("total_runs",),
+                        ("total_tenants",),
+                        ("total_catalogs",),
+                        ("succeeded",),
+                        ("failed",),
+                        ("avg_duration_ms",),
+                    ],
+                    [(0, 0, 0, 0, 0, None)],
+                ),
+                ([("bucket_start",), ("total",), ("succeeded",), ("failed",)], []),
+            ]
+        )
+
+        with (
+            patch("boto3.Session") as mock_session,
+            patch.object(pb, "psycopg2") as mock_pg,
+        ):
+            mock_client = MagicMock()
+            mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
+            mock_session.return_value.client.return_value = mock_client
+            mock_pg.connect.return_value = mock_conn
+
+            aggregations = reader.read_aggregations(
+                query_name="runs_jobs_detail_aggregation", timestamp_start=0, timestamp_end=window_ms
+            )
+
+            executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args_list[1][0][0]
+
+        assert expected_bucket == aggregations.timeline.bucket
+        assert expected_fragment in executed_sql
+
+    def test_unknown_query_name_raises_runtime_error(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
+        """Test that an unknown aggregation query_name raises RuntimeError."""
+        with (
+            patch("boto3.Session") as mock_session,
+            pytest.raises(RuntimeError, match="Unknown aggregation query"),
+        ):
+            mock_client = MagicMock()
+            mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
+            mock_session.return_value.client.return_value = mock_client
+            reader.read_aggregations(query_name="does_not_exist")
+
+
+def _make_mock_multi_query_connection(
+    query_results: list[tuple[list[tuple[str, ...]], list[tuple[Any, ...]]]],
+) -> MagicMock:
+    """Build a mock psycopg2 connection whose cursor returns a different result per `execute` call."""
+    mock_cursor = MagicMock()
+    descriptions = [description for description, _ in query_results]
+    rows = [query_rows for _, query_rows in query_results]
+    mock_cursor.description = descriptions[0]
+
+    call_state = {"index": -1}
+
+    def _execute(*_args: Any, **_kwargs: Any) -> None:
+        call_state["index"] += 1
+        mock_cursor.description = descriptions[call_state["index"]]
+        mock_cursor.fetchall.return_value = rows[call_state["index"]]
+        mock_cursor.fetchone.return_value = rows[call_state["index"]][0] if rows[call_state["index"]] else None
+
+    mock_cursor.execute.side_effect = _execute
+
+    mock_conn = MagicMock()
+    mock_conn.closed = 0
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    return mock_conn
+
+
 def _base_row(
     status: str,
     message: str | None,

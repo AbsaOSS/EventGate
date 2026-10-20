@@ -21,7 +21,7 @@ import pytest
 
 from src.utils.observability import CORRELATION_ID_RESPONSE_HEADER, bind_request_context
 from src.utils.observability import logger as powertools_logger
-from src.utils.utils import build_error_response, dispatch_request, resolve_request_topic
+from src.utils.utils import build_aggregations_response, build_error_response, dispatch_request, resolve_request_topic
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,18 @@ def test_build_error_response_structure():
     assert 1 == len(body["errors"])
     assert "topic" == body["errors"][0]["type"]
     assert "Topic not found" == body["errors"][0]["message"]
+
+
+## build_aggregations_response()
+def test_build_aggregations_response_structure():
+    """Test that build_aggregations_response returns the distinct envelope (no data/pagination keys)."""
+    resp = build_aggregations_response({"total_runs": 10})
+
+    body = json.loads(resp["body"])
+    assert body["success"] is True
+    assert 200 == body["statusCode"]
+    assert {"total_runs": 10} == body["aggregations"]
+    assert "data" not in body
 
 
 ## resolve_request_topic()

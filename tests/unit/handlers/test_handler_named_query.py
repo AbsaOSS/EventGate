@@ -21,7 +21,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.handlers.handler_named_query import HandlerNamedQuery, NamedQueryParams
+from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, NamedQueryParams
+from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations
 
 
 @pytest.fixture
@@ -31,6 +32,9 @@ def mock_reader() -> MagicMock:
     mock.read_named_query.return_value = (
         [{"event_id": "ev1", "internal_id": 1, "status": "succeeded", "run_status": "succeeded"}],
         {"cursor": None, "has_more": False, "limit": 50},
+    )
+    mock.read_aggregations.return_value = RunsJobsAggregations(
+        window=AggregationsWindow(timestamp_start=1000, timestamp_end=2000), total_runs=1, succeeded=1
     )
     return mock
 
@@ -193,6 +197,74 @@ class TestHandlerNamedQueryErrors:
         body = json.loads(response["body"])
         assert False is body["success"]
         assert "database" == body["errors"][0]["type"]
+
+
+class TestHandlerAggregationQuery:
+    """Tests for the window-wide aggregation branch (`runs_jobs_detail_aggregation`)."""
+
+    def test_returns_200_with_aggregations(self, handler: HandlerNamedQuery, mock_reader: MagicMock) -> None:
+        """Test that a supported aggregation query returns 200 with an `aggregations` key, not `data`/`pagination`."""
+        response = handler.handle_request(_make_event(query_name="runs_jobs_detail_aggregation"))
+
+        assert 200 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert True is body["success"]
+        assert "aggregations" in body
+        assert "data" not in body
+        assert "pagination" not in body
+        assert 1 == body["aggregations"]["total_runs"]
+        mock_reader.read_aggregations.assert_called_once_with(
+            query_name="runs_jobs_detail_aggregation", timestamp_start=None, timestamp_end=None
+        )
+
+    def test_cursor_or_limit_in_body_returns_400(self, handler: HandlerNamedQuery) -> None:
+        """Test that `cursor`/`limit` are rejected (400) instead of silently ignored for aggregation queries."""
+        response = handler.handle_request(
+            _make_event(query_name="runs_jobs_detail_aggregation", body={"cursor": 1, "limit": 10})
+        )
+
+        assert 400 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert "cursor" in body["errors"][0]["message"]
+        assert "limit" in body["errors"][0]["message"]
+
+    def test_database_error_returns_500(self, handler: HandlerNamedQuery, mock_reader: MagicMock) -> None:
+        """Test that a RuntimeError from `read_aggregations` returns 500."""
+        mock_reader.read_aggregations.side_effect = RuntimeError("boom")
+
+        response = handler.handle_request(_make_event(query_name="runs_jobs_detail_aggregation"))
+
+        assert 500 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert "database" == body["errors"][0]["type"]
+
+
+class TestValidateAggregationEventBody:
+    """Tests for `HandlerNamedQuery._validate_aggregation_event_body`."""
+
+    @pytest.mark.parametrize(
+        "body, expected_message_fragment",
+        [
+            pytest.param("not json", "valid JSON", id="invalid_json"),
+            pytest.param("[1, 2, 3]", "JSON object", id="non_dict_json"),
+            pytest.param(json.dumps({"timestamp_start": "bad"}), "timestamp_start", id="invalid_timestamp_start"),
+        ],
+    )
+    def test_returns_error_response_for_invalid_body(self, body: str, expected_message_fragment: str) -> None:
+        """Test that each invalid body returns a 400 with the expected message."""
+        result = HandlerNamedQuery._validate_aggregation_event_body(body)
+
+        assert isinstance(result, dict)
+        assert 400 == result["statusCode"]
+        assert expected_message_fragment in json.loads(result["body"])["errors"][0]["message"]
+
+    def test_returns_parsed_params_for_valid_body(self) -> None:
+        """Test that a valid body with only `timestamp_start`/`timestamp_end` parses correctly."""
+        result = HandlerNamedQuery._validate_aggregation_event_body(
+            json.dumps({"timestamp_start": 1000, "timestamp_end": 2000})
+        )
+
+        assert AggregationQueryParams(1000, 2000) == result
 
 
 class TestValidateEventPathParams:
