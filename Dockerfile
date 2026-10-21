@@ -57,6 +57,7 @@ RUN \
     wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v${CONFLUENT_KAFKA_VERSION}.tar.gz && \
     tar -xf v${CONFLUENT_KAFKA_VERSION}.tar.gz && \
     cd /tmp/env-install-workdir/librdkafka/librdkafka-${CONFLUENT_KAFKA_VERSION} && \
+    ./configure && make && make install && \
   echo "###################" && \
   echo "### pip installs ###" && \
   echo "###################" && \
