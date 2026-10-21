@@ -28,15 +28,19 @@ import aiosql
 import psycopg2.extensions
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.readers.named_query_registry import SUPPORTED_QUERIES
+from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
+from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_QUERIES
 from src.utils.constants import (
+    AGGREGATION_BUCKET_THRESHOLD_MS,
     POSTGRES_DEFAULT_LIMIT,
     POSTGRES_DEFAULT_WINDOW_MS,
     POSTGRES_MAX_LIMIT,
     POSTGRES_STATEMENT_TIMEOUT_MS,
     REQUIRED_CONNECTION_FIELDS,
+    TIMELINE_BUCKET_DAY,
+    TIMELINE_BUCKET_HOUR,
 )
-from src.utils.postgres_base import PsycopgError, PostgresBase
+from src.utils.postgres_base import PostgresConfig, PsycopgError, PostgresBase
 from src.utils.utils import Pagination, QueryRow
 from src.writers.writer import HealthCheckError
 
@@ -46,6 +50,7 @@ _SQL_DIR = Path(__file__).parent / "sql"
 
 type DbRow = tuple[Any, ...]
 type RawQueryResult = tuple[list[str], list[DbRow]]
+type AggregationQueryResult = tuple[dict[str, Any], list[dict[str, Any]]]
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,9 @@ class ReaderQueries:
     get_stats_with_cursor: str
     get_runs_jobs_detail: str
     get_runs_jobs_detail_with_cursor: str
+    get_runs_jobs_aggregations: str
+    get_runs_jobs_timeline_hourly: str
+    get_runs_jobs_timeline_daily: str
 
 
 class ReaderPostgres(PostgresBase):
@@ -82,7 +90,31 @@ class ReaderPostgres(PostgresBase):
             get_runs_jobs_detail_with_cursor=(
                 queries.get_runs_jobs_detail_with_cursor.sql  # pylint: disable=no-member
             ),
+            get_runs_jobs_aggregations=queries.get_runs_jobs_aggregations.sql,  # pylint: disable=no-member
+            get_runs_jobs_timeline_hourly=queries.get_runs_jobs_timeline_hourly.sql,  # pylint: disable=no-member
+            get_runs_jobs_timeline_daily=queries.get_runs_jobs_timeline_daily.sql,  # pylint: disable=no-member
         )
+
+    def _require_connection_config(self) -> PostgresConfig:
+        """Load and validate the PostgreSQL connection config, or raise.
+        Returns:
+            The validated connection config dict.
+        Raises:
+            RuntimeError: On config retrieval errors or missing required fields.
+        """
+        try:
+            config = self._pg_config
+        except (BotoCoreError, ClientError, ValueError, KeyError) as exc:
+            raise RuntimeError(f"PostgreSQL configuration error: {exc}") from exc
+
+        if not config.get("database"):
+            raise RuntimeError("PostgreSQL config missing: database.")
+
+        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
+        if missing:
+            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
+
+        return config
 
     def read_stats(
         self,
@@ -105,17 +137,7 @@ class ReaderPostgres(PostgresBase):
         Raises:
             RuntimeError: On database connectivity or query errors.
         """
-        try:
-            config = self._pg_config
-        except (BotoCoreError, ClientError, ValueError, KeyError) as exc:
-            raise RuntimeError(f"PostgreSQL configuration error: {exc}") from exc
-
-        if not config.get("database"):
-            raise RuntimeError("PostgreSQL config missing: database.")
-
-        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
-        if missing:
-            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
+        self._require_connection_config()
 
         limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
         now_ms = int(time.time() * 1000)
@@ -223,17 +245,7 @@ class ReaderPostgres(PostgresBase):
         if query is None:
             raise RuntimeError(f"Unknown named query: {query_name}.")
 
-        try:
-            config = self._pg_config
-        except (BotoCoreError, ClientError, ValueError, KeyError) as exc:
-            raise RuntimeError(f"PostgreSQL configuration error: {exc}") from exc
-
-        if not config.get("database"):
-            raise RuntimeError("PostgreSQL config missing: database.")
-
-        missing = [field for field in REQUIRED_CONNECTION_FIELDS if not config.get(field)]
-        if missing:
-            raise RuntimeError(f"PostgreSQL config missing: {', '.join(missing)}.")
+        self._require_connection_config()
 
         limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
         now_ms = int(time.time() * 1000)
@@ -308,6 +320,126 @@ class ReaderPostgres(PostgresBase):
                 logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
                 self._close_connection()
         return col_names, raw_rows
+
+    def read_aggregations(
+        self,
+        query_name: str,
+        timestamp_start: int | None = None,
+        timestamp_end: int | None = None,
+    ) -> RunsJobsAggregations:
+        """Execute a predefined window-wide aggregation named query.
+        Args:
+            query_name: Registered aggregation query identifier.
+            timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
+            timestamp_end: End of time window in epoch milliseconds (default to *now*).
+        Returns:
+            `RunsJobsAggregations` with window-wide totals, success rate, and a bucketed timeline.
+        Raises:
+            RuntimeError: On unknown query name or database connectivity/query errors.
+        """
+        query = SUPPORTED_AGGREGATION_QUERIES.get(query_name)
+        if query is None:
+            raise RuntimeError(f"Unknown aggregation query: {query_name}.")
+
+        self._require_connection_config()
+
+        now_ms = int(time.time() * 1000)
+        ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
+        ts_end = timestamp_end if timestamp_end is not None else now_ms
+
+        window_ms = ts_end - ts_start
+        bucket = TIMELINE_BUCKET_HOUR if window_ms <= AGGREGATION_BUCKET_THRESHOLD_MS else TIMELINE_BUCKET_DAY
+        timeline_sql_key = (
+            query.timeline_hourly_sql_key if bucket == TIMELINE_BUCKET_HOUR else (query.timeline_daily_sql_key)
+        )
+
+        summary_sql = getattr(self._queries, query.summary_sql_key)
+        timeline_sql = getattr(self._queries, timeline_sql_key)
+
+        try:
+            summary_row, timeline_rows = self._execute_with_retry(
+                lambda conn: self._run_aggregation_queries(conn, summary_sql, timeline_sql, ts_start, ts_end)
+            )
+        except PsycopgError as exc:
+            self._close_connection()
+            raise RuntimeError(f"Database aggregation query error: {exc}") from exc
+
+        aggregations = self._build_aggregations(ts_start, ts_end, bucket, summary_row, timeline_rows)
+
+        logger.debug("Aggregation query %s returned %d timeline buckets.", query_name, len(timeline_rows))
+        return aggregations
+
+    def _run_aggregation_queries(
+        self,
+        connection: psycopg2.extensions.connection,
+        summary_sql: str,
+        timeline_sql: str,
+        ts_start: int,
+        ts_end: int,
+    ) -> AggregationQueryResult:
+        """Execute the summary and timeline aggregation queries on the same connection."""
+        try:
+            with connection.cursor() as db_cursor:
+                # Summary: single aggregate row for the whole window.
+                db_cursor.execute(summary_sql, {"ts_start": ts_start, "ts_end": ts_end})
+                if db_cursor.description is None:
+                    raise RuntimeError("Aggregation query returned no result description.")
+                summary_cols = [desc[0] for desc in db_cursor.description]
+                summary_values = db_cursor.fetchone()
+                summary_row = dict(zip(summary_cols, summary_values, strict=True)) if summary_values else {}
+
+                # Timeline: bucketed rows for the heatmap.
+                db_cursor.execute(timeline_sql, {"ts_start": ts_start, "ts_end": ts_end})
+                if db_cursor.description is None:
+                    raise RuntimeError("Timeline query returned no result description.")
+                timeline_cols = [desc[0] for desc in db_cursor.description]
+                timeline_rows = [dict(zip(timeline_cols, row, strict=True)) for row in db_cursor.fetchall()]
+        finally:
+            # PostgreSQL (psycopg2) wraps every statement, including SELECT, in an implicit transaction.
+            # Without an explicit commit or rollback, the connection stays "idle in transaction".
+            try:
+                connection.rollback()
+            except PsycopgError:
+                logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
+                self._close_connection()
+        return summary_row, timeline_rows
+
+    @staticmethod
+    def _build_aggregations(
+        ts_start: int,
+        ts_end: int,
+        bucket: str,
+        summary_row: dict[str, Any],
+        timeline_rows: list[dict[str, Any]],
+    ) -> RunsJobsAggregations:
+        """Shape raw summary/timeline rows into a typed `RunsJobsAggregations`."""
+        total_runs = summary_row.get("total_runs") or 0
+        succeeded = summary_row.get("succeeded") or 0
+        failed = summary_row.get("failed") or 0
+        avg_duration_ms = summary_row.get("avg_duration_ms")
+
+        return RunsJobsAggregations(
+            window=AggregationsWindow(timestamp_start=ts_start, timestamp_end=ts_end),
+            total_runs=total_runs,
+            total_tenants=summary_row.get("total_tenants") or 0,
+            total_catalogs=summary_row.get("total_catalogs") or 0,
+            succeeded=succeeded,
+            failed=failed,
+            success_rate=round((succeeded / total_runs) * 100, 1) if total_runs else 0.0,
+            avg_duration_ms=round(avg_duration_ms) if avg_duration_ms is not None else None,
+            timeline=Timeline(
+                bucket=bucket,
+                entries=[
+                    TimelineEntry(
+                        bucket_start=int(row["bucket_start"]),
+                        total=row["total"],
+                        succeeded=row["succeeded"],
+                        failed=row["failed"],
+                    )
+                    for row in timeline_rows
+                ],
+            ),
+        )
 
     @staticmethod
     def _format_runs_jobs_detail_row(row: dict[str, Any]) -> dict[str, Any]:

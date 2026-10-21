@@ -332,8 +332,8 @@ paths:
     post:
       summary: Execute a predefined named query
       description: >
-        Runs a curated, server-side named query by name and returns its
-        paginated result set.
+        Runs a curated, server-side named query by name. `runs_jobs_detail` returns paginated
+        results. `runs_jobs_detail_aggregation` returns window totals and a bucketed timeline.
       security: []
       parameters:
         - name: topic_name
@@ -347,100 +347,30 @@ paths:
           required: true
           schema:
             type: string
-            enum: [runs_jobs_detail]
+            enum: [runs_jobs_detail, runs_jobs_detail_aggregation]
           description: Identifier of the named query to run
       requestBody:
-        description: Query parameters including time window, pagination cursor, and limit
+        description: >
+          Query parameters. Shape depends on `query_name`: pagination fields for
+          `runs_jobs_detail`, time window only for `runs_jobs_detail_aggregation`.
         required: false
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                timestamp_start:
-                  type: integer
-                  nullable: true
-                  description: Start of time window in epoch milliseconds (default now - 7 days)
-                  example: 1704067200000
-                timestamp_end:
-                  type: integer
-                  nullable: true
-                  description: End of time window in epoch milliseconds (default now)
-                  example: 1706745600000
-                cursor:
-                  type: integer
-                  nullable: true
-                  description: Last internal_id from previous page (keyset pagination)
-                limit:
-                  type: integer
-                  minimum: 1
-                  maximum: 1000
-                  default: 50
-                  description: Maximum number of records per page
+              anyOf:
+                - $ref: '#/components/schemas/RunsJobsDetailQueryBody'
+                - $ref: '#/components/schemas/RunsJobsDetailAggregationQueryBody'
       responses:
         '200':
-          description: Paginated named-query result set with computed fields
+          description: >
+            Named-query result. `runs_jobs_detail` returns a paginated result set;
+            `runs_jobs_detail_aggregation` returns window-wide aggregations instead.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  statusCode:
-                    type: integer
-                    example: 200
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        event_id:
-                          type: string
-                        job_ref:
-                          type: string
-                        tenant_id:
-                          type: string
-                        internal_id:
-                          type: integer
-                        catalog_id:
-                          type: string
-                        status:
-                          type: string
-                        run_date:
-                          type: string
-                          description: Date of the job-level timestamp_start (DD-MM-YYYY, UTC)
-                        run_status:
-                          type: string
-                          description: >
-                            Computed status bucket. Message reclassification is applied to
-                            every row (no data received, no data produced, timeout), else the
-                            raw status is preserved (succeeded, failed, killed, skipped).
-                        formatted_tenant:
-                          type: string
-                          description: Lowercase tenant_id
-                        elapsed_time:
-                          type: integer
-                          nullable: true
-                          description: Difference in milliseconds between job end and start
-                        start_time:
-                          type: string
-                          description: Formatted job start (YYYY-MM-DD HH:MM:SS UTC)
-                        end_time:
-                          type: string
-                          description: Formatted job end (YYYY-MM-DD HH:MM:SS UTC)
-                      additionalProperties: true
-                  pagination:
-                    type: object
-                    properties:
-                      cursor:
-                        type: integer
-                        nullable: true
-                      has_more:
-                        type: boolean
-                      limit:
-                        type: integer
+                anyOf:
+                  - $ref: '#/components/schemas/RunsJobsDetailResponse'
+                  - $ref: '#/components/schemas/RunsJobsDetailAggregationResponse'
         '400':
           description: Invalid parameters, unsupported topic, or unknown query_name
           content:
@@ -483,6 +413,182 @@ paths:
 
 components:
   schemas:
+    RunsJobsDetailQueryBody:
+      type: object
+      description: Request body for the paginated `runs_jobs_detail` named query.
+      properties:
+        timestamp_start:
+          type: integer
+          nullable: true
+          description: Start of time window in epoch milliseconds (default now - 7 days)
+          example: 1704067200000
+        timestamp_end:
+          type: integer
+          nullable: true
+          description: End of time window in epoch milliseconds (default now)
+          example: 1706745600000
+        cursor:
+          type: integer
+          nullable: true
+          description: Last internal_id from previous page (keyset pagination)
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+          description: Maximum number of records per page
+    RunsJobsDetailAggregationQueryBody:
+      type: object
+      description: >
+        Request body for the window-wide `runs_jobs_detail_aggregation` named query.
+        `cursor`/`limit` are not accepted here (400 if present) since this query is not paginated.
+      properties:
+        timestamp_start:
+          type: integer
+          nullable: true
+          description: Start of time window in epoch milliseconds (default now - 7 days)
+          example: 1704067200000
+        timestamp_end:
+          type: integer
+          nullable: true
+          description: End of time window in epoch milliseconds (default now)
+          example: 1706745600000
+    RunsJobsDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        statusCode:
+          type: integer
+          example: 200
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              event_id:
+                type: string
+              job_ref:
+                type: string
+              tenant_id:
+                type: string
+              internal_id:
+                type: integer
+              catalog_id:
+                type: string
+              status:
+                type: string
+              run_date:
+                type: string
+                description: Date of the job-level timestamp_start (DD-MM-YYYY, UTC)
+              run_status:
+                type: string
+                description: >
+                  Computed status bucket. Message reclassification is applied to
+                  every row (no data received, no data produced, timeout), else the
+                  raw status is preserved (succeeded, failed, killed, skipped).
+              formatted_tenant:
+                type: string
+                description: Lowercase tenant_id
+              elapsed_time:
+                type: integer
+                nullable: true
+                description: Difference in milliseconds between job end and start
+              start_time:
+                type: string
+                description: Formatted job start (YYYY-MM-DD HH:MM:SS UTC)
+              end_time:
+                type: string
+                description: Formatted job end (YYYY-MM-DD HH:MM:SS UTC)
+            additionalProperties: true
+        pagination:
+          type: object
+          properties:
+            cursor:
+              type: integer
+              nullable: true
+            has_more:
+              type: boolean
+            limit:
+              type: integer
+    RunsJobsDetailAggregationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        statusCode:
+          type: integer
+          example: 200
+        aggregations:
+          type: object
+          description: >
+            Window-wide totals, success rate, and a bucketed timeline for `runs_jobs_detail`(grain
+            job rows). Always fully populated (zeroed counts, empty timeline entries).
+          properties:
+            window:
+              type: object
+              properties:
+                timestamp_start:
+                  type: integer
+                  example: 1704067200000
+                timestamp_end:
+                  type: integer
+                  example: 1706745600000
+            total_runs:
+              type: integer
+              description: Count of job rows in the window (same grain as runs_jobs_detail)
+              example: 1840
+            total_tenants:
+              type: integer
+              description: Number of distinct tenants in the window
+              example: 12
+            total_catalogs:
+              type: integer
+              description: Number of distinct catalogs in the window
+              example: 44
+            succeeded:
+              type: integer
+              example: 1600
+            failed:
+              type: integer
+              example: 210
+            success_rate:
+              type: number
+              description: succeeded / total_runs * 100, rounded to 1 decimal, 0.0 when empty
+              example: 86.9
+            avg_duration_ms:
+              type: integer
+              nullable: true
+              description: Average job duration in ms over rows with both timestamps; null when none
+              example: 41000
+            timeline:
+              type: object
+              properties:
+                bucket:
+                  type: string
+                  enum: [hour, day]
+                  description: Bucket width - hour for windows <= 7 days, day otherwise
+                entries:
+                  type: array
+                  description: Non-empty buckets only, ordered oldest-first
+                  items:
+                    type: object
+                    properties:
+                      bucket_start:
+                        type: integer
+                        description: Start of the bucket in epoch milliseconds
+                        example: 1704067200000
+                      total:
+                        type: integer
+                        example: 12
+                      succeeded:
+                        type: integer
+                        example: 10
+                      failed:
+                        type: integer
+                        example: 2
     ErrorResponse:
       type: object
       properties:

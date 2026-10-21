@@ -39,6 +39,21 @@ class Pagination(TypedDict):
     limit: int
 
 
+def _build_json_response(status: int, payload: dict[str, Any]) -> dict[str, Any]:
+    """Build a standardized API Gateway Lambda Proxy response envelope.
+    Args:
+        status: HTTP status code.
+        payload: The JSON-serializable response body.
+    Returns:
+        A dictionary compatible with API Gateway Lambda Proxy integration.
+    """
+    return {
+        "statusCode": status,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(payload, default=str),
+    }
+
+
 def build_error_response(status: int, err_type: str, message: str) -> dict[str, Any]:
     """Build a standardized JSON error response body.
     Args:
@@ -48,17 +63,14 @@ def build_error_response(status: int, err_type: str, message: str) -> dict[str, 
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     """
-    return {
-        "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(
-            {
-                "success": False,
-                "statusCode": status,
-                "errors": [{"type": err_type, "message": message}],
-            }
-        ),
-    }
+    return _build_json_response(
+        status,
+        {
+            "success": False,
+            "statusCode": status,
+            "errors": [{"type": err_type, "message": message}],
+        },
+    )
 
 
 def build_success_response(data: list[QueryRow], pagination: Pagination) -> dict[str, Any]:
@@ -69,19 +81,32 @@ def build_success_response(data: list[QueryRow], pagination: Pagination) -> dict
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     """
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(
-            {
-                "success": True,
-                "statusCode": 200,
-                "data": data,
-                "pagination": pagination,
-            },
-            default=str,
-        ),
-    }
+    return _build_json_response(
+        200,
+        {
+            "success": True,
+            "statusCode": 200,
+            "data": data,
+            "pagination": pagination,
+        },
+    )
+
+
+def build_aggregations_response(aggregations: dict[str, Any]) -> dict[str, Any]:
+    """Build a standardized JSON success response body for a window-wide aggregation result.
+    Args:
+        aggregations: The aggregation result, already converted to a plain dict.
+    Returns:
+        A dictionary compatible with API Gateway Lambda Proxy integration.
+    """
+    return _build_json_response(
+        200,
+        {
+            "success": True,
+            "statusCode": 200,
+            "aggregations": aggregations,
+        },
+    )
 
 
 def resolve_request_topic(event: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:

@@ -50,16 +50,18 @@ RUN \
   echo "#################" && \
   echo "### librdkafka ###" && \
   echo "#################" && \
+    # Build librdkafka from the version pinned for confluent-kafka in requirements.txt. \
+    CONFLUENT_KAFKA_VERSION=$(grep ^confluent-kafka== ${LAMBDA_TASK_ROOT}/requirements.txt | cut -d "=" -f3) && \
     mkdir -p /tmp/env-install-workdir/librdkafka && \
     cd /tmp/env-install-workdir/librdkafka && \
-    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v2.15.0.tar.gz && \
-    tar -xf v2.15.0.tar.gz && \
-    cd /tmp/env-install-workdir/librdkafka/librdkafka-2.15.0 && \
+    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v${CONFLUENT_KAFKA_VERSION}.tar.gz && \
+    tar -xf v${CONFLUENT_KAFKA_VERSION}.tar.gz && \
+    cd /tmp/env-install-workdir/librdkafka/librdkafka-${CONFLUENT_KAFKA_VERSION} && \
     ./configure && make && make install && \
   echo "###################" && \
   echo "### pip installs ###" && \
   echo "###################" && \
-    # requirements.txt pins the version of confluent-kafka.
+    # requirements.txt pins the version of confluent-kafka. \
     # --no-binary confluent-kafka forces source compilation against the system librdkafka
     # built above, which includes Kerberos/GSSAPI support. The PyPI compiles without GSSAPI.
     pip install -r ${LAMBDA_TASK_ROOT}/requirements.txt --no-binary confluent-kafka && \
