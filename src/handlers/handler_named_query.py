@@ -162,7 +162,7 @@ class HandlerNamedQuery:
             return build_error_response(400, "validation", "Missing path parameter 'query_name'.")
 
         if query_name not in SUPPORTED_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
-            return build_error_response(400, "validation", f"Query '{query_name}' is not supported. ")
+            return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
 
         return None
 
