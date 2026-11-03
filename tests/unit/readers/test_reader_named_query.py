@@ -354,7 +354,7 @@ class TestReadAggregations:
                 query_name="runs_jobs_detail_aggregation", timestamp_start=0, timestamp_end=window_ms
             )
 
-            executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args_list[1][0][0]
+            executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args_list[2][0][0]
 
         assert expected_bucket == aggregations.timeline.bucket
         assert expected_fragment in executed_sql
@@ -383,6 +383,8 @@ def _make_mock_multi_query_connection(
     call_state = {"index": -1}
 
     def _execute(*_args: Any, **_kwargs: Any) -> None:
+        if _args[0].startswith("SET TRANSACTION"):
+            return
         call_state["index"] += 1
         mock_cursor.description = descriptions[call_state["index"]]
         mock_cursor.fetchall.return_value = rows[call_state["index"]]

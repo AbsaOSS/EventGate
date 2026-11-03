@@ -377,9 +377,10 @@ class ReaderPostgres(PostgresBase):
         ts_start: int,
         ts_end: int,
     ) -> AggregationQueryResult:
-        """Execute the summary and timeline aggregation queries on the same connection."""
+        """Execute summary and timeline queries within one read-only snapshot."""
         try:
             with connection.cursor() as db_cursor:
+                db_cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 # Summary: single aggregate row for the whole window.
                 db_cursor.execute(summary_sql, {"ts_start": ts_start, "ts_end": ts_end})
                 if db_cursor.description is None:

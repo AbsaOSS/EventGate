@@ -18,10 +18,15 @@
 import json
 import time
 import uuid
+from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 
+from psycopg2.extensions import TRANSACTION_STATUS_IDLE, cursor, parse_dsn
 import pytest
 
+from src.readers.reader_postgres import ReaderPostgres
+from src.utils.postgres_base import PostgresConfig
 from tests.integration.conftest import EventGateTestClient, EventStatsTestClient
 
 _QUERY = "runs_jobs_detail"
@@ -33,14 +38,18 @@ def _post_job(
     status: str,
     message: str | None,
     source_app: str,
+    timestamp_start: int | None = None,
 ) -> dict[str, Any]:
     """Post a single-job run event with an explicit status and message."""
     now_ms = int(time.time() * 1000)
+    job_duration_ms = 60_000
+    ts_start = timestamp_start if timestamp_start is not None else now_ms - job_duration_ms
+    ts_end = ts_start + job_duration_ms
     job: dict[str, Any] = {
         "catalog_id": "db.schema.table",
         "status": status,
-        "timestamp_start": now_ms - 60000,
-        "timestamp_end": now_ms,
+        "timestamp_start": ts_start,
+        "timestamp_end": ts_end,
     }
     if message is not None:
         job["message"] = message
@@ -51,13 +60,111 @@ def _post_job(
         "source_app": source_app,
         "source_app_version": "2.0.0",
         "environment": "test",
-        "timestamp_start": now_ms - 60000,
-        "timestamp_end": now_ms,
+        "timestamp_start": ts_start,
+        "timestamp_end": ts_end,
         "jobs": [job],
     }
     response = client.post_event("public.cps.za.runs", event, token=token)
     assert 202 == response["statusCode"], f"Seed event failed: {response}"
     return event
+
+
+@pytest.fixture
+def aggregation_reader(postgres_container: str) -> Generator[ReaderPostgres, None, None]:
+    """Use an isolated cached reader connection to the real PostgreSQL container."""
+    config = parse_dsn(postgres_container)
+    reader = ReaderPostgres()
+    reader._pg_config = PostgresConfig(
+        database=config["dbname"],
+        host=config["host"],
+        port=int(config["port"]),
+        user=config["user"],
+        password=config["password"],
+    )
+    try:
+        yield reader
+    finally:
+        reader._close_connection()
+
+
+@pytest.mark.parametrize("bucket, month, window_days", [("hour", 5, 1), ("day", 6, 8)])
+def test_timeline_buckets_are_utc_aligned(
+    aggregation_reader: ReaderPostgres,
+    eventgate_client: EventGateTestClient,
+    valid_token: str,
+    bucket: str,
+    month: int,
+    window_days: int,
+) -> None:
+    """Keep hourly and daily UTC boundaries under a fractional-offset session timezone."""
+    window_start = int(datetime(2024, month, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    _post_job(eventgate_client, valid_token, "succeeded", None, "cq-utc-test", window_start + 10 * 60 * 1000)
+    connection = aggregation_reader._get_connection()
+    with connection.cursor() as db_cursor:
+        db_cursor.execute("SET TIME ZONE %s", ("Asia/Kathmandu",))
+    connection.commit()
+
+    result = aggregation_reader.read_aggregations(
+        "runs_jobs_detail_aggregation", window_start, window_start + window_days * 24 * 60 * 60 * 1000
+    )
+
+    assert 1 == result.total_runs
+    assert 1 == result.timeline.entries[0].total
+    assert bucket == result.timeline.bucket
+    # Expect one bucket at UTC midnight, unaffected by Kathmandu's UTC+05:45 offset.
+    assert [window_start] == [entry.bucket_start for entry in result.timeline.entries]
+
+
+def test_aggregation_uses_one_snapshot_during_intervening_insert(
+    aggregation_reader: ReaderPostgres, eventgate_client: EventGateTestClient, valid_token: str
+) -> None:
+    """Keep one response consistent while making a committed insert visible to the next request."""
+    timestamp = int(datetime(2024, 4, 1, 12, tzinfo=timezone.utc).timestamp() * 1000)
+    _post_job(eventgate_client, valid_token, "succeeded", None, "cq-snapshot-test", timestamp)
+    connection = aggregation_reader._get_connection()
+    with connection.cursor() as db_cursor:
+        db_cursor.execute("SHOW default_transaction_isolation")
+        default_isolation = db_cursor.fetchone()[0]
+    connection.rollback()
+    inserted = False
+
+    class InsertAfterSummaryCursor(cursor):
+        """Commit a job through the separate ingestion connection after the first summary read."""
+
+        def fetchone(self) -> tuple[Any, ...] | None:
+            nonlocal inserted
+            row = super().fetchone()
+            if not inserted:
+                # Commit a second job on another connection after the summary SELECT, before the timeline SELECT.
+                _post_job(eventgate_client, valid_token, "failed", None, "cq-snapshot-test", timestamp)
+                inserted = True
+            return row
+
+    connection.cursor_factory = InsertAfterSummaryCursor
+    first = aggregation_reader.read_aggregations("runs_jobs_detail_aggregation", timestamp, timestamp)
+
+    # Both reads must still see only the original job, despite the committed insert between them.
+    assert inserted
+    assert 1 == first.total_runs
+    assert 1 == sum(entry.total for entry in first.timeline.entries)
+    assert 1 == first.succeeded
+    assert 1 == sum(entry.succeeded for entry in first.timeline.entries)
+    assert 0 == first.failed
+    assert 0 == sum(entry.failed for entry in first.timeline.entries)
+    assert TRANSACTION_STATUS_IDLE == connection.get_transaction_status()
+
+    second = aggregation_reader.read_aggregations("runs_jobs_detail_aggregation", timestamp, timestamp)
+
+    # The next transaction must see both jobs, including the newly committed failed job.
+    assert 2 == second.total_runs
+    assert 2 == sum(entry.total for entry in second.timeline.entries)
+    assert 1 == second.failed
+    assert 1 == sum(entry.failed for entry in second.timeline.entries)
+    assert TRANSACTION_STATUS_IDLE == connection.get_transaction_status()
+    with connection.cursor() as db_cursor:
+        db_cursor.execute("SHOW default_transaction_isolation")
+        assert default_isolation == db_cursor.fetchone()[0]
+    connection.rollback()
 
 
 def test_unknown_query_name_returns_400(stats_client: EventStatsTestClient) -> None:
