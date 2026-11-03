@@ -199,6 +199,9 @@ class HandlerNamedQuery:
         if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             return build_error_response(400, "validation", "Field 'limit' must be a positive integer.")
 
+        if error_response := HandlerNamedQuery._validate_timestamp_order(timestamp_start, timestamp_end):
+            return error_response
+
         return NamedQueryParams(
             timestamp_start=timestamp_start, timestamp_end=timestamp_end, cursor=cursor, limit=limit
         )
@@ -238,4 +241,20 @@ class HandlerNamedQuery:
             if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
                 return build_error_response(400, "validation", f"Field '{field_name}' must be an integer.")
 
+        if error_response := HandlerNamedQuery._validate_timestamp_order(timestamp_start, timestamp_end):
+            return error_response
+
         return AggregationQueryParams(timestamp_start=timestamp_start, timestamp_end=timestamp_end)
+
+    @staticmethod
+    def _validate_timestamp_order(timestamp_start: int | None, timestamp_end: int | None) -> dict[str, Any] | None:
+        """Reject reversed windows when both timestamp bounds are supplied."""
+        if timestamp_start is not None and timestamp_end is not None and timestamp_start > timestamp_end:
+            logger.warning(
+                "Request rejected: timestamp_start exceeds timestamp_end.",
+                extra={"timestamp_start": timestamp_start, "timestamp_end": timestamp_end},
+            )
+            return build_error_response(
+                400, "validation", "Field 'timestamp_start' must be less than or equal to 'timestamp_end'."
+            )
+        return None

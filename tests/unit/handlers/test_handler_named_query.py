@@ -16,6 +16,7 @@
 
 
 import json
+import logging
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -98,6 +99,52 @@ class TestHandlerNamedQuerySuccess:
 
 class TestHandlerNamedQueryValidation:
     """Tests for request validation."""
+
+    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    def test_reversed_window_is_rejected_before_reading(
+        self,
+        handler: HandlerNamedQuery,
+        mock_reader: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+        query_name: str,
+    ) -> None:
+        """Reject reversed explicit bounds with one warning and no database call."""
+        with caplog.at_level(logging.WARNING, logger="src.handlers.handler_named_query"):
+            response = handler.handle_request(
+                _make_event(query_name=query_name, body={"timestamp_start": 2000, "timestamp_end": 1000})
+            )
+
+        assert 400 == response["statusCode"]
+        mock_reader.read_named_query.assert_not_called()
+        mock_reader.read_aggregations.assert_not_called()
+        assert ["Request rejected: timestamp_start exceeds timestamp_end."] == [
+            record.getMessage() for record in caplog.records
+        ]
+
+    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    @pytest.mark.parametrize(
+        "bounds",
+        [
+            {"timestamp_start": 1000, "timestamp_end": 2000},
+            {"timestamp_start": 1000, "timestamp_end": 1000},
+            {},
+            {"timestamp_start": 1000},
+            {"timestamp_end": 1000},
+            {"timestamp_start": None, "timestamp_end": 1000},
+            {"timestamp_start": 1000, "timestamp_end": None},
+            {"timestamp_start": None, "timestamp_end": None},
+        ],
+    )
+    def test_valid_or_defaulted_bounds_are_forwarded(
+        self, handler: HandlerNamedQuery, mock_reader: MagicMock, query_name: str, bounds: dict[str, int | None]
+    ) -> None:
+        """Keep equality, ordered bounds, and reader-side defaults unchanged."""
+        response = handler.handle_request(_make_event(query_name=query_name, body=bounds))
+
+        assert 200 == response["statusCode"]
+        read = mock_reader.read_aggregations if query_name.endswith("_aggregation") else mock_reader.read_named_query
+        assert bounds.get("timestamp_start") == read.call_args.kwargs["timestamp_start"]
+        assert bounds.get("timestamp_end") == read.call_args.kwargs["timestamp_end"]
 
     def test_unknown_topic_returns_404(self, handler: HandlerNamedQuery) -> None:
         """Test that unknown topic returns 404."""
