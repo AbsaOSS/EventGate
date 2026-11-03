@@ -29,7 +29,7 @@ import psycopg2.extensions
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
-from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_QUERIES
+from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_PAGINATED_QUERIES
 from src.utils.constants import (
     AGGREGATION_BUCKET_THRESHOLD_MS,
     POSTGRES_DEFAULT_LIMIT,
@@ -140,7 +140,7 @@ class ReaderPostgres(PostgresBase):
         self._require_connection_config()
 
         limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
-        now_ms = int(time.time() * 1000)
+        now_ms = int(time.time() * 1000)  # Milliseconds since the Unix epoch.
         ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
@@ -227,28 +227,32 @@ class ReaderPostgres(PostgresBase):
         timestamp_end: int | None = None,
         cursor: int | None = None,
         limit: int = POSTGRES_DEFAULT_LIMIT,
+        source_app: str | None = None,
+        tenant_id: str | None = None,
     ) -> tuple[list[QueryRow], Pagination]:
         """Execute a predefined named query with keyset pagination.
         Args:
-            query_name: Registered named query identifier (see `SUPPORTED_QUERIES`).
+            query_name: Registered named query identifier (see `SUPPORTED_PAGINATED_QUERIES`).
             timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
             timestamp_end: End of time window in epoch milliseconds (default to *now*).
             cursor: Last `internal_id` from previous page (keyset pagination).
             limit: Maximum number of rows per page.
+            source_app: Exact source application filter, or `None` for all applications.
+            tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
         Returns:
             Tuple of (rows, pagination), where each row is a dict with raw and
             computed columns and pagination contains cursor info.
         Raises:
             RuntimeError: On unknown query name or database connectivity/query errors.
         """
-        query = SUPPORTED_QUERIES.get(query_name)
+        query = SUPPORTED_PAGINATED_QUERIES.get(query_name)
         if query is None:
             raise RuntimeError(f"Unknown named query: {query_name}.")
 
         self._require_connection_config()
 
         limit = max(1, min(limit, POSTGRES_MAX_LIMIT))
-        now_ms = int(time.time() * 1000)
+        now_ms = int(time.time() * 1000)  # Milliseconds since the Unix epoch.
         ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
@@ -257,7 +261,9 @@ class ReaderPostgres(PostgresBase):
 
         try:
             col_names, raw_rows = self._execute_with_retry(
-                lambda conn: self._run_named_query(conn, sql, sql_with_cursor, ts_start, ts_end, cursor, limit)
+                lambda conn: self._run_named_query(
+                    conn, sql, sql_with_cursor, ts_start, ts_end, cursor, limit, source_app, tenant_id
+                )
             )
         except PsycopgError as exc:
             self._close_connection()
@@ -293,20 +299,24 @@ class ReaderPostgres(PostgresBase):
         ts_end: int,
         cursor: int | None,
         limit: int,
+        source_app: str | None,
+        tenant_id: str | None,
     ) -> RawQueryResult:
         """Execute a named SQL query and return column names and raw rows."""
+        params: dict[str, Any] = {
+            "ts_start": ts_start,
+            "ts_end": ts_end,
+            "lim": limit + 1,
+            "source_app": source_app,
+            "tenant_id": tenant_id,
+        }
         try:
             with connection.cursor() as db_cursor:
                 if cursor is not None:
-                    db_cursor.execute(
-                        sql_with_cursor,
-                        {"ts_start": ts_start, "ts_end": ts_end, "cursor_id": cursor, "lim": limit + 1},
-                    )
+                    params["cursor_id"] = cursor
+                    db_cursor.execute(sql_with_cursor, params)
                 else:
-                    db_cursor.execute(
-                        sql,
-                        {"ts_start": ts_start, "ts_end": ts_end, "lim": limit + 1},
-                    )
+                    db_cursor.execute(sql, params)
                 if db_cursor.description is None:
                     raise RuntimeError("Named query returned no result description.")
                 col_names = [desc[0] for desc in db_cursor.description]
@@ -326,12 +336,16 @@ class ReaderPostgres(PostgresBase):
         query_name: str,
         timestamp_start: int | None = None,
         timestamp_end: int | None = None,
+        source_app: str | None = None,
+        tenant_id: str | None = None,
     ) -> RunsJobsAggregations:
         """Execute a predefined window-wide aggregation named query.
         Args:
             query_name: Registered aggregation query identifier.
             timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
             timestamp_end: End of time window in epoch milliseconds (default to *now*).
+            source_app: Exact source application filter, or `None` for all applications.
+            tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
         Returns:
             `RunsJobsAggregations` with window-wide totals, success rate, and a bucketed timeline.
         Raises:
@@ -343,7 +357,7 @@ class ReaderPostgres(PostgresBase):
 
         self._require_connection_config()
 
-        now_ms = int(time.time() * 1000)
+        now_ms = int(time.time() * 1000)  # Milliseconds since the Unix epoch.
         ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
@@ -358,7 +372,9 @@ class ReaderPostgres(PostgresBase):
 
         try:
             summary_row, timeline_rows = self._execute_with_retry(
-                lambda conn: self._run_aggregation_queries(conn, summary_sql, timeline_sql, ts_start, ts_end)
+                lambda conn: self._run_aggregation_queries(
+                    conn, summary_sql, timeline_sql, ts_start, ts_end, source_app, tenant_id
+                )
             )
         except PsycopgError as exc:
             self._close_connection()
@@ -376,13 +392,21 @@ class ReaderPostgres(PostgresBase):
         timeline_sql: str,
         ts_start: int,
         ts_end: int,
+        source_app: str | None,
+        tenant_id: str | None,
     ) -> AggregationQueryResult:
         """Execute summary and timeline queries within one read-only snapshot."""
+        params = {
+            "ts_start": ts_start,
+            "ts_end": ts_end,
+            "source_app": source_app,
+            "tenant_id": tenant_id,
+        }
         try:
             with connection.cursor() as db_cursor:
                 db_cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 # Summary: single aggregate row for the whole window.
-                db_cursor.execute(summary_sql, {"ts_start": ts_start, "ts_end": ts_end})
+                db_cursor.execute(summary_sql, params)
                 if db_cursor.description is None:
                     raise RuntimeError("Aggregation query returned no result description.")
                 summary_cols = [desc[0] for desc in db_cursor.description]
@@ -390,7 +414,7 @@ class ReaderPostgres(PostgresBase):
                 summary_row = dict(zip(summary_cols, summary_values, strict=True)) if summary_values else {}
 
                 # Timeline: bucketed rows for the heatmap.
-                db_cursor.execute(timeline_sql, {"ts_start": ts_start, "ts_end": ts_end})
+                db_cursor.execute(timeline_sql, params)
                 if db_cursor.description is None:
                     raise RuntimeError("Timeline query returned no result description.")
                 timeline_cols = [desc[0] for desc in db_cursor.description]
@@ -426,6 +450,8 @@ class ReaderPostgres(PostgresBase):
             total_catalogs=summary_row.get("total_catalogs") or 0,
             succeeded=succeeded,
             failed=failed,
+            killed=summary_row.get("killed") or 0,
+            skipped=summary_row.get("skipped") or 0,
             success_rate=round((succeeded / total_runs) * 100, 1) if total_runs else 0.0,
             avg_duration_ms=round(avg_duration_ms) if avg_duration_ms is not None else None,
             timeline=Timeline(
@@ -436,6 +462,8 @@ class ReaderPostgres(PostgresBase):
                         total=row["total"],
                         succeeded=row["succeeded"],
                         failed=row["failed"],
+                        killed=row["killed"],
+                        skipped=row["skipped"],
                     )
                     for row in timeline_rows
                 ],

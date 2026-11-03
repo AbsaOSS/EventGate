@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, NamedQueryParams
+from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, PaginatedQueryParams
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations
 
 
@@ -99,6 +99,63 @@ class TestHandlerNamedQuerySuccess:
 
 class TestHandlerNamedQueryValidation:
     """Tests for request validation."""
+
+    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    @pytest.mark.parametrize("field_name", ["source_app", "tenant_id"])
+    @pytest.mark.parametrize("value", [None, "", "ordinary", "MixedCase"])
+    def test_string_or_null_filters_are_forwarded(
+        self,
+        handler: HandlerNamedQuery,
+        mock_reader: MagicMock,
+        query_name: str,
+        field_name: str,
+        value: str | None,
+    ) -> None:
+        response = handler.handle_request(_make_event(query_name=query_name, body={field_name: value}))
+
+        assert 200 == response["statusCode"]
+        read = mock_reader.read_aggregations if query_name.endswith("_aggregation") else mock_reader.read_named_query
+        assert value == read.call_args.kwargs[field_name]
+
+    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    def test_both_filters_and_their_defaults_are_forwarded(
+        self, handler: HandlerNamedQuery, mock_reader: MagicMock, query_name: str
+    ) -> None:
+        filters = {"source_app": "MixedApp", "tenant_id": "MixedTenant"}
+        response = handler.handle_request(_make_event(query_name=query_name, body=filters))
+
+        assert 200 == response["statusCode"]
+        read = mock_reader.read_aggregations if query_name.endswith("_aggregation") else mock_reader.read_named_query
+        assert filters == {field: read.call_args.kwargs[field] for field in filters}
+
+        response = handler.handle_request(_make_event(query_name=query_name))
+
+        assert 200 == response["statusCode"]
+        assert {"source_app": None, "tenant_id": None} == {field: read.call_args.kwargs[field] for field in filters}
+
+    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    @pytest.mark.parametrize("field_name", ["source_app", "tenant_id"])
+    @pytest.mark.parametrize("value", [123, True, ["app"], {"name": "app"}])
+    def test_invalid_filter_is_rejected_before_reading(
+        self,
+        handler: HandlerNamedQuery,
+        mock_reader: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+        query_name: str,
+        field_name: str,
+        value: Any,
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="src.handlers.handler_named_query"):
+            response = handler.handle_request(_make_event(query_name=query_name, body={field_name: value}))
+
+        assert 400 == response["statusCode"]
+        assert f"Field '{field_name}' must be a string or null." == json.loads(response["body"])["errors"][0]["message"]
+        mock_reader.read_named_query.assert_not_called()
+        mock_reader.read_aggregations.assert_not_called()
+        assert ["Request rejected: query filter must be a string or null."] == [
+            record.getMessage() for record in caplog.records
+        ]
+        assert field_name == caplog.records[0].field
 
     @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
     def test_reversed_window_is_rejected_before_reading(
@@ -261,7 +318,11 @@ class TestHandlerAggregationQuery:
         assert "pagination" not in body
         assert 1 == body["aggregations"]["total_runs"]
         mock_reader.read_aggregations.assert_called_once_with(
-            query_name="runs_jobs_detail_aggregation", timestamp_start=None, timestamp_end=None
+            query_name="runs_jobs_detail_aggregation",
+            timestamp_start=None,
+            timestamp_end=None,
+            source_app=None,
+            tenant_id=None,
         )
 
     def test_cursor_or_limit_in_body_returns_400(self, handler: HandlerNamedQuery) -> None:
@@ -370,8 +431,8 @@ class TestValidateEventPathParams:
         assert error is None
 
 
-class TestValidateEventBody:
-    """Parametrized tests for `HandlerNamedQuery._validate_event_body`."""
+class TestValidatePaginatedEventBody:
+    """Parametrized tests for `HandlerNamedQuery._validate_paginated_event_body`."""
 
     @pytest.mark.parametrize(
         "body, expected_status, expected_message_fragment",
@@ -389,7 +450,7 @@ class TestValidateEventBody:
         self, body: str, expected_status: int, expected_message_fragment: str
     ) -> None:
         """Test that each invalid body returns the expected error."""
-        result = HandlerNamedQuery._validate_event_body(body)
+        result = HandlerNamedQuery._validate_paginated_event_body(body)
 
         assert isinstance(result, dict)
         assert expected_status == result["statusCode"]
@@ -399,17 +460,19 @@ class TestValidateEventBody:
     @pytest.mark.parametrize(
         "body, expected_params",
         [
-            pytest.param(None, NamedQueryParams(None, None, None, 50), id="none_body_uses_defaults"),
-            pytest.param("{}", NamedQueryParams(None, None, None, 50), id="empty_object_uses_defaults"),
+            pytest.param(None, PaginatedQueryParams(None, None, None, 50), id="none_body_uses_defaults"),
+            pytest.param("{}", PaginatedQueryParams(None, None, None, 50), id="empty_object_uses_defaults"),
             pytest.param(
                 json.dumps({"timestamp_start": 1000, "timestamp_end": 2000, "cursor": 42, "limit": 25}),
-                NamedQueryParams(1000, 2000, 42, 25),
+                PaginatedQueryParams(1000, 2000, 42, 25),
                 id="full_body",
             ),
         ],
     )
-    def test_returns_parsed_params_for_valid_body(self, body: str | None, expected_params: NamedQueryParams) -> None:
-        """Test that valid bodies are parsed into the expected `NamedQueryParams`."""
-        result = HandlerNamedQuery._validate_event_body(body)
+    def test_returns_parsed_params_for_valid_body(
+        self, body: str | None, expected_params: PaginatedQueryParams
+    ) -> None:
+        """Test that valid bodies are parsed into the expected `PaginatedQueryParams`."""
+        result = HandlerNamedQuery._validate_paginated_event_body(body)
 
         assert expected_params == result

@@ -48,12 +48,16 @@ class TimelineEntry:
         total: Number of rows in the bucket.
         succeeded: Number of rows with raw status `succeeded`.
         failed: Number of rows with raw status `failed`.
+        killed: Number of rows with raw status `killed`.
+        skipped: Number of rows with raw status `skipped`.
     """
 
     bucket_start: int
     total: int
     succeeded: int
     failed: int
+    killed: int = 0
+    skipped: int = 0
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,8 @@ class RunsJobsAggregations:
         total_catalogs: Number of distinct catalogs in the window.
         succeeded: Count of rows with raw status `succeeded`.
         failed: Count of rows with raw status `failed`.
+        killed: Count of rows with raw status `killed`.
+        skipped: Count of rows with raw status `skipped`.
         success_rate: `succeeded / total_runs * 100`, rounded to 1 decimal, `0.0` when empty.
         avg_duration_ms: Average job duration in milliseconds, or `None` when no row has
             both `timestamp_start` and `timestamp_end`.
@@ -92,6 +98,8 @@ class RunsJobsAggregations:
     total_catalogs: int = 0
     succeeded: int = 0
     failed: int = 0
+    killed: int = 0
+    skipped: int = 0
     success_rate: float = 0.0
     avg_duration_ms: int | None = None
     timeline: Timeline = field(default_factory=lambda: Timeline(bucket=TIMELINE_BUCKET_HOUR, entries=[]))

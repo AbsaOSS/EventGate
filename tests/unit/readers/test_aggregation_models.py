@@ -26,6 +26,8 @@ def test_defaults_are_zeroed_not_missing() -> None:
     assert 0 == aggregations.total_catalogs
     assert 0 == aggregations.succeeded
     assert 0 == aggregations.failed
+    assert 0 == aggregations.killed
+    assert 0 == aggregations.skipped
     assert 0.0 == aggregations.success_rate
     assert aggregations.avg_duration_ms is None
     assert "hour" == aggregations.timeline.bucket

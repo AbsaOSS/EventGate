@@ -213,13 +213,19 @@ class TestReadNamedQuery:
             mock_pg.connect.return_value = mock_conn
 
             result_rows, pagination = reader.read_named_query(query_name="runs_jobs_detail", limit=50)
+            executed_params = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][1]
 
         assert 2 == len(result_rows)
         assert "killed" == result_rows[0]["run_status"]
         assert False is pagination["has_more"]
+        assert executed_params["source_app"] is None
+        assert executed_params["tenant_id"] is None
 
-    def test_cursor_uses_cursor_variant(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
-        """Test that passing a cursor uses the keyset-cursor SQL variant."""
+    @pytest.mark.parametrize("cursor", [None, 100])
+    def test_filters_reach_both_query_variants(
+        self, reader: ReaderPostgres, pg_secret: dict[str, Any], cursor: int | None
+    ) -> None:
+        """Pass filters to the SQL variant selected by the keyset cursor."""
         mock_conn = _make_mock_connection(_DETAIL_DESCRIPTION, [])
 
         with (
@@ -231,13 +237,17 @@ class TestReadNamedQuery:
             mock_session.return_value.client.return_value = mock_client
             mock_pg.connect.return_value = mock_conn
 
-            reader.read_named_query(query_name="runs_jobs_detail", cursor=100, limit=10)
+            reader.read_named_query(
+                query_name="runs_jobs_detail", cursor=cursor, limit=10, source_app="MixedApp", tenant_id="MixedTenant"
+            )
 
             executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][0]
             executed_params = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args[0][1]
 
-        assert "j.internal_id <" in executed_sql
-        assert 100 == executed_params["cursor_id"]
+        assert (cursor is not None) == ("j.internal_id <" in executed_sql)
+        assert cursor == executed_params.get("cursor_id")
+        assert "MixedApp" == executed_params["source_app"]
+        assert "MixedTenant" == executed_params["tenant_id"]
 
     def test_unknown_query_name_raises_runtime_error(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
         """Test that an unknown query_name raises RuntimeError."""
@@ -257,14 +267,18 @@ class TestReadAggregations:
     def test_build_aggregations_shapes_populated_rows(self) -> None:
         """Test that _build_aggregations shapes summary/timeline rows into a typed result."""
         summary_row = {
-            "total_runs": 2,
+            "total_runs": 4,
             "total_tenants": 1,
             "total_catalogs": 1,
             "succeeded": 1,
             "failed": 1,
+            "killed": 1,
+            "skipped": 1,
             "avg_duration_ms": 1800000.0,
         }
-        timeline_rows = [{"bucket_start": 1704067200000, "total": 2, "succeeded": 1, "failed": 1}]
+        timeline_rows = [
+            {"bucket_start": 1704067200000, "total": 4, "succeeded": 1, "failed": 1, "killed": 1, "skipped": 1}
+        ]
 
         aggregations = ReaderPostgres._build_aggregations(
             ts_start=1704067200000,
@@ -276,17 +290,21 @@ class TestReadAggregations:
 
         assert 1704067200000 == aggregations.window.timestamp_start
         assert 1704070800000 == aggregations.window.timestamp_end
-        assert 2 == aggregations.total_runs
+        assert 4 == aggregations.total_runs
         assert 1 == aggregations.total_tenants
         assert 1 == aggregations.total_catalogs
         assert 1 == aggregations.succeeded
         assert 1 == aggregations.failed
-        assert 50.0 == aggregations.success_rate
+        assert 1 == aggregations.killed
+        assert 1 == aggregations.skipped
+        assert 25.0 == aggregations.success_rate
         assert 1800000 == aggregations.avg_duration_ms
         assert "hour" == aggregations.timeline.bucket
         assert 1 == len(aggregations.timeline.entries)
         assert 1704067200000 == aggregations.timeline.entries[0].bucket_start
-        assert 2 == aggregations.timeline.entries[0].total
+        assert 4 == aggregations.timeline.entries[0].total
+        assert 1 == aggregations.timeline.entries[0].killed
+        assert 1 == aggregations.timeline.entries[0].skipped
 
     def test_build_aggregations_zeroes_empty_window(self) -> None:
         """Test that an empty summary/timeline still produces a fully-populated, zeroed result."""
@@ -296,6 +314,8 @@ class TestReadAggregations:
             "total_catalogs": 0,
             "succeeded": 0,
             "failed": 0,
+            "killed": 0,
+            "skipped": 0,
             "avg_duration_ms": None,
         }
 
@@ -304,6 +324,8 @@ class TestReadAggregations:
         )
 
         assert 0 == aggregations.total_runs
+        assert 0 == aggregations.killed
+        assert 0 == aggregations.skipped
         assert 0.0 == aggregations.success_rate
         assert aggregations.avg_duration_ms is None
         assert [] == aggregations.timeline.entries
@@ -333,11 +355,13 @@ class TestReadAggregations:
                         ("total_catalogs",),
                         ("succeeded",),
                         ("failed",),
+                        ("killed",),
+                        ("skipped",),
                         ("avg_duration_ms",),
                     ],
-                    [(0, 0, 0, 0, 0, None)],
+                    [(0, 0, 0, 0, 0, 0, 0, None)],
                 ),
-                ([("bucket_start",), ("total",), ("succeeded",), ("failed",)], []),
+                ([("bucket_start",), ("total",), ("succeeded",), ("failed",), ("killed",), ("skipped",)], []),
             ]
         )
 
@@ -351,13 +375,21 @@ class TestReadAggregations:
             mock_pg.connect.return_value = mock_conn
 
             aggregations = reader.read_aggregations(
-                query_name="runs_jobs_detail_aggregation", timestamp_start=0, timestamp_end=window_ms
+                query_name="runs_jobs_detail_aggregation",
+                timestamp_start=0,
+                timestamp_end=window_ms,
+                source_app="MixedApp",
+                tenant_id="MixedTenant",
             )
 
-            executed_sql = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args_list[2][0][0]
+            execute_calls = mock_conn.cursor.return_value.__enter__.return_value.execute.call_args_list
+            executed_sql = execute_calls[2][0][0]
 
         assert expected_bucket == aggregations.timeline.bucket
         assert expected_fragment in executed_sql
+        for call in execute_calls[1:]:
+            assert "MixedApp" == call.args[1]["source_app"]
+            assert "MixedTenant" == call.args[1]["tenant_id"]
 
     def test_unknown_query_name_raises_runtime_error(self, reader: ReaderPostgres, pg_secret: dict[str, Any]) -> None:
         """Test that an unknown aggregation query_name raises RuntimeError."""

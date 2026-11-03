@@ -415,7 +415,10 @@ components:
   schemas:
     RunsJobsDetailQueryBody:
       type: object
-      description: Request body for the paginated `runs_jobs_detail` named query.
+      description: >
+        Request body for the paginated `runs_jobs_detail` named query.
+        source_app and tenant_id are optional exact, case-sensitive filters combined with AND.
+        Omitted or null filters mean all values. Filters do not enforce authorization.
       properties:
         timestamp_start:
           type: integer
@@ -437,11 +440,21 @@ components:
           maximum: 1000
           default: 50
           description: Maximum number of records per page
+        source_app:
+          type: string
+          nullable: true
+          description: Source application filter. Omitted or null means all applications
+        tenant_id:
+          type: string
+          nullable: true
+          description: Tenant identifier filter. Omitted or null means all tenants
     RunsJobsDetailAggregationQueryBody:
       type: object
       description: >
         Request body for the window-wide `runs_jobs_detail_aggregation` named query.
         `cursor`/`limit` are not accepted here (400 if present) since this query is not paginated.
+        source_app and tenant_id are optional exact, case-sensitive filters combined with AND.
+        Omitted or null filters mean all values. Filters do not enforce authorization.
       properties:
         timestamp_start:
           type: integer
@@ -453,6 +466,14 @@ components:
           nullable: true
           description: End of time window in epoch milliseconds (default now)
           example: 1706745600000
+        source_app:
+          type: string
+          nullable: true
+          description: Source application filter. Omitted or null means all applications
+        tenant_id:
+          type: string
+          nullable: true
+          description: Tenant identifier filter. Omitted or null means all tenants
     RunsJobsDetailResponse:
       type: object
       properties:
@@ -554,6 +575,14 @@ components:
             failed:
               type: integer
               example: 210
+            killed:
+              type: integer
+              description: Count of job rows with raw status killed
+              example: 20
+            skipped:
+              type: integer
+              description: Count of job rows with raw status skipped
+              example: 10
             success_rate:
               type: number
               description: succeeded / total_runs * 100, rounded to 1 decimal, 0.0 when empty
@@ -589,6 +618,14 @@ components:
                       failed:
                         type: integer
                         example: 2
+                      killed:
+                        type: integer
+                        description: Count of job rows with raw status killed in this bucket
+                        example: 0
+                      skipped:
+                        type: integer
+                        description: Count of job rows with raw status skipped in this bucket
+                        example: 0
     ErrorResponse:
       type: object
       properties:

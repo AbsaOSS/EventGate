@@ -39,6 +39,7 @@ def _post_job(
     message: str | None,
     source_app: str,
     timestamp_start: int | None = None,
+    tenant_id: str = "CQ_TEST",
 ) -> dict[str, Any]:
     """Post a single-job run event with an explicit status and message."""
     now_ms = int(time.time() * 1000)
@@ -56,7 +57,7 @@ def _post_job(
     event = {
         "event_id": str(uuid.uuid4()),
         "job_ref": "spark-cq-001",
-        "tenant_id": "CQ_TEST",
+        "tenant_id": tenant_id,
         "source_app": source_app,
         "source_app_version": "2.0.0",
         "environment": "test",
@@ -165,6 +166,65 @@ def test_aggregation_uses_one_snapshot_during_intervening_insert(
         db_cursor.execute("SHOW default_transaction_isolation")
         assert default_isolation == db_cursor.fetchone()[0]
     connection.rollback()
+
+
+class TestNamedQueryFilters:
+    """Apply tenant and source filters to detail and aggregation queries."""
+
+    @pytest.fixture(scope="class")
+    def filter_events(self, eventgate_client: EventGateTestClient, valid_token: str) -> list[dict[str, Any]]:
+        timestamp = int(datetime(2024, 7, 1, tzinfo=timezone.utc).timestamp() * 1000)
+        # Events 0-3 cover all four statuses for the same tenant/application pair.
+        events = [
+            _post_job(eventgate_client, valid_token, status, None, "app_a", timestamp, "tenant_a")
+            for status in ("succeeded", "failed", "killed", "skipped")
+        ]
+        # Event 4 changes only the application; event 5 changes only the tenant.
+        events.append(_post_job(eventgate_client, valid_token, "failed", None, "app_b", timestamp, "tenant_a"))
+        events.append(_post_job(eventgate_client, valid_token, "failed", None, "app_a", timestamp, "tenant_b"))
+        return events
+
+    @pytest.mark.parametrize(
+        "filters, expected_indices, expected_failed",
+        [
+            # Tenant-only: include both applications, but exclude tenant_b.
+            pytest.param({"tenant_id": "tenant_a"}, [0, 1, 2, 3, 4], 2, id="tenant"),
+            # Source-only: include both tenants, but exclude app_b.
+            pytest.param({"source_app": "app_a"}, [0, 1, 2, 3, 5], 2, id="source"),
+            # Combined: include only events matching both tenant_a and app_a.
+            pytest.param({"tenant_id": "tenant_a", "source_app": "app_a"}, [0, 1, 2, 3], 1, id="combined"),
+        ],
+    )
+    def test_exact_filters_and_their_intersection(
+        self,
+        stats_client: EventStatsTestClient,
+        filter_events: list[dict[str, Any]],
+        filters: dict[str, str],
+        expected_indices: list[int],
+        expected_failed: int,
+    ) -> None:
+        timestamp = filter_events[0]["timestamp_start"]
+        body = {"timestamp_start": timestamp, "timestamp_end": timestamp, **filters}
+        response = stats_client.post_named_query("public.cps.za.runs", _QUERY, body)
+
+        assert 200 == response["statusCode"]
+        rows = json.loads(response["body"])["data"]
+        # Detail results must contain exactly the expected events, with no excluded rows.
+        assert {filter_events[index]["event_id"] for index in expected_indices} == {row["event_id"] for row in rows}
+
+        response = stats_client.post_named_query("public.cps.za.runs", "runs_jobs_detail_aggregation", body)
+
+        assert 200 == response["statusCode"]
+        aggregations = json.loads(response["body"])["aggregations"]
+        counts = {"succeeded": 1, "failed": expected_failed, "killed": 1, "skipped": 1}
+        total = len(expected_indices)
+        # Summary totals and all four status counts must describe the same filtered events.
+        assert total == aggregations["total_runs"]
+        assert counts == {status: aggregations[status] for status in counts}
+        # Timeline totals must also exclude events rejected by the filters.
+        entries = aggregations["timeline"]["entries"]
+        assert total == sum(entry["total"] for entry in entries)
+        assert counts == {status: sum(entry[status] for entry in entries) for status in counts}
 
 
 def test_unknown_query_name_returns_400(stats_client: EventStatsTestClient) -> None:

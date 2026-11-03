@@ -21,7 +21,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_QUERIES
+from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_PAGINATED_QUERIES
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
 from src.utils.utils import build_aggregations_response, build_error_response, build_success_response
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class NamedQueryParams:
+class PaginatedQueryParams:
     """Validated query parameters ready to pass to `read_named_query`.
 
     Attributes:
@@ -38,12 +38,16 @@ class NamedQueryParams:
         timestamp_end: End of time window in epoch milliseconds, or `None` for the default.
         cursor: Last `internal_id` from previous page, or `None` for the first page.
         limit: Maximum number of rows per page.
+        source_app: Exact source application filter, or `None` for all applications.
+        tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
     """
 
     timestamp_start: int | None
     timestamp_end: int | None
     cursor: int | None
     limit: int
+    source_app: str | None = None
+    tenant_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,10 +57,14 @@ class AggregationQueryParams:
     Attributes:
         timestamp_start: Start of time window in epoch milliseconds.
         timestamp_end: End of time window in epoch milliseconds.
+        source_app: Exact source application filter, or `None` for all applications.
+        tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
     """
 
     timestamp_start: int | None
     timestamp_end: int | None
+    source_app: str | None = None
+    tenant_id: str | None = None
 
 
 class HandlerNamedQuery:
@@ -90,7 +98,7 @@ class HandlerNamedQuery:
         return self._handle_paginated_query(event.get("body"), query_name, topic_name)
 
     def _handle_paginated_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
-        """Handle a paginated named query (`SUPPORTED_QUERIES`).
+        """Handle a paginated named query (`SUPPORTED_PAGINATED_QUERIES`).
         Args:
             body: The raw request body (JSON string) from the API Gateway event.
             query_name: The lower-cased, already-validated `query_name` path parameter.
@@ -98,8 +106,8 @@ class HandlerNamedQuery:
         Returns:
             API Gateway response dict.
         """
-        body_params = self._validate_event_body(body)
-        if not isinstance(body_params, NamedQueryParams):
+        body_params = self._validate_paginated_event_body(body)
+        if not isinstance(body_params, PaginatedQueryParams):
             return body_params
 
         try:
@@ -109,6 +117,8 @@ class HandlerNamedQuery:
                 timestamp_end=body_params.timestamp_end,
                 cursor=body_params.cursor,
                 limit=body_params.limit,
+                source_app=body_params.source_app,
+                tenant_id=body_params.tenant_id,
             )
         except RuntimeError:
             logger.exception("Named query %s failed for topic %s.", query_name, topic_name)
@@ -134,6 +144,8 @@ class HandlerNamedQuery:
                 query_name=query_name,
                 timestamp_start=body_params.timestamp_start,
                 timestamp_end=body_params.timestamp_end,
+                source_app=body_params.source_app,
+                tenant_id=body_params.tenant_id,
             )
         except RuntimeError:
             logger.exception("Aggregation query %s failed for topic %s.", query_name, topic_name)
@@ -161,18 +173,18 @@ class HandlerNamedQuery:
         if not query_name:
             return build_error_response(400, "validation", "Missing path parameter 'query_name'.")
 
-        if query_name not in SUPPORTED_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
+        if query_name not in SUPPORTED_PAGINATED_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
             return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
 
         return None
 
     @staticmethod
-    def _validate_event_body(body: str | None) -> NamedQueryParams | dict[str, Any]:
+    def _validate_paginated_event_body(body: str | None) -> PaginatedQueryParams | dict[str, Any]:
         """Parse and validate the request body.
         Args:
             body: The raw request body (JSON string) from the API Gateway event, or `None`.
         Returns:
-            The parsed_body `NamedQueryParams`, or an `error_response` dict if validation fails.
+            The parsed_body `PaginatedQueryParams`, or an `error_response` dict if validation fails.
         """
         try:
             parsed_body = json.loads(body or "{}")
@@ -202,8 +214,16 @@ class HandlerNamedQuery:
         if error_response := HandlerNamedQuery._validate_timestamp_order(timestamp_start, timestamp_end):
             return error_response
 
-        return NamedQueryParams(
-            timestamp_start=timestamp_start, timestamp_end=timestamp_end, cursor=cursor, limit=limit
+        if error_response := HandlerNamedQuery._validate_filters(parsed_body):
+            return error_response
+
+        return PaginatedQueryParams(
+            timestamp_start=timestamp_start,
+            timestamp_end=timestamp_end,
+            cursor=cursor,
+            limit=limit,
+            source_app=parsed_body.get("source_app"),
+            tenant_id=parsed_body.get("tenant_id"),
         )
 
     @staticmethod
@@ -244,7 +264,28 @@ class HandlerNamedQuery:
         if error_response := HandlerNamedQuery._validate_timestamp_order(timestamp_start, timestamp_end):
             return error_response
 
-        return AggregationQueryParams(timestamp_start=timestamp_start, timestamp_end=timestamp_end)
+        if error_response := HandlerNamedQuery._validate_filters(parsed_body):
+            return error_response
+
+        return AggregationQueryParams(
+            timestamp_start=timestamp_start,
+            timestamp_end=timestamp_end,
+            source_app=parsed_body.get("source_app"),
+            tenant_id=parsed_body.get("tenant_id"),
+        )
+
+    @staticmethod
+    def _validate_filters(parsed_body: dict[str, Any]) -> dict[str, Any] | None:
+        """Reject non-string, non-null named-query filters."""
+        for field_name in ("source_app", "tenant_id"):
+            value = parsed_body.get(field_name)
+            if value is not None and not isinstance(value, str):
+                logger.warning(
+                    "Request rejected: query filter must be a string or null.",
+                    extra={"field": field_name},
+                )
+                return build_error_response(400, "validation", f"Field '{field_name}' must be a string or null.")
+        return None
 
     @staticmethod
     def _validate_timestamp_order(timestamp_start: int | None, timestamp_end: int | None) -> dict[str, Any] | None:
