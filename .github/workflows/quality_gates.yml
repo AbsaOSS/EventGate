@@ -167,7 +167,7 @@ jobs:
           java-version: '21'
 
       - name: Set up Flyway
-        uses: red-gate/setup-flyway@85d1712c775f0f2bcf70523d0caf1df46a4761d5
+        uses: red-gate/setup-flyway@fb33799f0b7d22232e8406bc831c85e93bb22362
         with:
           version: '13.3.0'
           edition: community
