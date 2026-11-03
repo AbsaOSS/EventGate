@@ -40,7 +40,7 @@ SELECT COUNT(*) AS total_runs,
 
 -- name: get_runs_jobs_timeline_hourly(ts_start, ts_end)
 -- Hourly timeline buckets (non-empty buckets only) for runs_jobs_detail, oldest first.
-SELECT (EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(r.timestamp_start / 1000.0))) * 1000)::bigint
+SELECT (EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(r.timestamp_start / 1000.0), 'UTC')) * 1000)::bigint
            AS bucket_start,
        COUNT(*) AS total,
        COUNT(*) FILTER (WHERE j.status = 'succeeded') AS succeeded,
@@ -53,7 +53,7 @@ SELECT (EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(r.timestamp_start / 1
 
 -- name: get_runs_jobs_timeline_daily(ts_start, ts_end)
 -- Daily timeline buckets (non-empty buckets only) for runs_jobs_detail, oldest first.
-SELECT (EXTRACT(EPOCH FROM date_trunc('day', to_timestamp(r.timestamp_start / 1000.0))) * 1000)::bigint
+SELECT (EXTRACT(EPOCH FROM date_trunc('day', to_timestamp(r.timestamp_start / 1000.0), 'UTC')) * 1000)::bigint
            AS bucket_start,
        COUNT(*) AS total,
        COUNT(*) FILTER (WHERE j.status = 'succeeded') AS succeeded,

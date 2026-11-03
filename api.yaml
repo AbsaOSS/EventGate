@@ -569,7 +569,7 @@ components:
                 bucket:
                   type: string
                   enum: [hour, day]
-                  description: Bucket width - hour for windows <= 7 days, day otherwise
+                  description: Bucket width - hour for windows <= 7 days, day otherwise; aligned to UTC hours/days
                 entries:
                   type: array
                   description: Non-empty buckets only, ordered oldest-first
