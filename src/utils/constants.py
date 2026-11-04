@@ -42,10 +42,6 @@ TOPIC_STATUS_CHANGE = "public.cps.za.status_change"
 POSTGRES_WRITE_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS, TOPIC_DLCHANGE, TOPIC_TEST, TOPIC_STATUS_CHANGE})
 SUPPORTED_STATS_TOPICS: frozenset[str] = frozenset({TOPIC_RUNS})
 
-# Named query constants
-QUERY_RUNS_JOBS_DETAIL = "runs_jobs_detail"
-QUERY_RUNS_JOBS_DETAIL_AGGREGATION = "runs_jobs_detail_aggregation"
-
 # Named query aggregations
 AGGREGATION_BUCKET_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000  # 7 days in milliseconds
 TIMELINE_BUCKET_HOUR = "hour"
