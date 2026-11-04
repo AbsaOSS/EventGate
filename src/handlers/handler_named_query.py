@@ -18,19 +18,19 @@
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
-from src.readers.named_query_registry import SUPPORTED_QUERIES
+from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_JOBS_DETAIL_QUERIES
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
-from src.utils.utils import build_error_response, build_success_response
+from src.utils.utils import build_aggregations_response, build_error_response, build_success_response
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class NamedQueryParams:
+class JobsDetailQueryParams:
     """Validated query parameters ready to pass to `read_named_query`.
 
     Attributes:
@@ -38,12 +38,33 @@ class NamedQueryParams:
         timestamp_end: End of time window in epoch milliseconds, or `None` for the default.
         cursor: Last `internal_id` from previous page, or `None` for the first page.
         limit: Maximum number of rows per page.
+        source_app: Exact source application filter, or `None` for all applications.
+        tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
     """
 
     timestamp_start: int | None
     timestamp_end: int | None
     cursor: int | None
     limit: int
+    source_app: str | None = None
+    tenant_id: str | None = None
+
+
+@dataclass(frozen=True)
+class AggregationQueryParams:
+    """Validated query parameters ready to pass to `read_aggregations`.
+
+    Attributes:
+        timestamp_start: Start of time window in epoch milliseconds.
+        timestamp_end: End of time window in epoch milliseconds.
+        source_app: Exact source application filter, or `None` for all applications.
+        tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
+    """
+
+    timestamp_start: int | None
+    timestamp_end: int | None
+    source_app: str | None = None
+    tenant_id: str | None = None
 
 
 class HandlerNamedQuery:
@@ -71,8 +92,22 @@ class HandlerNamedQuery:
         if error_response := self._validate_event_path_params(topic_name, query_name):
             return error_response
 
-        body_params = self._validate_event_body(event.get("body"))
-        if isinstance(body_params, dict):
+        if query_name in SUPPORTED_AGGREGATION_QUERIES:
+            return self._handle_aggregation_query(event.get("body"), query_name, topic_name)
+
+        return self._handle_jobs_detail_query(event.get("body"), query_name, topic_name)
+
+    def _handle_jobs_detail_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
+        """Handle a jobs-detail named query (`SUPPORTED_JOBS_DETAIL_QUERIES`).
+        Args:
+            body: The raw request body (JSON string) from the API Gateway event.
+            query_name: The lower-cased, already-validated `query_name` path parameter.
+            topic_name: The lower-cased, already-validated `topic_name` path parameter.
+        Returns:
+            API Gateway response dict.
+        """
+        body_params = self._validate_jobs_detail_event_body(body)
+        if not isinstance(body_params, JobsDetailQueryParams):
             return body_params
 
         try:
@@ -82,12 +117,41 @@ class HandlerNamedQuery:
                 timestamp_end=body_params.timestamp_end,
                 cursor=body_params.cursor,
                 limit=body_params.limit,
+                source_app=body_params.source_app,
+                tenant_id=body_params.tenant_id,
             )
         except RuntimeError:
             logger.exception("Named query %s failed for topic %s.", query_name, topic_name)
             return build_error_response(500, "database", "Named query failed.")
 
         return build_success_response(rows, pagination)
+
+    def _handle_aggregation_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
+        """Handle a window-wide aggregation named query (`SUPPORTED_AGGREGATION_QUERIES`).
+        Args:
+            body: The raw request body (JSON string) from the API Gateway event.
+            query_name: The lower-cased, already-validated `query_name` path parameter.
+            topic_name: The lower-cased, already-validated `topic_name` path parameter.
+        Returns:
+            API Gateway response dict.
+        """
+        body_params = self._validate_aggregation_event_body(body)
+        if not isinstance(body_params, AggregationQueryParams):
+            return body_params
+
+        try:
+            aggregations = self.reader_postgres.read_aggregations(
+                query_name=query_name,
+                timestamp_start=body_params.timestamp_start,
+                timestamp_end=body_params.timestamp_end,
+                source_app=body_params.source_app,
+                tenant_id=body_params.tenant_id,
+            )
+        except RuntimeError:
+            logger.exception("Aggregation query %s failed for topic %s.", query_name, topic_name)
+            return build_error_response(500, "database", "Aggregation query failed.")
+
+        return build_aggregations_response(asdict(aggregations))
 
     def _validate_event_path_params(self, topic_name: str, query_name: str) -> dict[str, Any] | None:
         """Validate the `topic_name`/`query_name` path parameters.
@@ -109,18 +173,18 @@ class HandlerNamedQuery:
         if not query_name:
             return build_error_response(400, "validation", "Missing path parameter 'query_name'.")
 
-        if query_name not in SUPPORTED_QUERIES:
-            return build_error_response(400, "validation", f"Query '{query_name}' is not supported. ")
+        if query_name not in SUPPORTED_JOBS_DETAIL_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
+            return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
 
         return None
 
     @staticmethod
-    def _validate_event_body(body: str | None) -> NamedQueryParams | dict[str, Any]:
+    def _validate_jobs_detail_event_body(body: str | None) -> JobsDetailQueryParams | dict[str, Any]:
         """Parse and validate the request body.
         Args:
             body: The raw request body (JSON string) from the API Gateway event, or `None`.
         Returns:
-            The parsed_body `NamedQueryParams`, or an `error_response` dict if validation fails.
+            The parsed_body `JobsDetailQueryParams`, or an `error_response` dict if validation fails.
         """
         try:
             parsed_body = json.loads(body or "{}")
@@ -147,6 +211,91 @@ class HandlerNamedQuery:
         if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             return build_error_response(400, "validation", "Field 'limit' must be a positive integer.")
 
-        return NamedQueryParams(
-            timestamp_start=timestamp_start, timestamp_end=timestamp_end, cursor=cursor, limit=limit
+        if error_response := HandlerNamedQuery._validate_timestamp_order(timestamp_start, timestamp_end):
+            return error_response
+
+        if error_response := HandlerNamedQuery._validate_filters(parsed_body):
+            return error_response
+
+        return JobsDetailQueryParams(
+            timestamp_start=timestamp_start,
+            timestamp_end=timestamp_end,
+            cursor=cursor,
+            limit=limit,
+            source_app=parsed_body.get("source_app"),
+            tenant_id=parsed_body.get("tenant_id"),
         )
+
+    @staticmethod
+    def _validate_aggregation_event_body(body: str | None) -> AggregationQueryParams | dict[str, Any]:
+        """Parse and validate the request body for an aggregation named query.
+        Args:
+            body: The raw request body (JSON string) from the API Gateway event.
+        Returns:
+            The parsed_body `AggregationQueryParams`, or an `error_response` dict if validation fails.
+        """
+        try:
+            parsed_body = json.loads(body or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return build_error_response(400, "validation", "Request body must be valid JSON.")
+
+        if not isinstance(parsed_body, dict):
+            return build_error_response(400, "validation", "Request body must be a JSON object.")
+
+        unsupported_fields = [field_name for field_name in ("cursor", "limit") if field_name in parsed_body]
+        if unsupported_fields:
+            return build_error_response(
+                400,
+                "validation",
+                f"Field(s) {', '.join(unsupported_fields)} are not supported for aggregation queries.",
+            )
+
+        timestamp_start = parsed_body.get("timestamp_start")
+        timestamp_end = parsed_body.get("timestamp_end")
+
+        int_fields = (
+            (timestamp_start, "timestamp_start"),
+            (timestamp_end, "timestamp_end"),
+        )
+        for value, field_name in int_fields:
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+                return build_error_response(400, "validation", f"Field '{field_name}' must be an integer.")
+
+        if error_response := HandlerNamedQuery._validate_timestamp_order(timestamp_start, timestamp_end):
+            return error_response
+
+        if error_response := HandlerNamedQuery._validate_filters(parsed_body):
+            return error_response
+
+        return AggregationQueryParams(
+            timestamp_start=timestamp_start,
+            timestamp_end=timestamp_end,
+            source_app=parsed_body.get("source_app"),
+            tenant_id=parsed_body.get("tenant_id"),
+        )
+
+    @staticmethod
+    def _validate_filters(parsed_body: dict[str, Any]) -> dict[str, Any] | None:
+        """Reject non-string, non-null named-query filters."""
+        for field_name in ("source_app", "tenant_id"):
+            value = parsed_body.get(field_name)
+            if value is not None and not isinstance(value, str):
+                logger.warning(
+                    "Request rejected: query filter must be a string or null.",
+                    extra={"field": field_name},
+                )
+                return build_error_response(400, "validation", f"Field '{field_name}' must be a string or null.")
+        return None
+
+    @staticmethod
+    def _validate_timestamp_order(timestamp_start: int | None, timestamp_end: int | None) -> dict[str, Any] | None:
+        """Reject reversed windows when both timestamp bounds are supplied."""
+        if timestamp_start is not None and timestamp_end is not None and timestamp_start > timestamp_end:
+            logger.warning(
+                "Request rejected: timestamp_start exceeds timestamp_end.",
+                extra={"timestamp_start": timestamp_start, "timestamp_end": timestamp_end},
+            )
+            return build_error_response(
+                400, "validation", "Field 'timestamp_start' must be less than or equal to 'timestamp_end'."
+            )
+        return None
