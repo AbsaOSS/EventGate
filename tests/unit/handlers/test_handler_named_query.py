@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, PaginatedQueryParams
+from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, JobsDetailQueryParams
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations
 
 
@@ -431,8 +431,8 @@ class TestValidateEventPathParams:
         assert error is None
 
 
-class TestValidatePaginatedEventBody:
-    """Parametrized tests for `HandlerNamedQuery._validate_paginated_event_body`."""
+class TestValidateJobsDetailEventBody:
+    """Parametrized tests for `HandlerNamedQuery._validate_jobs_detail_event_body`."""
 
     @pytest.mark.parametrize(
         "body, expected_status, expected_message_fragment",
@@ -450,7 +450,7 @@ class TestValidatePaginatedEventBody:
         self, body: str, expected_status: int, expected_message_fragment: str
     ) -> None:
         """Test that each invalid body returns the expected error."""
-        result = HandlerNamedQuery._validate_paginated_event_body(body)
+        result = HandlerNamedQuery._validate_jobs_detail_event_body(body)
 
         assert isinstance(result, dict)
         assert expected_status == result["statusCode"]
@@ -460,19 +460,19 @@ class TestValidatePaginatedEventBody:
     @pytest.mark.parametrize(
         "body, expected_params",
         [
-            pytest.param(None, PaginatedQueryParams(None, None, None, 50), id="none_body_uses_defaults"),
-            pytest.param("{}", PaginatedQueryParams(None, None, None, 50), id="empty_object_uses_defaults"),
+            pytest.param(None, JobsDetailQueryParams(None, None, None, 50), id="none_body_uses_defaults"),
+            pytest.param("{}", JobsDetailQueryParams(None, None, None, 50), id="empty_object_uses_defaults"),
             pytest.param(
                 json.dumps({"timestamp_start": 1000, "timestamp_end": 2000, "cursor": 42, "limit": 25}),
-                PaginatedQueryParams(1000, 2000, 42, 25),
+                JobsDetailQueryParams(1000, 2000, 42, 25),
                 id="full_body",
             ),
         ],
     )
     def test_returns_parsed_params_for_valid_body(
-        self, body: str | None, expected_params: PaginatedQueryParams
+        self, body: str | None, expected_params: JobsDetailQueryParams
     ) -> None:
-        """Test that valid bodies are parsed into the expected `PaginatedQueryParams`."""
-        result = HandlerNamedQuery._validate_paginated_event_body(body)
+        """Test that valid bodies are parsed into the expected `JobsDetailQueryParams`."""
+        result = HandlerNamedQuery._validate_jobs_detail_event_body(body)
 
         assert expected_params == result

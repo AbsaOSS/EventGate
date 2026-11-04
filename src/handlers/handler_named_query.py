@@ -21,7 +21,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_PAGINATED_QUERIES
+from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_JOBS_DETAIL_QUERIES
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
 from src.utils.utils import build_aggregations_response, build_error_response, build_success_response
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class PaginatedQueryParams:
+class JobsDetailQueryParams:
     """Validated query parameters ready to pass to `read_named_query`.
 
     Attributes:
@@ -95,10 +95,10 @@ class HandlerNamedQuery:
         if query_name in SUPPORTED_AGGREGATION_QUERIES:
             return self._handle_aggregation_query(event.get("body"), query_name, topic_name)
 
-        return self._handle_paginated_query(event.get("body"), query_name, topic_name)
+        return self._handle_jobs_detail_query(event.get("body"), query_name, topic_name)
 
-    def _handle_paginated_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
-        """Handle a paginated named query (`SUPPORTED_PAGINATED_QUERIES`).
+    def _handle_jobs_detail_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
+        """Handle a jobs-detail named query (`SUPPORTED_JOBS_DETAIL_QUERIES`).
         Args:
             body: The raw request body (JSON string) from the API Gateway event.
             query_name: The lower-cased, already-validated `query_name` path parameter.
@@ -106,8 +106,8 @@ class HandlerNamedQuery:
         Returns:
             API Gateway response dict.
         """
-        body_params = self._validate_paginated_event_body(body)
-        if not isinstance(body_params, PaginatedQueryParams):
+        body_params = self._validate_jobs_detail_event_body(body)
+        if not isinstance(body_params, JobsDetailQueryParams):
             return body_params
 
         try:
@@ -173,18 +173,18 @@ class HandlerNamedQuery:
         if not query_name:
             return build_error_response(400, "validation", "Missing path parameter 'query_name'.")
 
-        if query_name not in SUPPORTED_PAGINATED_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
+        if query_name not in SUPPORTED_JOBS_DETAIL_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
             return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
 
         return None
 
     @staticmethod
-    def _validate_paginated_event_body(body: str | None) -> PaginatedQueryParams | dict[str, Any]:
+    def _validate_jobs_detail_event_body(body: str | None) -> JobsDetailQueryParams | dict[str, Any]:
         """Parse and validate the request body.
         Args:
             body: The raw request body (JSON string) from the API Gateway event, or `None`.
         Returns:
-            The parsed_body `PaginatedQueryParams`, or an `error_response` dict if validation fails.
+            The parsed_body `JobsDetailQueryParams`, or an `error_response` dict if validation fails.
         """
         try:
             parsed_body = json.loads(body or "{}")
@@ -217,7 +217,7 @@ class HandlerNamedQuery:
         if error_response := HandlerNamedQuery._validate_filters(parsed_body):
             return error_response
 
-        return PaginatedQueryParams(
+        return JobsDetailQueryParams(
             timestamp_start=timestamp_start,
             timestamp_end=timestamp_end,
             cursor=cursor,

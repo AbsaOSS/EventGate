@@ -29,7 +29,7 @@ import psycopg2.extensions
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
-from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_PAGINATED_QUERIES
+from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_JOBS_DETAIL_QUERIES
 from src.utils.constants import (
     AGGREGATION_BUCKET_THRESHOLD_MS,
     POSTGRES_DEFAULT_LIMIT,
@@ -232,7 +232,7 @@ class ReaderPostgres(PostgresBase):
     ) -> tuple[list[QueryRow], Pagination]:
         """Execute a predefined named query with keyset pagination.
         Args:
-            query_name: Registered named query identifier (see `SUPPORTED_PAGINATED_QUERIES`).
+            query_name: Registered named query identifier (see `SUPPORTED_JOBS_DETAIL_QUERIES`).
             timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
             timestamp_end: End of time window in epoch milliseconds (default to *now*).
             cursor: Last `internal_id` from previous page (keyset pagination).
@@ -245,7 +245,7 @@ class ReaderPostgres(PostgresBase):
         Raises:
             RuntimeError: On unknown query name or database connectivity/query errors.
         """
-        query = SUPPORTED_PAGINATED_QUERIES.get(query_name)
+        query = SUPPORTED_JOBS_DETAIL_QUERIES.get(query_name)
         if query is None:
             raise RuntimeError(f"Unknown named query: {query_name}.")
 

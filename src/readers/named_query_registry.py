@@ -16,7 +16,7 @@
 
 """Registry of predefined, server-executed named queries.
 
-`SUPPORTED_PAGINATED_QUERIES` maps each paginated `query_name` to its aiosql query keys, with and
+`SUPPORTED_JOBS_DETAIL_QUERIES` maps each jobs-detail `query_name` to its aiosql query keys, with and
 without a keyset-pagination cursor. `SUPPORTED_AGGREGATION_QUERIES` holds window-wide
 aggregation queries instead, which have no pagination and a different response shape.
 Names absent from both are rejected as a `400` at the handler layer. New named queries
@@ -29,8 +29,8 @@ from src.utils.constants import QUERY_RUNS_JOBS_DETAIL, QUERY_RUNS_JOBS_DETAIL_A
 
 
 @dataclass(frozen=True)
-class PaginatedQuery:
-    """Definition of a single paginated named query.
+class JobsDetailQuery:
+    """Definition of a single jobs-detail named query with keyset pagination.
 
     Attributes:
         name: Stable identifier used in the request path.
@@ -43,8 +43,8 @@ class PaginatedQuery:
     sql_key_with_cursor: str
 
 
-SUPPORTED_PAGINATED_QUERIES: dict[str, PaginatedQuery] = {
-    QUERY_RUNS_JOBS_DETAIL: PaginatedQuery(
+SUPPORTED_JOBS_DETAIL_QUERIES: dict[str, JobsDetailQuery] = {
+    QUERY_RUNS_JOBS_DETAIL: JobsDetailQuery(
         name=QUERY_RUNS_JOBS_DETAIL,
         sql_key="get_runs_jobs_detail",
         sql_key_with_cursor="get_runs_jobs_detail_with_cursor",
