@@ -1,4 +1,4 @@
--- name: get_runs_jobs_detail(ts_start, ts_end, lim, source_app, tenant_id)
+-- name: runs_jobs_detail(ts_start, ts_end, lim, source_app, tenant_id)
 SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
        r.source_app_version, r.environment,
        r.timestamp_start AS run_timestamp_start,
@@ -13,7 +13,7 @@ SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
  ORDER BY j.internal_id DESC
  LIMIT :lim;
 
--- name: get_runs_jobs_detail_with_cursor(ts_start, ts_end, cursor_id, lim, source_app, tenant_id)
+-- name: runs_jobs_detail_with_cursor(ts_start, ts_end, cursor_id, lim, source_app, tenant_id)
 SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
        r.source_app_version, r.environment,
        r.timestamp_start AS run_timestamp_start,

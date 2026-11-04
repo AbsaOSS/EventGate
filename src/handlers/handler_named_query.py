@@ -21,7 +21,6 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_JOBS_DETAIL_QUERIES
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
 from src.utils.utils import build_aggregations_response, build_error_response, build_success_response
@@ -92,13 +91,25 @@ class HandlerNamedQuery:
         if error_response := self._validate_event_path_params(topic_name, query_name):
             return error_response
 
-        if query_name in SUPPORTED_AGGREGATION_QUERIES:
+        try:
+            family = self.reader_postgres.get_query_family(query_name)
+        except RuntimeError:
+            logger.exception("Internal configuration error.", extra={"query_name": query_name})
+            return build_error_response(
+                500, "configuration", "Internal configuration error. Please contact the service owners."
+            )
+
+        if family is None:
+            logger.warning("Request rejected: query is not supported.", extra={"query_name": query_name})
+            return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
+
+        if family == "aggregation":
             return self._handle_aggregation_query(event.get("body"), query_name, topic_name)
 
         return self._handle_jobs_detail_query(event.get("body"), query_name, topic_name)
 
     def _handle_jobs_detail_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
-        """Handle a jobs-detail named query (`SUPPORTED_JOBS_DETAIL_QUERIES`).
+        """Handle a discovered jobs-detail named query.
         Args:
             body: The raw request body (JSON string) from the API Gateway event.
             query_name: The lower-cased, already-validated `query_name` path parameter.
@@ -127,7 +138,7 @@ class HandlerNamedQuery:
         return build_success_response(rows, pagination)
 
     def _handle_aggregation_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
-        """Handle a window-wide aggregation named query (`SUPPORTED_AGGREGATION_QUERIES`).
+        """Handle a discovered window-wide aggregation named query.
         Args:
             body: The raw request body (JSON string) from the API Gateway event.
             query_name: The lower-cased, already-validated `query_name` path parameter.
@@ -172,9 +183,6 @@ class HandlerNamedQuery:
 
         if not query_name:
             return build_error_response(400, "validation", "Missing path parameter 'query_name'.")
-
-        if query_name not in SUPPORTED_JOBS_DETAIL_QUERIES and query_name not in SUPPORTED_AGGREGATION_QUERIES:
-            return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
 
         return None
 

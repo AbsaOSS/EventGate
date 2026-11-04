@@ -1,4 +1,4 @@
--- name: get_runs_jobs_aggregations(ts_start, ts_end, source_app, tenant_id)
+-- name: runs_jobs_detail_aggregation_summary(ts_start, ts_end, source_app, tenant_id)
 -- Window-wide summary aggregates for runs_jobs_detail (job-row grain).
 SELECT COUNT(*) AS total_runs,
        COUNT(DISTINCT r.tenant_id) AS total_tenants,
@@ -15,7 +15,7 @@ SELECT COUNT(*) AS total_runs,
    AND (:source_app IS NULL OR r.source_app = :source_app)
    AND (:tenant_id IS NULL OR r.tenant_id = :tenant_id);
 
--- name: get_runs_jobs_timeline_hourly(ts_start, ts_end, source_app, tenant_id)
+-- name: runs_jobs_detail_aggregation_timeline_hourly(ts_start, ts_end, source_app, tenant_id)
 -- Hourly timeline buckets (non-empty buckets only) for runs_jobs_detail, oldest first.
 SELECT (EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(r.timestamp_start / 1000.0), 'UTC')) * 1000)::bigint
            AS bucket_start,
@@ -32,7 +32,7 @@ SELECT (EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(r.timestamp_start / 1
  GROUP BY bucket_start
  ORDER BY bucket_start ASC;
 
--- name: get_runs_jobs_timeline_daily(ts_start, ts_end, source_app, tenant_id)
+-- name: runs_jobs_detail_aggregation_timeline_daily(ts_start, ts_end, source_app, tenant_id)
 -- Daily timeline buckets (non-empty buckets only) for runs_jobs_detail, oldest first.
 SELECT (EXTRACT(EPOCH FROM date_trunc('day', to_timestamp(r.timestamp_start / 1000.0), 'UTC')) * 1000)::bigint
            AS bucket_start,
