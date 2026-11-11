@@ -27,7 +27,7 @@ from aiosql.queries import Queries
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
-from src.readers.query_catalog import QueryFamily, load_queries, query_family
+from src.readers.query_catalog import QueryFamily, load_queries, load_query_family
 from src.utils.constants import (
     AGGREGATION_BUCKET_THRESHOLD_MS,
     POSTGRES_DEFAULT_LIMIT,
@@ -67,7 +67,7 @@ class ReaderPostgres(PostgresBase):
 
     def get_query_family(self, query_name: str) -> QueryFamily | None:
         """Discover a public query's family without accessing database configuration."""
-        return query_family(self._queries, query_name)
+        return load_query_family(self._queries, query_name)
 
     def _require_connection_config(self) -> PostgresConfig:
         """Load and validate the PostgreSQL connection config, or raise.

@@ -66,7 +66,7 @@ def _validate_query_groups(queries: Queries) -> None:
         public_names.update(names)
 
 
-def query_family(queries: Queries, query_name: str) -> QueryFamily | None:
+def load_query_family(queries: Queries, query_name: str) -> QueryFamily | None:
     """Classify a public name in a validated query tree without exposing helper methods."""
     for family, (_, suffixes) in _QUERY_FAMILIES.items():
         if f"{query_name}{suffixes[0]}" in getattr(queries, family).available_queries:

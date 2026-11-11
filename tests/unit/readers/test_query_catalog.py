@@ -20,7 +20,7 @@ from aiosql.queries import Queries
 import pytest
 from pytest_mock import MockerFixture
 
-from src.readers.query_catalog import load_queries, query_family
+from src.readers.query_catalog import load_queries, load_query_family
 
 
 def _queries(tmp_path: Path, mocker: MockerFixture, detail: tuple[str, ...], aggregation: tuple[str, ...]) -> Queries:
@@ -40,9 +40,9 @@ def test_discovers_additional_groups_without_python_registration(tmp_path: Path,
         ("totals_summary", "totals_timeline_hourly", "totals_timeline_daily"),
     )
 
-    assert "jobs_detail" == query_family(queries, "first")
-    assert "jobs_detail" == query_family(queries, "second")
-    assert "aggregation" == query_family(queries, "totals")
+    assert "jobs_detail" == load_query_family(queries, "first")
+    assert "jobs_detail" == load_query_family(queries, "second")
+    assert "aggregation" == load_query_family(queries, "totals")
 
 
 @pytest.mark.parametrize(
@@ -62,7 +62,7 @@ def test_private_methods_are_not_public_queries(name: str, tmp_path: Path, mocke
         ("totals_summary", "totals_timeline_hourly", "totals_timeline_daily"),
     )
 
-    assert query_family(queries, name) is None
+    assert load_query_family(queries, name) is None
 
 
 @pytest.mark.parametrize(
