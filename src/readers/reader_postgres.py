@@ -20,17 +20,14 @@ import logging
 import time
 from datetime import datetime, timezone
 from functools import cached_property
-from pathlib import Path
 from typing import Any
 
-import aiosql
 import psycopg2.extensions
 from aiosql.queries import Queries
-from aiosql.utils import SQLLoadException, SQLParseException
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
-from src.readers.query_catalog import QueryFamily, query_family, validate_query_groups
+from src.readers.query_catalog import QueryFamily, load_queries, query_family
 from src.utils.constants import (
     AGGREGATION_BUCKET_THRESHOLD_MS,
     POSTGRES_DEFAULT_LIMIT,
@@ -46,8 +43,6 @@ from src.utils.utils import Pagination, QueryRow
 from src.writers.writer import HealthCheckError
 
 logger = logging.getLogger(__name__)
-
-_SQL_DIR = Path(__file__).parent / "sql"
 
 type DbRow = tuple[Any, ...]
 type RawQueryResult = tuple[list[str], list[DbRow]]
@@ -68,14 +63,7 @@ class ReaderPostgres(PostgresBase):
     @cached_property
     def _queries(self) -> Queries:
         """Load native aiosql queries with separate public family namespaces."""
-        try:
-            queries = aiosql.from_path(_SQL_DIR / "stats.sql", "psycopg2")
-            queries.add_child_queries("jobs_detail", aiosql.from_path(_SQL_DIR / "jobs_detail_queries.sql", "psycopg2"))
-            queries.add_child_queries("aggregation", aiosql.from_path(_SQL_DIR / "aggregation_queries.sql", "psycopg2"))
-            validate_query_groups(queries)
-        except (OSError, ValueError, SQLLoadException, SQLParseException) as exc:
-            raise RuntimeError(f"SQL query configuration error: {exc}") from exc
-        return queries
+        return load_queries()
 
     def get_query_family(self, query_name: str) -> QueryFamily | None:
         """Discover a public query's family without accessing database configuration."""

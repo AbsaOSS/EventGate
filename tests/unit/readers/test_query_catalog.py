@@ -14,28 +14,31 @@
 # limitations under the License.
 #
 
-import aiosql
+from pathlib import Path
+
 from aiosql.queries import Queries
 import pytest
+from pytest_mock import MockerFixture
 
-from src.readers.query_catalog import query_family, validate_query_groups
+from src.readers.query_catalog import load_queries, query_family
 
 
-def _queries(detail: tuple[str, ...], aggregation: tuple[str, ...]) -> Queries:
-    queries = aiosql.from_str("-- name: get_stats()\nSELECT 1;", "psycopg2")
-    for family, names in (("jobs_detail", detail), ("aggregation", aggregation)):
+def _queries(tmp_path: Path, mocker: MockerFixture, detail: tuple[str, ...], aggregation: tuple[str, ...]) -> Queries:
+    (tmp_path / "stats.sql").write_text("-- name: get_stats()\nSELECT 1;", encoding="utf-8")
+    for filename, names in (("jobs_detail_queries.sql", detail), ("aggregation_queries.sql", aggregation)):
         sql = "\n".join(f"-- name: {name}()\nSELECT 1;" for name in names)
-        queries.add_child_queries(family, aiosql.from_str(sql, "psycopg2"))
-    return queries
+        (tmp_path / filename).write_text(sql, encoding="utf-8")
+    mocker.patch("src.readers.query_catalog._SQL_DIR", tmp_path)
+    return load_queries()
 
 
-def test_discovers_additional_groups_without_python_registration() -> None:
+def test_discovers_additional_groups_without_python_registration(tmp_path: Path, mocker: MockerFixture) -> None:
     queries = _queries(
+        tmp_path,
+        mocker,
         ("first", "first_with_cursor", "second", "second_with_cursor"),
         ("totals_summary", "totals_timeline_hourly", "totals_timeline_daily"),
     )
-
-    validate_query_groups(queries)
 
     assert "jobs_detail" == query_family(queries, "first")
     assert "jobs_detail" == query_family(queries, "second")
@@ -51,12 +54,13 @@ def test_discovers_additional_groups_without_python_registration() -> None:
         "unknown",
     ],
 )
-def test_private_methods_are_not_public_queries(name: str) -> None:
+def test_private_methods_are_not_public_queries(name: str, tmp_path: Path, mocker: MockerFixture) -> None:
     queries = _queries(
+        tmp_path,
+        mocker,
         ("detail", "detail_with_cursor"),
         ("totals_summary", "totals_timeline_hourly", "totals_timeline_daily"),
     )
-    validate_query_groups(queries)
 
     assert query_family(queries, name) is None
 
@@ -69,18 +73,20 @@ def test_private_methods_are_not_public_queries(name: str) -> None:
         (("Detail", "Detail_with_cursor"), ()),
     ],
 )
-def test_rejects_incomplete_or_unexpected_groups(detail: tuple[str, ...], aggregation: tuple[str, ...]) -> None:
-    queries = _queries(detail, aggregation)
+def test_rejects_incomplete_or_unexpected_groups(
+    detail: tuple[str, ...], aggregation: tuple[str, ...], tmp_path: Path, mocker: MockerFixture
+) -> None:
+    with pytest.raises(RuntimeError, match="SQL query configuration error: Invalid SQL query groups") as exc:
+        _queries(tmp_path, mocker, detail, aggregation)
 
-    with pytest.raises(ValueError, match="Invalid SQL query groups"):
-        validate_query_groups(queries)
+    assert isinstance(exc.value.__cause__, ValueError)
 
 
-def test_rejects_names_shared_by_both_families() -> None:
-    queries = _queries(
-        ("shared", "shared_with_cursor"),
-        ("shared_summary", "shared_timeline_hourly", "shared_timeline_daily"),
-    )
-
-    with pytest.raises(ValueError, match="Conflicting public SQL query names: shared"):
-        validate_query_groups(queries)
+def test_rejects_names_shared_by_both_families(tmp_path: Path, mocker: MockerFixture) -> None:
+    with pytest.raises(RuntimeError, match="Conflicting public SQL query names: shared"):
+        _queries(
+            tmp_path,
+            mocker,
+            ("shared", "shared_with_cursor"),
+            ("shared_summary", "shared_timeline_hourly", "shared_timeline_daily"),
+        )

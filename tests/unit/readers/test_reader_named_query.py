@@ -123,7 +123,7 @@ def test_sql_configuration_failure_raises_before_database_access(
 ) -> None:
     for filename, sql in files.items():
         (tmp_path / filename).write_text(sql, encoding="utf-8")
-    mocker.patch("src.readers.reader_postgres._SQL_DIR", tmp_path)
+    mocker.patch("src.readers.query_catalog._SQL_DIR", tmp_path)
     config = mocker.patch.object(reader, "_require_connection_config")
 
     with pytest.raises(RuntimeError, match="SQL query configuration error"):

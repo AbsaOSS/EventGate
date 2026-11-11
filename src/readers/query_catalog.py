@@ -14,29 +14,47 @@
 # limitations under the License.
 #
 
-"""Discover public query groups from aiosql's family namespaces.
+"""Load and discover public query groups from aiosql's family namespaces.
 
 Detail groups contain `<name>` and `<name>_with_cursor`; aggregation groups contain
 `<name>_summary`, `<name>_timeline_hourly`, and `<name>_timeline_daily`.
 Only complete groups are public. Root stats methods and generated cursor helpers are private.
 """
 
+from pathlib import Path
 from typing import Literal
 
+import aiosql
 from aiosql.queries import Queries
+from aiosql.utils import SQLLoadException, SQLParseException
 
 type QueryFamily = Literal["jobs_detail", "aggregation"]
+type QueryFamilyDefinition = tuple[str, tuple[str, ...]]
 
-_FAMILY_SUFFIXES: dict[QueryFamily, tuple[str, ...]] = {
-    "jobs_detail": ("_with_cursor", ""),
-    "aggregation": ("_summary", "_timeline_hourly", "_timeline_daily"),
+_SQL_DIR = Path(__file__).parent / "sql"
+
+_QUERY_FAMILIES: dict[QueryFamily, QueryFamilyDefinition] = {
+    "jobs_detail": ("jobs_detail_queries.sql", ("_with_cursor", "")),
+    "aggregation": ("aggregation_queries.sql", ("_summary", "_timeline_hourly", "_timeline_daily")),
 }
 
 
-def validate_query_groups(queries: Queries) -> None:
+def load_queries() -> Queries:
+    """Load and validate the SQL query tree, wrapping configuration failures."""
+    try:
+        queries = aiosql.from_path(_SQL_DIR / "stats.sql", "psycopg2")
+        for family, (filename, _) in _QUERY_FAMILIES.items():
+            queries.add_child_queries(family, aiosql.from_path(_SQL_DIR / filename, "psycopg2"))
+        _validate_query_groups(queries)
+    except (OSError, ValueError, SQLLoadException, SQLParseException) as exc:
+        raise RuntimeError(f"SQL query configuration error: {exc}") from exc
+    return queries
+
+
+def _validate_query_groups(queries: Queries) -> None:
     """Reject incomplete, unexpected, or conflicting public SQL groups."""
     public_names: set[str] = set()
-    for family, suffixes in _FAMILY_SUFFIXES.items():
+    for family, (_, suffixes) in _QUERY_FAMILIES.items():
         available = set(getattr(queries, family).available_queries)
         names = {name.removesuffix(suffixes[0]) for name in available if name.endswith(suffixes[0])}
         # Every authored SELECT also has an aiosql-generated `<statement>_cursor` method.
@@ -50,7 +68,7 @@ def validate_query_groups(queries: Queries) -> None:
 
 def query_family(queries: Queries, query_name: str) -> QueryFamily | None:
     """Classify a public name in a validated query tree without exposing helper methods."""
-    for family, suffixes in _FAMILY_SUFFIXES.items():
+    for family, (_, suffixes) in _QUERY_FAMILIES.items():
         if f"{query_name}{suffixes[0]}" in getattr(queries, family).available_queries:
             return family
     return None

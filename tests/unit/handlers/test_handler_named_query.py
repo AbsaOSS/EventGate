@@ -289,7 +289,7 @@ class TestHandlerNamedQueryErrors:
         error: Exception,
     ) -> None:
         """Test that a SQL load failure returns a sanitized 500 with one error log and no database access."""
-        mocker.patch("src.readers.reader_postgres.aiosql.from_path", side_effect=error)
+        mocker.patch("src.readers.query_catalog.aiosql.from_path", side_effect=error)
         connection = mocker.patch.object(ReaderPostgres, "_get_connection")
         handler = HandlerNamedQuery(topics=topics, reader_postgres=ReaderPostgres())
 
