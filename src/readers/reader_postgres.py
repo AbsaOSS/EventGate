@@ -18,18 +18,16 @@
 
 import logging
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import cached_property
-from pathlib import Path
 from typing import Any
 
-import aiosql
 import psycopg2.extensions
+from aiosql.queries import Queries
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
-from src.readers.named_query_registry import SUPPORTED_AGGREGATION_QUERIES, SUPPORTED_JOBS_DETAIL_QUERIES
+from src.readers.query_catalog import QueryFamily, load_queries, load_query_family
 from src.utils.constants import (
     AGGREGATION_BUCKET_THRESHOLD_MS,
     POSTGRES_DEFAULT_LIMIT,
@@ -46,24 +44,9 @@ from src.writers.writer import HealthCheckError
 
 logger = logging.getLogger(__name__)
 
-_SQL_DIR = Path(__file__).parent / "sql"
-
 type DbRow = tuple[Any, ...]
 type RawQueryResult = tuple[list[str], list[DbRow]]
 type AggregationQueryResult = tuple[dict[str, Any], list[dict[str, Any]]]
-
-
-@dataclass(frozen=True)
-class ReaderQueries:
-    """Typed holder for reader SQL query strings loaded via aiosql."""
-
-    get_stats: str
-    get_stats_with_cursor: str
-    get_runs_jobs_detail: str
-    get_runs_jobs_detail_with_cursor: str
-    get_runs_jobs_aggregations: str
-    get_runs_jobs_timeline_hourly: str
-    get_runs_jobs_timeline_daily: str
 
 
 class ReaderPostgres(PostgresBase):
@@ -78,22 +61,13 @@ class ReaderPostgres(PostgresBase):
         return f"-c statement_timeout={POSTGRES_STATEMENT_TIMEOUT_MS} -c default_transaction_read_only=on"
 
     @cached_property
-    def _queries(self) -> ReaderQueries:
-        """Load SQL queries from the `sql/` directory via aiosql."""
-        queries = aiosql.from_path(_SQL_DIR, "psycopg2")
-        # aiosql loads SQL files and attaches query functions as dynamic attributes at runtime.
-        # pylint cannot resolve these statically.
-        return ReaderQueries(
-            get_stats=queries.get_stats.sql,  # pylint: disable=no-member
-            get_stats_with_cursor=queries.get_stats_with_cursor.sql,  # pylint: disable=no-member
-            get_runs_jobs_detail=queries.get_runs_jobs_detail.sql,  # pylint: disable=no-member
-            get_runs_jobs_detail_with_cursor=(
-                queries.get_runs_jobs_detail_with_cursor.sql  # pylint: disable=no-member
-            ),
-            get_runs_jobs_aggregations=queries.get_runs_jobs_aggregations.sql,  # pylint: disable=no-member
-            get_runs_jobs_timeline_hourly=queries.get_runs_jobs_timeline_hourly.sql,  # pylint: disable=no-member
-            get_runs_jobs_timeline_daily=queries.get_runs_jobs_timeline_daily.sql,  # pylint: disable=no-member
-        )
+    def _queries(self) -> Queries:
+        """Load native aiosql queries with separate public family namespaces."""
+        return load_queries()
+
+    def get_query_family(self, query_name: str) -> QueryFamily | None:
+        """Discover a public query's family without accessing database configuration."""
+        return load_query_family(self._queries, query_name)
 
     def _require_connection_config(self) -> PostgresConfig:
         """Load and validate the PostgreSQL connection config, or raise.
@@ -198,12 +172,12 @@ class ReaderPostgres(PostgresBase):
             with connection.cursor() as db_cursor:
                 if cursor is not None:
                     db_cursor.execute(
-                        self._queries.get_stats_with_cursor,
+                        getattr(self._queries, "get_stats_with_cursor").sql,
                         {"ts_start": ts_start, "ts_end": ts_end, "cursor_id": cursor, "lim": limit + 1},
                     )
                 else:
                     db_cursor.execute(
-                        self._queries.get_stats,
+                        getattr(self._queries, "get_stats").sql,
                         {"ts_start": ts_start, "ts_end": ts_end, "lim": limit + 1},
                     )
                 if db_cursor.description is None:
@@ -232,7 +206,7 @@ class ReaderPostgres(PostgresBase):
     ) -> tuple[list[QueryRow], Pagination]:
         """Execute a predefined named query with keyset pagination.
         Args:
-            query_name: Registered named query identifier (see `SUPPORTED_JOBS_DETAIL_QUERIES`).
+            query_name: Public query identifier discovered from the jobs-detail SQL file.
             timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
             timestamp_end: End of time window in epoch milliseconds (default to *now*).
             cursor: Last `internal_id` from previous page (keyset pagination).
@@ -245,8 +219,7 @@ class ReaderPostgres(PostgresBase):
         Raises:
             RuntimeError: On unknown query name or database connectivity/query errors.
         """
-        query = SUPPORTED_JOBS_DETAIL_QUERIES.get(query_name)
-        if query is None:
+        if self.get_query_family(query_name) != "jobs_detail":
             raise RuntimeError(f"Unknown named query: {query_name}.")
 
         self._require_connection_config()
@@ -256,8 +229,9 @@ class ReaderPostgres(PostgresBase):
         ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
         ts_end = timestamp_end if timestamp_end is not None else now_ms
 
-        sql = getattr(self._queries, query.sql_key)
-        sql_with_cursor = getattr(self._queries, query.sql_key_with_cursor)
+        queries = getattr(self._queries, "jobs_detail")
+        sql = getattr(queries, query_name).sql
+        sql_with_cursor = getattr(queries, f"{query_name}_with_cursor").sql
 
         try:
             col_names, raw_rows = self._execute_with_retry(
@@ -341,7 +315,7 @@ class ReaderPostgres(PostgresBase):
     ) -> RunsJobsAggregations:
         """Execute a predefined window-wide aggregation named query.
         Args:
-            query_name: Registered aggregation query identifier.
+            query_name: Public query identifier discovered from the aggregation SQL file.
             timestamp_start: Start of time window in epoch milliseconds (default to *now - 7 days*).
             timestamp_end: End of time window in epoch milliseconds (default to *now*).
             source_app: Exact source application filter, or `None` for all applications.
@@ -351,8 +325,7 @@ class ReaderPostgres(PostgresBase):
         Raises:
             RuntimeError: On unknown query name or database connectivity/query errors.
         """
-        query = SUPPORTED_AGGREGATION_QUERIES.get(query_name)
-        if query is None:
+        if self.get_query_family(query_name) != "aggregation":
             raise RuntimeError(f"Unknown aggregation query: {query_name}.")
 
         self._require_connection_config()
@@ -363,12 +336,10 @@ class ReaderPostgres(PostgresBase):
 
         window_ms = ts_end - ts_start
         bucket = TIMELINE_BUCKET_HOUR if window_ms <= AGGREGATION_BUCKET_THRESHOLD_MS else TIMELINE_BUCKET_DAY
-        timeline_sql_key = (
-            query.timeline_hourly_sql_key if bucket == TIMELINE_BUCKET_HOUR else (query.timeline_daily_sql_key)
-        )
-
-        summary_sql = getattr(self._queries, query.summary_sql_key)
-        timeline_sql = getattr(self._queries, timeline_sql_key)
+        timeline_suffix = "timeline_hourly" if bucket == TIMELINE_BUCKET_HOUR else "timeline_daily"
+        queries = getattr(self._queries, "aggregation")
+        summary_sql = getattr(queries, f"{query_name}_summary").sql
+        timeline_sql = getattr(queries, f"{query_name}_{timeline_suffix}").sql
 
         try:
             summary_row, timeline_rows = self._execute_with_retry(

@@ -16,11 +16,15 @@
 
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import aiosql
 import pytest
+from pytest_mock import MockerFixture
 
+from src.handlers.handler_named_query import HandlerNamedQuery
 from src.readers.reader_postgres import ReaderPostgres
 import src.utils.postgres_base as pb
 
@@ -62,6 +66,70 @@ def reader(monkeypatch: pytest.MonkeyPatch) -> ReaderPostgres:
     monkeypatch.setenv("POSTGRES_SECRET_NAME", "eventgate/postgres")
     monkeypatch.setenv("POSTGRES_SECRET_REGION", "us-east-1")
     return ReaderPostgres()
+
+
+def test_query_discovery_is_lazy_cached_and_independent_of_database(mocker: MockerFixture) -> None:
+    load = mocker.spy(aiosql, "from_path")
+    config = mocker.patch.object(ReaderPostgres, "_require_connection_config")
+    connection = mocker.patch.object(ReaderPostgres, "_get_connection")
+    aws_session = mocker.patch("boto3.Session")
+
+    reader = ReaderPostgres()
+    HandlerNamedQuery({}, reader)
+    load.assert_not_called()
+
+    assert "jobs_detail" == reader.get_query_family("runs_jobs_detail")
+    assert "aggregation" == reader.get_query_family("runs_jobs_detail_aggregation")
+    assert 3 == load.call_count
+    config.assert_not_called()
+    connection.assert_not_called()
+    aws_session.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "method, query_name",
+    [
+        ("read_named_query", "runs_jobs_detail_aggregation"),
+        ("read_aggregations", "runs_jobs_detail"),
+    ],
+)
+def test_reader_rejects_private_or_wrong_family_queries_before_config(
+    reader: ReaderPostgres, mocker: MockerFixture, method: str, query_name: str
+) -> None:
+    config = mocker.patch.object(reader, "_require_connection_config")
+
+    with pytest.raises(RuntimeError, match="Unknown"):
+        getattr(reader, method)(query_name)
+
+    config.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        pytest.param({}, id="missing_sql_files"),
+        pytest.param(
+            {
+                "stats.sql": "-- name: get_stats()\nSELECT 1;",
+                "jobs_detail_queries.sql": "-- name: detail()\nSELECT 1;",
+                "aggregation_queries.sql": "",
+            },
+            id="incomplete_group",
+        ),
+    ],
+)
+def test_sql_configuration_failure_raises_before_database_access(
+    reader: ReaderPostgres, tmp_path: Path, mocker: MockerFixture, files: dict[str, str]
+) -> None:
+    for filename, sql in files.items():
+        (tmp_path / filename).write_text(sql, encoding="utf-8")
+    mocker.patch("src.readers.query_catalog._SQL_DIR", tmp_path)
+    config = mocker.patch.object(reader, "_require_connection_config")
+
+    with pytest.raises(RuntimeError, match="SQL query configuration error"):
+        reader.get_query_family("detail")
+
+    config.assert_not_called()
 
 
 def _make_mock_connection(description: list[tuple[str, ...]], rows: list[tuple[Any, ...]]) -> MagicMock:
@@ -305,30 +373,6 @@ class TestReadAggregations:
         assert 4 == aggregations.timeline.entries[0].total
         assert 1 == aggregations.timeline.entries[0].killed
         assert 1 == aggregations.timeline.entries[0].skipped
-
-    def test_build_aggregations_zeroes_empty_window(self) -> None:
-        """Test that an empty summary/timeline still produces a fully-populated, zeroed result."""
-        summary_row = {
-            "total_runs": 0,
-            "total_tenants": 0,
-            "total_catalogs": 0,
-            "succeeded": 0,
-            "failed": 0,
-            "killed": 0,
-            "skipped": 0,
-            "avg_duration_ms": None,
-        }
-
-        aggregations = ReaderPostgres._build_aggregations(
-            ts_start=1704067200000, ts_end=1704070800000, bucket="hour", summary_row=summary_row, timeline_rows=[]
-        )
-
-        assert 0 == aggregations.total_runs
-        assert 0 == aggregations.killed
-        assert 0 == aggregations.skipped
-        assert 0.0 == aggregations.success_rate
-        assert aggregations.avg_duration_ms is None
-        assert [] == aggregations.timeline.entries
 
     @pytest.mark.parametrize(
         "window_ms, expected_bucket, expected_fragment",

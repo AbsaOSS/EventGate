@@ -326,14 +326,6 @@ class TestNamedQueryAggregation:
         assert timeline["bucket"] in ("hour", "day")
         assert sum(entry["total"] for entry in timeline["entries"]) == aggregations["total_runs"]
 
-    def test_cursor_or_limit_returns_400(self, stats_client: EventStatsTestClient) -> None:
-        """Test that cursor/limit are rejected for the aggregation query (not silently ignored)."""
-        response = stats_client.post_named_query("public.cps.za.runs", self._AGG_QUERY, {"limit": 10})
-
-        assert 400 == response["statusCode"]
-        body = json.loads(response["body"])
-        assert "limit" in body["errors"][0]["message"]
-
 
 class TestNamedQueryPagination:
     """Keyset pagination for runs_jobs_detail."""

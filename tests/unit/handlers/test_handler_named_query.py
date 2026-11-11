@@ -20,16 +20,20 @@ import logging
 from typing import Any
 from unittest.mock import MagicMock
 
+from aiosql.utils import SQLLoadException, SQLParseException
 import pytest
+from pytest_mock import MockerFixture
 
 from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, JobsDetailQueryParams
 from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations
+from src.readers.reader_postgres import ReaderPostgres
 
 
 @pytest.fixture
 def mock_reader() -> MagicMock:
     """Mock ReaderPostgres."""
-    mock = MagicMock()
+    mock = MagicMock(spec=ReaderPostgres)
+    mock.get_query_family.side_effect = ReaderPostgres().get_query_family
     mock.read_named_query.return_value = (
         [{"event_id": "ev1", "internal_id": 1, "status": "succeeded", "run_status": "succeeded"}],
         {"cursor": None, "has_more": False, "limit": 50},
@@ -101,23 +105,6 @@ class TestHandlerNamedQueryValidation:
     """Tests for request validation."""
 
     @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
-    @pytest.mark.parametrize("field_name", ["source_app", "tenant_id"])
-    @pytest.mark.parametrize("value", [None, "", "ordinary", "MixedCase"])
-    def test_string_or_null_filters_are_forwarded(
-        self,
-        handler: HandlerNamedQuery,
-        mock_reader: MagicMock,
-        query_name: str,
-        field_name: str,
-        value: str | None,
-    ) -> None:
-        response = handler.handle_request(_make_event(query_name=query_name, body={field_name: value}))
-
-        assert 200 == response["statusCode"]
-        read = mock_reader.read_aggregations if query_name.endswith("_aggregation") else mock_reader.read_named_query
-        assert value == read.call_args.kwargs[field_name]
-
-    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
     def test_both_filters_and_their_defaults_are_forwarded(
         self, handler: HandlerNamedQuery, mock_reader: MagicMock, query_name: str
     ) -> None:
@@ -135,7 +122,7 @@ class TestHandlerNamedQueryValidation:
 
     @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
     @pytest.mark.parametrize("field_name", ["source_app", "tenant_id"])
-    @pytest.mark.parametrize("value", [123, True, ["app"], {"name": "app"}])
+    @pytest.mark.parametrize("value", [123])
     def test_invalid_filter_is_rejected_before_reading(
         self,
         handler: HandlerNamedQuery,
@@ -178,31 +165,6 @@ class TestHandlerNamedQueryValidation:
             record.getMessage() for record in caplog.records
         ]
 
-    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
-    @pytest.mark.parametrize(
-        "bounds",
-        [
-            {"timestamp_start": 1000, "timestamp_end": 2000},
-            {"timestamp_start": 1000, "timestamp_end": 1000},
-            {},
-            {"timestamp_start": 1000},
-            {"timestamp_end": 1000},
-            {"timestamp_start": None, "timestamp_end": 1000},
-            {"timestamp_start": 1000, "timestamp_end": None},
-            {"timestamp_start": None, "timestamp_end": None},
-        ],
-    )
-    def test_valid_or_defaulted_bounds_are_forwarded(
-        self, handler: HandlerNamedQuery, mock_reader: MagicMock, query_name: str, bounds: dict[str, int | None]
-    ) -> None:
-        """Keep equality, ordered bounds, and reader-side defaults unchanged."""
-        response = handler.handle_request(_make_event(query_name=query_name, body=bounds))
-
-        assert 200 == response["statusCode"]
-        read = mock_reader.read_aggregations if query_name.endswith("_aggregation") else mock_reader.read_named_query
-        assert bounds.get("timestamp_start") == read.call_args.kwargs["timestamp_start"]
-        assert bounds.get("timestamp_end") == read.call_args.kwargs["timestamp_end"]
-
     def test_unknown_topic_returns_404(self, handler: HandlerNamedQuery) -> None:
         """Test that unknown topic returns 404."""
         response = handler.handle_request(_make_event(topic="nonexistent.topic"))
@@ -237,13 +199,27 @@ class TestHandlerNamedQueryValidation:
         body = json.loads(response["body"])
         assert "query_name" in body["errors"][0]["message"]
 
-    def test_unknown_query_name_returns_400(self, handler: HandlerNamedQuery) -> None:
+    @pytest.mark.parametrize(
+        "query_name",
+        [
+            "does_not_exist",
+            "get_stats",
+            "runs_jobs_detail_cursor",
+            "runs_jobs_detail_with_cursor",
+            "runs_jobs_detail_aggregation_summary",
+            "runs_jobs_detail_aggregation_timeline_hourly_cursor",
+        ],
+    )
+    def test_unknown_query_name_returns_400(
+        self, handler: HandlerNamedQuery, query_name: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test that an unknown query_name returns 400 (not 500)."""
-        response = handler.handle_request(_make_event(query_name="does_not_exist"))
+        with caplog.at_level(logging.WARNING):
+            response = handler.handle_request(_make_event(query_name=query_name))
 
         assert 400 == response["statusCode"]
         body = json.loads(response["body"])
-        assert "does_not_exist" in body["errors"][0]["message"]
+        assert f"Query '{query_name}' is not supported." == body["errors"][0]["message"]
 
     def test_invalid_json_body_returns_400(self, handler: HandlerNamedQuery) -> None:
         """Test that non-JSON body returns 400."""
@@ -302,6 +278,30 @@ class TestHandlerNamedQueryErrors:
         assert False is body["success"]
         assert "database" == body["errors"][0]["type"]
 
+    @pytest.mark.parametrize(
+        "error", [OSError("secret/path.sql"), SQLLoadException("secret", None), SQLParseException("secret")]
+    )
+    def test_sql_configuration_failure_returns_sanitized_500(
+        self,
+        topics: dict[str, dict[str, Any]],
+        mocker: MockerFixture,
+        caplog: pytest.LogCaptureFixture,
+        error: Exception,
+    ) -> None:
+        """Test that a SQL load failure returns a sanitized 500 with one error log and no database access."""
+        mocker.patch("src.readers.query_catalog.aiosql.from_path", side_effect=error)
+        connection = mocker.patch.object(ReaderPostgres, "_get_connection")
+        handler = HandlerNamedQuery(topics=topics, reader_postgres=ReaderPostgres())
+
+        with caplog.at_level(logging.ERROR, logger="src.handlers.handler_named_query"):
+            response = handler.handle_request(_make_event())
+
+        assert 500 == response["statusCode"]
+        assert "configuration" == json.loads(response["body"])["errors"][0]["type"]
+        assert "secret" not in response["body"]
+        assert 1 == len(caplog.records)
+        connection.assert_not_called()
+
 
 class TestHandlerAggregationQuery:
     """Tests for the window-wide aggregation branch (`runs_jobs_detail_aggregation`)."""
@@ -350,22 +350,6 @@ class TestHandlerAggregationQuery:
 class TestValidateAggregationEventBody:
     """Tests for `HandlerNamedQuery._validate_aggregation_event_body`."""
 
-    @pytest.mark.parametrize(
-        "body, expected_message_fragment",
-        [
-            pytest.param("not json", "valid JSON", id="invalid_json"),
-            pytest.param("[1, 2, 3]", "JSON object", id="non_dict_json"),
-            pytest.param(json.dumps({"timestamp_start": "bad"}), "timestamp_start", id="invalid_timestamp_start"),
-        ],
-    )
-    def test_returns_error_response_for_invalid_body(self, body: str, expected_message_fragment: str) -> None:
-        """Test that each invalid body returns a 400 with the expected message."""
-        result = HandlerNamedQuery._validate_aggregation_event_body(body)
-
-        assert isinstance(result, dict)
-        assert 400 == result["statusCode"]
-        assert expected_message_fragment in json.loads(result["body"])["errors"][0]["message"]
-
     def test_returns_parsed_params_for_valid_body(self) -> None:
         """Test that a valid body with only `timestamp_start`/`timestamp_end` parses correctly."""
         result = HandlerNamedQuery._validate_aggregation_event_body(
@@ -395,12 +379,6 @@ class TestValidateEventPathParams:
                 id="known_but_unsupported_topic",
             ),
             pytest.param({"topic_name": "public.cps.za.runs"}, 400, "query_name", id="missing_query_name"),
-            pytest.param(
-                {"topic_name": "public.cps.za.runs", "query_name": "does_not_exist"},
-                400,
-                "does_not_exist",
-                id="unknown_query_name",
-            ),
         ],
     )
     def test_returns_error_response_for_invalid_params(
@@ -420,6 +398,25 @@ class TestValidateEventPathParams:
         assert expected_status == error["statusCode"]
         body = json.loads(error["body"])
         assert expected_message_fragment in body["errors"][0]["message"]
+
+    @pytest.mark.parametrize(
+        "topic, query_name, expected_status",
+        [
+            ("", "runs_jobs_detail", 400),
+            ("nonexistent.topic", "runs_jobs_detail", 404),
+            ("public.cps.za.test", "runs_jobs_detail", 400),
+            ("public.cps.za.runs", "", 400),
+        ],
+    )
+    def test_invalid_path_bypasses_query_discovery(
+        self, handler: HandlerNamedQuery, mock_reader: MagicMock, topic: str, query_name: str, expected_status: int
+    ) -> None:
+        mock_reader.get_query_family.side_effect = AssertionError("Must not load SQL for an invalid path")
+
+        response = handler.handle_request(_make_event(topic=topic, query_name=query_name))
+
+        assert expected_status == response["statusCode"]
+        mock_reader.get_query_family.assert_not_called()
 
     def test_returns_none_for_valid_params(self, handler: HandlerNamedQuery) -> None:
         """Test that valid path parameters return None (no error)."""

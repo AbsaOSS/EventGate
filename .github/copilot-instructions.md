@@ -7,9 +7,15 @@ Structure
 - Main lambda (event ingestion): `src/event_gate_lambda.py`
 - Stats lambda (read-only queries): `src/event_stats_lambda.py`
 - Shared config loading: `src/utils/config_loader.py`
-- Handlers: `src/handlers/` (HandlerApi, HandlerToken, HandlerTopic, HandlerHealth, HandlerStats)
+- Handlers: `src/handlers/` (HandlerApi, HandlerToken, HandlerTopic, HandlerHealth, HandlerStats, HandlerNamedQuery)
 - Writers: `src/writers/` (inherit from `Writer` base class)
 - Readers: `src/readers/` (read-only database access for stats)
+- Named queries: `POST /stats/{topic}/query/{query_name}`; public names are discovered from `src/readers/sql/*.sql` by `src/readers/query_catalog.py`, no Python registry
+  - `jobs_detail_queries.sql`: `<name>` + `<name>_with_cursor` (paginated)
+  - `aggregation_queries.sql`: `<name>_summary` + `<name>_timeline_hourly` + `<name>_timeline_daily` (no `cursor`/`limit`)
+  - Both families accept optional `source_app` and `tenant_id` filters (exact match, `null` = no filter)
+  - Public names must not clash across families; `stats.sql` queries stay private
+  - aiosql methods are dynamic: access with `getattr(queries, "name").sql`
 - Config: `conf/config.json`, `conf/access.json`, `conf/topic_schemas/*.json`
 
 Python style
@@ -52,6 +58,8 @@ Testing
 - Use `mocker.patch("module.dependency")` or `mocker.patch.object(Class, "method")`
 - Assert pattern: `assert expected == actual`
 - Pylint is disabled for `tests/`. Do not add any `# pylint: disable=...` comments in test files
+- Keep tests minimal: only the most direct cases per behavior; no exhaustive parametrization, no tests of dataclass defaults, or duplicates of cases covered at another layer
+- Do not repeat a unit-covered case in integration tests
 
 Quality gates (run after changes, fix only if below threshold)
 - Run all quality gates at once: `make qa`
