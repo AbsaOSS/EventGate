@@ -1,4 +1,4 @@
--- name: get_runs_jobs_detail(ts_start, ts_end, lim)
+-- name: get_runs_jobs_detail(ts_start, ts_end, lim, source_app, tenant_id)
 SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
        r.source_app_version, r.environment,
        r.timestamp_start AS run_timestamp_start,
@@ -8,10 +8,12 @@ SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
   FROM public_cps_za_runs_jobs j
  INNER JOIN public_cps_za_runs r ON j.event_id = r.event_id
  WHERE r.timestamp_start >= :ts_start AND r.timestamp_start <= :ts_end
+   AND (:source_app IS NULL OR r.source_app = :source_app)
+   AND (:tenant_id IS NULL OR r.tenant_id = :tenant_id)
  ORDER BY j.internal_id DESC
  LIMIT :lim;
 
--- name: get_runs_jobs_detail_with_cursor(ts_start, ts_end, cursor_id, lim)
+-- name: get_runs_jobs_detail_with_cursor(ts_start, ts_end, cursor_id, lim, source_app, tenant_id)
 SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
        r.source_app_version, r.environment,
        r.timestamp_start AS run_timestamp_start,
@@ -21,6 +23,8 @@ SELECT r.event_id, r.job_ref, r.tenant_id, r.source_app,
   FROM public_cps_za_runs_jobs j
  INNER JOIN public_cps_za_runs r ON j.event_id = r.event_id
  WHERE r.timestamp_start >= :ts_start AND r.timestamp_start <= :ts_end
+   AND (:source_app IS NULL OR r.source_app = :source_app)
+   AND (:tenant_id IS NULL OR r.tenant_id = :tenant_id)
    AND j.internal_id < :cursor_id
  ORDER BY j.internal_id DESC
  LIMIT :lim;

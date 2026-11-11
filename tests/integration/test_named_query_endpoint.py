@@ -18,10 +18,15 @@
 import json
 import time
 import uuid
+from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 
+from psycopg2.extensions import TRANSACTION_STATUS_IDLE, cursor, parse_dsn
 import pytest
 
+from src.readers.reader_postgres import ReaderPostgres
+from src.utils.postgres_base import PostgresConfig
 from tests.integration.conftest import EventGateTestClient, EventStatsTestClient
 
 _QUERY = "runs_jobs_detail"
@@ -33,31 +38,193 @@ def _post_job(
     status: str,
     message: str | None,
     source_app: str,
+    timestamp_start: int | None = None,
+    tenant_id: str = "CQ_TEST",
 ) -> dict[str, Any]:
     """Post a single-job run event with an explicit status and message."""
     now_ms = int(time.time() * 1000)
+    job_duration_ms = 60_000
+    ts_start = timestamp_start if timestamp_start is not None else now_ms - job_duration_ms
+    ts_end = ts_start + job_duration_ms
     job: dict[str, Any] = {
         "catalog_id": "db.schema.table",
         "status": status,
-        "timestamp_start": now_ms - 60000,
-        "timestamp_end": now_ms,
+        "timestamp_start": ts_start,
+        "timestamp_end": ts_end,
     }
     if message is not None:
         job["message"] = message
     event = {
         "event_id": str(uuid.uuid4()),
         "job_ref": "spark-cq-001",
-        "tenant_id": "CQ_TEST",
+        "tenant_id": tenant_id,
         "source_app": source_app,
         "source_app_version": "2.0.0",
         "environment": "test",
-        "timestamp_start": now_ms - 60000,
-        "timestamp_end": now_ms,
+        "timestamp_start": ts_start,
+        "timestamp_end": ts_end,
         "jobs": [job],
     }
     response = client.post_event("public.cps.za.runs", event, token=token)
     assert 202 == response["statusCode"], f"Seed event failed: {response}"
     return event
+
+
+@pytest.fixture
+def aggregation_reader(postgres_container: str) -> Generator[ReaderPostgres, None, None]:
+    """Use an isolated cached reader connection to the real PostgreSQL container."""
+    config = parse_dsn(postgres_container)
+    reader = ReaderPostgres()
+    reader._pg_config = PostgresConfig(
+        database=config["dbname"],
+        host=config["host"],
+        port=int(config["port"]),
+        user=config["user"],
+        password=config["password"],
+    )
+    try:
+        yield reader
+    finally:
+        reader._close_connection()
+
+
+@pytest.mark.parametrize("bucket, month, window_days", [("hour", 5, 1), ("day", 6, 8)])
+def test_timeline_buckets_are_utc_aligned(
+    aggregation_reader: ReaderPostgres,
+    eventgate_client: EventGateTestClient,
+    valid_token: str,
+    bucket: str,
+    month: int,
+    window_days: int,
+) -> None:
+    """Keep hourly and daily UTC boundaries under a fractional-offset session timezone."""
+    window_start = int(datetime(2024, month, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    _post_job(eventgate_client, valid_token, "succeeded", None, "cq-utc-test", window_start + 10 * 60 * 1000)
+    connection = aggregation_reader._get_connection()
+    with connection.cursor() as db_cursor:
+        db_cursor.execute("SET TIME ZONE %s", ("Asia/Kathmandu",))
+    connection.commit()
+
+    result = aggregation_reader.read_aggregations(
+        "runs_jobs_detail_aggregation", window_start, window_start + window_days * 24 * 60 * 60 * 1000
+    )
+
+    assert 1 == result.total_runs
+    assert 1 == result.timeline.entries[0].total
+    assert bucket == result.timeline.bucket
+    # Expect one bucket at UTC midnight, unaffected by Kathmandu's UTC+05:45 offset.
+    assert [window_start] == [entry.bucket_start for entry in result.timeline.entries]
+
+
+def test_aggregation_uses_one_snapshot_during_intervening_insert(
+    aggregation_reader: ReaderPostgres, eventgate_client: EventGateTestClient, valid_token: str
+) -> None:
+    """Keep one response consistent while making a committed insert visible to the next request."""
+    timestamp = int(datetime(2024, 4, 1, 12, tzinfo=timezone.utc).timestamp() * 1000)
+    _post_job(eventgate_client, valid_token, "succeeded", None, "cq-snapshot-test", timestamp)
+    connection = aggregation_reader._get_connection()
+    with connection.cursor() as db_cursor:
+        db_cursor.execute("SHOW default_transaction_isolation")
+        default_isolation = db_cursor.fetchone()[0]
+    connection.rollback()
+    inserted = False
+
+    class InsertAfterSummaryCursor(cursor):
+        """Commit a job through the separate ingestion connection after the first summary read."""
+
+        def fetchone(self) -> tuple[Any, ...] | None:
+            nonlocal inserted
+            row = super().fetchone()
+            if not inserted:
+                # Commit a second job on another connection after the summary SELECT, before the timeline SELECT.
+                _post_job(eventgate_client, valid_token, "failed", None, "cq-snapshot-test", timestamp)
+                inserted = True
+            return row
+
+    connection.cursor_factory = InsertAfterSummaryCursor
+    first = aggregation_reader.read_aggregations("runs_jobs_detail_aggregation", timestamp, timestamp)
+
+    # Both reads must still see only the original job, despite the committed insert between them.
+    assert inserted
+    assert 1 == first.total_runs
+    assert 1 == sum(entry.total for entry in first.timeline.entries)
+    assert 1 == first.succeeded
+    assert 1 == sum(entry.succeeded for entry in first.timeline.entries)
+    assert 0 == first.failed
+    assert 0 == sum(entry.failed for entry in first.timeline.entries)
+    assert TRANSACTION_STATUS_IDLE == connection.get_transaction_status()
+
+    second = aggregation_reader.read_aggregations("runs_jobs_detail_aggregation", timestamp, timestamp)
+
+    # The next transaction must see both jobs, including the newly committed failed job.
+    assert 2 == second.total_runs
+    assert 2 == sum(entry.total for entry in second.timeline.entries)
+    assert 1 == second.failed
+    assert 1 == sum(entry.failed for entry in second.timeline.entries)
+    assert TRANSACTION_STATUS_IDLE == connection.get_transaction_status()
+    with connection.cursor() as db_cursor:
+        db_cursor.execute("SHOW default_transaction_isolation")
+        assert default_isolation == db_cursor.fetchone()[0]
+    connection.rollback()
+
+
+class TestNamedQueryFilters:
+    """Apply tenant and source filters to detail and aggregation queries."""
+
+    @pytest.fixture(scope="class")
+    def filter_events(self, eventgate_client: EventGateTestClient, valid_token: str) -> list[dict[str, Any]]:
+        timestamp = int(datetime(2024, 7, 1, tzinfo=timezone.utc).timestamp() * 1000)
+        # Events 0-3 cover all four statuses for the same tenant/application pair.
+        events = [
+            _post_job(eventgate_client, valid_token, status, None, "app_a", timestamp, "tenant_a")
+            for status in ("succeeded", "failed", "killed", "skipped")
+        ]
+        # Event 4 changes only the application; event 5 changes only the tenant.
+        events.append(_post_job(eventgate_client, valid_token, "failed", None, "app_b", timestamp, "tenant_a"))
+        events.append(_post_job(eventgate_client, valid_token, "failed", None, "app_a", timestamp, "tenant_b"))
+        return events
+
+    @pytest.mark.parametrize(
+        "filters, expected_indices, expected_failed",
+        [
+            # Tenant-only: include both applications, but exclude tenant_b.
+            pytest.param({"tenant_id": "tenant_a"}, [0, 1, 2, 3, 4], 2, id="tenant"),
+            # Source-only: include both tenants, but exclude app_b.
+            pytest.param({"source_app": "app_a"}, [0, 1, 2, 3, 5], 2, id="source"),
+            # Combined: include only events matching both tenant_a and app_a.
+            pytest.param({"tenant_id": "tenant_a", "source_app": "app_a"}, [0, 1, 2, 3], 1, id="combined"),
+        ],
+    )
+    def test_exact_filters_and_their_intersection(
+        self,
+        stats_client: EventStatsTestClient,
+        filter_events: list[dict[str, Any]],
+        filters: dict[str, str],
+        expected_indices: list[int],
+        expected_failed: int,
+    ) -> None:
+        timestamp = filter_events[0]["timestamp_start"]
+        body = {"timestamp_start": timestamp, "timestamp_end": timestamp, **filters}
+        response = stats_client.post_named_query("public.cps.za.runs", _QUERY, body)
+
+        assert 200 == response["statusCode"]
+        rows = json.loads(response["body"])["data"]
+        # Detail results must contain exactly the expected events, with no excluded rows.
+        assert {filter_events[index]["event_id"] for index in expected_indices} == {row["event_id"] for row in rows}
+
+        response = stats_client.post_named_query("public.cps.za.runs", "runs_jobs_detail_aggregation", body)
+
+        assert 200 == response["statusCode"]
+        aggregations = json.loads(response["body"])["aggregations"]
+        counts = {"succeeded": 1, "failed": expected_failed, "killed": 1, "skipped": 1}
+        total = len(expected_indices)
+        # Summary totals and all four status counts must describe the same filtered events.
+        assert total == aggregations["total_runs"]
+        assert counts == {status: aggregations[status] for status in counts}
+        # Timeline totals must also exclude events rejected by the filters.
+        entries = aggregations["timeline"]["entries"]
+        assert total == sum(entry["total"] for entry in entries)
+        assert counts == {status: sum(entry[status] for entry in entries) for status in counts}
 
 
 def test_unknown_query_name_returns_400(stats_client: EventStatsTestClient) -> None:
@@ -126,6 +293,46 @@ class TestNamedQueryRunStatus:
         statuses = self._run_statuses_for_tenant(stats_client)
 
         assert {"timeout", "no data received", "no data produced"}.issubset(statuses)
+
+
+class TestNamedQueryAggregation:
+    """End-to-end for the dedicated runs_jobs_detail_aggregation named query."""
+
+    _AGG_QUERY = "runs_jobs_detail_aggregation"
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seed_events(self, eventgate_client: EventGateTestClient, valid_token: str) -> None:
+        """Seed a mix of succeeded/failed jobs to aggregate over."""
+        _post_job(eventgate_client, valid_token, "succeeded", None, "cq-aggregation-test")
+        _post_job(eventgate_client, valid_token, "succeeded", None, "cq-aggregation-test")
+        _post_job(eventgate_client, valid_token, "failed", "boom", "cq-aggregation-test")
+
+    def test_returns_populated_aggregations(self, stats_client: EventStatsTestClient) -> None:
+        """Test that totals/success_rate/timeline reflect the seeded jobs, with no data/pagination keys."""
+        response = stats_client.post_named_query("public.cps.za.runs", self._AGG_QUERY, {})
+
+        assert 200 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert True is body["success"]
+        assert "aggregations" in body
+        assert "data" not in body
+        assert "pagination" not in body
+
+        aggregations = body["aggregations"]
+        assert aggregations["total_runs"] >= 3
+        assert aggregations["succeeded"] >= 2
+        assert aggregations["failed"] >= 1
+        timeline = aggregations["timeline"]
+        assert timeline["bucket"] in ("hour", "day")
+        assert sum(entry["total"] for entry in timeline["entries"]) == aggregations["total_runs"]
+
+    def test_cursor_or_limit_returns_400(self, stats_client: EventStatsTestClient) -> None:
+        """Test that cursor/limit are rejected for the aggregation query (not silently ignored)."""
+        response = stats_client.post_named_query("public.cps.za.runs", self._AGG_QUERY, {"limit": 10})
+
+        assert 400 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert "limit" in body["errors"][0]["message"]
 
 
 class TestNamedQueryPagination:

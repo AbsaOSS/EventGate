@@ -16,20 +16,21 @@
 
 """Registry of predefined, server-executed named queries.
 
-Each named query maps a stable `query_name` to the aiosql query keys used to
-run it (with and without a keyset-pagination cursor). Unknown query names are
-rejected at the handler layer with a `400` response. New aggregation queries are
-added here without introducing new routes.
+`SUPPORTED_JOBS_DETAIL_QUERIES` maps each jobs-detail `query_name` to its aiosql query keys, with and
+without a keyset-pagination cursor. `SUPPORTED_AGGREGATION_QUERIES` holds window-wide
+aggregation queries instead, which have no pagination and a different response shape.
+Names absent from both are rejected as a `400` at the handler layer. New named queries
+are added here, not as new routes.
 """
 
 from dataclasses import dataclass
 
-from src.utils.constants import QUERY_RUNS_JOBS_DETAIL
+from src.utils.constants import QUERY_RUNS_JOBS_DETAIL, QUERY_RUNS_JOBS_DETAIL_AGGREGATION
 
 
 @dataclass(frozen=True)
-class NamedQuery:
-    """Definition of a single named query.
+class JobsDetailQuery:
+    """Definition of a single jobs-detail named query with keyset pagination.
 
     Attributes:
         name: Stable identifier used in the request path.
@@ -42,10 +43,37 @@ class NamedQuery:
     sql_key_with_cursor: str
 
 
-SUPPORTED_QUERIES: dict[str, NamedQuery] = {
-    QUERY_RUNS_JOBS_DETAIL: NamedQuery(
+SUPPORTED_JOBS_DETAIL_QUERIES: dict[str, JobsDetailQuery] = {
+    QUERY_RUNS_JOBS_DETAIL: JobsDetailQuery(
         name=QUERY_RUNS_JOBS_DETAIL,
         sql_key="get_runs_jobs_detail",
         sql_key_with_cursor="get_runs_jobs_detail_with_cursor",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class AggregationQuery:
+    """Definition of a single window-wide aggregation named query.
+
+    Attributes:
+        name: Stable identifier used in the request path.
+        summary_sql_key: aiosql query name for the single-row summary aggregates.
+        timeline_hourly_sql_key: aiosql query name for hourly timeline buckets.
+        timeline_daily_sql_key: aiosql query name for daily timeline buckets.
+    """
+
+    name: str
+    summary_sql_key: str
+    timeline_hourly_sql_key: str
+    timeline_daily_sql_key: str
+
+
+SUPPORTED_AGGREGATION_QUERIES: dict[str, AggregationQuery] = {
+    QUERY_RUNS_JOBS_DETAIL_AGGREGATION: AggregationQuery(
+        name=QUERY_RUNS_JOBS_DETAIL_AGGREGATION,
+        summary_sql_key="get_runs_jobs_aggregations",
+        timeline_hourly_sql_key="get_runs_jobs_timeline_hourly",
+        timeline_daily_sql_key="get_runs_jobs_timeline_daily",
     ),
 }
