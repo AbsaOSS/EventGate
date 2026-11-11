@@ -50,13 +50,17 @@ RUN \
   echo "#################" && \
   echo "### librdkafka ###" && \
   echo "#################" && \
-    # Build librdkafka from the version pinned for confluent-kafka in requirements.txt. \
+    # Build librdkafka matching the confluent-kafka version pinned in requirements.txt. \
+    # The versions differ, so the librdkafka version is read from the confluent-kafka release notes. \
     CONFLUENT_KAFKA_VERSION=$(grep ^confluent-kafka== ${LAMBDA_TASK_ROOT}/requirements.txt | cut -d "=" -f3) && \
+    LIBRD_KAFKA_VERSION=$(curl -s https://api.github.com/repos/confluentinc/confluent-kafka-python/releases/tags/v$CONFLUENT_KAFKA_VERSION \
+    | grep -oP -m1 'based on librdkafka v?\K[0-9]+(\.[0-9]+)+') && \
+    [ -n "$LIBRD_KAFKA_VERSION" ] || { echo "Could not determine librdkafka version"; exit 1; } && \
     mkdir -p /tmp/env-install-workdir/librdkafka && \
     cd /tmp/env-install-workdir/librdkafka && \
-    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v${CONFLUENT_KAFKA_VERSION}.tar.gz && \
-    tar -xf v${CONFLUENT_KAFKA_VERSION}.tar.gz && \
-    cd /tmp/env-install-workdir/librdkafka/librdkafka-${CONFLUENT_KAFKA_VERSION} && \
+    wget --ca-certificate=/etc/pki/tls/certs/ca-bundle.crt https://github.com/confluentinc/librdkafka/archive/v${LIBRD_KAFKA_VERSION}.tar.gz && \
+    tar -xf v${LIBRD_KAFKA_VERSION}.tar.gz && \
+    cd /tmp/env-install-workdir/librdkafka/librdkafka-${LIBRD_KAFKA_VERSION} && \
     ./configure && make && make install && \
   echo "###################" && \
   echo "### pip installs ###" && \
