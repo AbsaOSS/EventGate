@@ -18,6 +18,7 @@
 
 Detail groups contain `<name>` and `<name>_with_cursor`; aggregation groups contain
 `<name>_summary`, `<name>_timeline_hourly`, and `<name>_timeline_daily`.
+Breakdown groups contain a single `<name>` statement.
 Only complete groups are public. Root stats methods and generated cursor helpers are private.
 """
 
@@ -28,7 +29,7 @@ import aiosql
 from aiosql.queries import Queries
 from aiosql.utils import SQLLoadException, SQLParseException
 
-type QueryFamily = Literal["jobs_detail", "aggregation"]
+type QueryFamily = Literal["jobs_detail", "aggregation", "breakdown"]
 type QueryFamilyDefinition = tuple[str, tuple[str, ...]]
 
 _SQL_DIR = Path(__file__).parent / "sql"
@@ -36,6 +37,7 @@ _SQL_DIR = Path(__file__).parent / "sql"
 _QUERY_FAMILIES: dict[QueryFamily, QueryFamilyDefinition] = {
     "jobs_detail": ("jobs_detail_queries.sql", ("_with_cursor", "")),
     "aggregation": ("aggregation_queries.sql", ("_summary", "_timeline_hourly", "_timeline_daily")),
+    "breakdown": ("breakdown_queries.sql", ("",)),
 }
 
 
@@ -56,8 +58,11 @@ def _validate_query_groups(queries: Queries) -> None:
     public_names: set[str] = set()
     for family, (_, suffixes) in _QUERY_FAMILIES.items():
         available = set(getattr(queries, family).available_queries)
-        names = {name.removesuffix(suffixes[0]) for name in available if name.endswith(suffixes[0])}
         # Every authored SELECT also has an aiosql-generated `<statement>_cursor` method.
+        statements = {
+            name for name in available if not (name.endswith("_cursor") and name.removesuffix("_cursor") in available)
+        }
+        names = {name.removesuffix(suffixes[0]) for name in statements if name.endswith(suffixes[0])}
         expected = {f"{name}{suffix}{helper}" for name in names for suffix in suffixes for helper in ("", "_cursor")}
         if available != expected or any(not name or name.endswith("_cursor") or name != name.lower() for name in names):
             raise ValueError(f"Invalid SQL query groups in {family}: {', '.join(sorted(available ^ expected))}.")
@@ -68,6 +73,8 @@ def _validate_query_groups(queries: Queries) -> None:
 
 def load_query_family(queries: Queries, query_name: str) -> QueryFamily | None:
     """Classify a public name in a validated query tree without exposing helper methods."""
+    if query_name.endswith("_cursor"):
+        return None
     for family, (_, suffixes) in _QUERY_FAMILIES.items():
         if f"{query_name}{suffixes[0]}" in getattr(queries, family).available_queries:
             return family

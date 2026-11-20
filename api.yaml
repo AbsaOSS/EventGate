@@ -334,6 +334,7 @@ paths:
       description: >
         Runs a curated, server-side named query by name. `runs_jobs_detail` returns paginated
         results. `runs_jobs_detail_aggregation` returns window totals and a bucketed timeline.
+        `runs_jobs_detail_breakdowns` independently returns tenant/source distributions.
       security: []
       parameters:
         - name: topic_name
@@ -347,12 +348,13 @@ paths:
           required: true
           schema:
             type: string
-            enum: [runs_jobs_detail, runs_jobs_detail_aggregation]
+            enum: [runs_jobs_detail, runs_jobs_detail_aggregation, runs_jobs_detail_breakdowns]
           description: Identifier of the named query to run
       requestBody:
         description: >
           Query parameters. Shape depends on `query_name`: pagination fields for
-          `runs_jobs_detail`, time window only for `runs_jobs_detail_aggregation`.
+          `runs_jobs_detail`, time window and optional exact filters for
+          `runs_jobs_detail_aggregation` and `runs_jobs_detail_breakdowns`.
         required: false
         content:
           application/json:
@@ -364,13 +366,15 @@ paths:
         '200':
           description: >
             Named-query result. `runs_jobs_detail` returns a paginated result set;
-            `runs_jobs_detail_aggregation` returns window-wide aggregations instead.
+            `runs_jobs_detail_aggregation` returns window-wide totals/timeline;
+            `runs_jobs_detail_breakdowns` returns tenant/source distributions instead.
           content:
             application/json:
               schema:
                 anyOf:
                   - $ref: '#/components/schemas/RunsJobsDetailResponse'
                   - $ref: '#/components/schemas/RunsJobsDetailAggregationResponse'
+                  - $ref: '#/components/schemas/RunsJobsDetailBreakdownsResponse'
         '400':
           description: Invalid parameters, unsupported topic, or unknown query_name
           content:
@@ -451,10 +455,13 @@ components:
     RunsJobsDetailAggregationQueryBody:
       type: object
       description: >
-        Request body for the window-wide `runs_jobs_detail_aggregation` named query.
+        Request body for the window-wide `runs_jobs_detail_aggregation` and
+        `runs_jobs_detail_breakdowns` named queries.
         `cursor`/`limit` are not accepted here (400 if present) since this query is not paginated.
         source_app and tenant_id are optional exact, case-sensitive filters combined with AND.
         Omitted or null filters mean all values. Filters do not enforce authorization.
+        Bounds are inclusive and apply to the parent run's timestamp_start, not job timestamps.
+        Both filters apply before both breakdown groupings; these are not self-excluding facets.
       properties:
         timestamp_start:
           type: integer
@@ -626,6 +633,86 @@ components:
                         type: integer
                         description: Count of job rows with raw status skipped in this bucket
                         example: 0
+    RunsJobsDetailBreakdownsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        statusCode:
+          type: integer
+          example: 200
+        breakdowns:
+          type: object
+          required: [window, by_tenant, by_source]
+          additionalProperties: false
+          description: >
+            Complete whole-window distributions at job-row grain, not distinct runs or latest states.
+            Both arrays are empty when no rows match. Total counts all matching job rows.
+            Rows serialize the identifier first, then total, succeeded, failed, killed, skipped.
+          properties:
+            window:
+              type: object
+              required: [timestamp_start, timestamp_end]
+              properties:
+                timestamp_start:
+                  type: integer
+                  example: 1704067200000
+                timestamp_end:
+                  type: integer
+                  example: 1706745600000
+            by_tenant:
+              type: array
+              description: All matching tenant groups, sorted by raw tenant_id ascending with case-sensitive C collation
+              items:
+                type: object
+                required: [tenant_id, total, succeeded, failed, killed, skipped]
+                additionalProperties: false
+                properties:
+                  tenant_id:
+                    type: string
+                    example: tenant-a
+                  total:
+                    type: integer
+                    example: 120
+                  succeeded:
+                    type: integer
+                    example: 70
+                  failed:
+                    type: integer
+                    example: 50
+                  killed:
+                    type: integer
+                    example: 0
+                  skipped:
+                    type: integer
+                    example: 0
+            by_source:
+              type: array
+              description: All matching source groups, sorted by raw source_app ascending with case-sensitive C collation
+              items:
+                type: object
+                required: [source_app, total, succeeded, failed, killed, skipped]
+                additionalProperties: false
+                properties:
+                  source_app:
+                    type: string
+                    example: app-x
+                  total:
+                    type: integer
+                    example: 200
+                  succeeded:
+                    type: integer
+                    example: 90
+                  failed:
+                    type: integer
+                    example: 110
+                  killed:
+                    type: integer
+                    example: 0
+                  skipped:
+                    type: integer
+                    example: 0
     ErrorResponse:
       type: object
       properties:

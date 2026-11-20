@@ -23,9 +23,19 @@ from pytest_mock import MockerFixture
 from src.readers.query_catalog import load_queries, load_query_family
 
 
-def _queries(tmp_path: Path, mocker: MockerFixture, detail: tuple[str, ...], aggregation: tuple[str, ...]) -> Queries:
+def _queries(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    detail: tuple[str, ...],
+    aggregation: tuple[str, ...],
+    breakdown: tuple[str, ...] = (),
+) -> Queries:
     (tmp_path / "stats.sql").write_text("-- name: get_stats()\nSELECT 1;", encoding="utf-8")
-    for filename, names in (("jobs_detail_queries.sql", detail), ("aggregation_queries.sql", aggregation)):
+    for filename, names in (
+        ("jobs_detail_queries.sql", detail),
+        ("aggregation_queries.sql", aggregation),
+        ("breakdown_queries.sql", breakdown),
+    ):
         sql = "\n".join(f"-- name: {name}()\nSELECT 1;" for name in names)
         (tmp_path / filename).write_text(sql, encoding="utf-8")
     mocker.patch("src.readers.query_catalog._SQL_DIR", tmp_path)
@@ -38,11 +48,14 @@ def test_discovers_additional_groups_without_python_registration(tmp_path: Path,
         mocker,
         ("first", "first_with_cursor", "second", "second_with_cursor"),
         ("totals_summary", "totals_timeline_hourly", "totals_timeline_daily"),
+        ("distributions", "more_distributions"),
     )
 
     assert "jobs_detail" == load_query_family(queries, "first")
     assert "jobs_detail" == load_query_family(queries, "second")
     assert "aggregation" == load_query_family(queries, "totals")
+    assert "breakdown" == load_query_family(queries, "distributions")
+    assert "breakdown" == load_query_family(queries, "more_distributions")
 
 
 @pytest.mark.parametrize(
@@ -51,6 +64,7 @@ def test_discovers_additional_groups_without_python_registration(tmp_path: Path,
         "get_stats",
         "detail_with_cursor",
         "totals_summary",
+        "distributions_cursor",
         "unknown",
     ],
 )
@@ -60,6 +74,7 @@ def test_private_methods_are_not_public_queries(name: str, tmp_path: Path, mocke
         mocker,
         ("detail", "detail_with_cursor"),
         ("totals_summary", "totals_timeline_hourly", "totals_timeline_daily"),
+        ("distributions",),
     )
 
     assert load_query_family(queries, name) is None
@@ -82,11 +97,32 @@ def test_rejects_incomplete_or_unexpected_groups(
     assert isinstance(exc.value.__cause__, ValueError)
 
 
-def test_rejects_names_shared_by_both_families(tmp_path: Path, mocker: MockerFixture) -> None:
+@pytest.mark.parametrize(
+    "detail, aggregation, breakdown",
+    [
+        (("shared", "shared_with_cursor"), ("shared_summary", "shared_timeline_hourly", "shared_timeline_daily"), ()),
+        (("shared", "shared_with_cursor"), (), ("shared",)),
+        ((), ("shared_summary", "shared_timeline_hourly", "shared_timeline_daily"), ("shared",)),
+    ],
+)
+def test_rejects_names_shared_by_families(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    detail: tuple[str, ...],
+    aggregation: tuple[str, ...],
+    breakdown: tuple[str, ...],
+) -> None:
     with pytest.raises(RuntimeError, match="Conflicting public SQL query names: shared"):
         _queries(
             tmp_path,
             mocker,
-            ("shared", "shared_with_cursor"),
-            ("shared_summary", "shared_timeline_hourly", "shared_timeline_daily"),
+            detail,
+            aggregation,
+            breakdown,
         )
+
+
+@pytest.mark.parametrize("name", ["Distributions", "distributions_cursor"])
+def test_rejects_invalid_singleton_names(tmp_path: Path, mocker: MockerFixture, name: str) -> None:
+    with pytest.raises(RuntimeError, match="Invalid SQL query groups in breakdown"):
+        _queries(tmp_path, mocker, (), (), (name,))

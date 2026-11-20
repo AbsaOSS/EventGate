@@ -25,7 +25,13 @@ import pytest
 from pytest_mock import MockerFixture
 
 from src.handlers.handler_named_query import AggregationQueryParams, HandlerNamedQuery, JobsDetailQueryParams
-from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations
+from src.readers.aggregation_models import (
+    AggregationsWindow,
+    RunsJobsAggregations,
+    RunsJobsBreakdowns,
+    SourceBreakdown,
+    TenantBreakdown,
+)
 from src.readers.reader_postgres import ReaderPostgres
 
 
@@ -40,6 +46,11 @@ def mock_reader() -> MagicMock:
     )
     mock.read_aggregations.return_value = RunsJobsAggregations(
         window=AggregationsWindow(timestamp_start=1000, timestamp_end=2000), total_runs=1, succeeded=1
+    )
+    mock.read_breakdowns.return_value = RunsJobsBreakdowns(
+        window=AggregationsWindow(timestamp_start=1000, timestamp_end=2000),
+        by_tenant=[TenantBreakdown("Tenant", 4, 1, 2, 1, 0)],
+        by_source=[SourceBreakdown("App", 4, 1, 2, 1, 0)],
     )
     return mock
 
@@ -104,7 +115,9 @@ class TestHandlerNamedQuerySuccess:
 class TestHandlerNamedQueryValidation:
     """Tests for request validation."""
 
-    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    @pytest.mark.parametrize(
+        "query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation", "runs_jobs_detail_breakdowns"]
+    )
     def test_both_filters_and_their_defaults_are_forwarded(
         self, handler: HandlerNamedQuery, mock_reader: MagicMock, query_name: str
     ) -> None:
@@ -112,7 +125,11 @@ class TestHandlerNamedQueryValidation:
         response = handler.handle_request(_make_event(query_name=query_name, body=filters))
 
         assert 200 == response["statusCode"]
-        read = mock_reader.read_aggregations if query_name.endswith("_aggregation") else mock_reader.read_named_query
+        read = {
+            "runs_jobs_detail": mock_reader.read_named_query,
+            "runs_jobs_detail_aggregation": mock_reader.read_aggregations,
+            "runs_jobs_detail_breakdowns": mock_reader.read_breakdowns,
+        }[query_name]
         assert filters == {field: read.call_args.kwargs[field] for field in filters}
 
         response = handler.handle_request(_make_event(query_name=query_name))
@@ -120,7 +137,9 @@ class TestHandlerNamedQueryValidation:
         assert 200 == response["statusCode"]
         assert {"source_app": None, "tenant_id": None} == {field: read.call_args.kwargs[field] for field in filters}
 
-    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    @pytest.mark.parametrize(
+        "query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation", "runs_jobs_detail_breakdowns"]
+    )
     @pytest.mark.parametrize("field_name", ["source_app", "tenant_id"])
     @pytest.mark.parametrize("value", [123])
     def test_invalid_filter_is_rejected_before_reading(
@@ -139,12 +158,15 @@ class TestHandlerNamedQueryValidation:
         assert f"Field '{field_name}' must be a string or null." == json.loads(response["body"])["errors"][0]["message"]
         mock_reader.read_named_query.assert_not_called()
         mock_reader.read_aggregations.assert_not_called()
+        mock_reader.read_breakdowns.assert_not_called()
         assert ["Request rejected: query filter must be a string or null."] == [
             record.getMessage() for record in caplog.records
         ]
         assert field_name == caplog.records[0].field
 
-    @pytest.mark.parametrize("query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation"])
+    @pytest.mark.parametrize(
+        "query_name", ["runs_jobs_detail", "runs_jobs_detail_aggregation", "runs_jobs_detail_breakdowns"]
+    )
     def test_reversed_window_is_rejected_before_reading(
         self,
         handler: HandlerNamedQuery,
@@ -161,6 +183,7 @@ class TestHandlerNamedQueryValidation:
         assert 400 == response["statusCode"]
         mock_reader.read_named_query.assert_not_called()
         mock_reader.read_aggregations.assert_not_called()
+        mock_reader.read_breakdowns.assert_not_called()
         assert ["Request rejected: timestamp_start exceeds timestamp_end."] == [
             record.getMessage() for record in caplog.records
         ]
@@ -208,6 +231,7 @@ class TestHandlerNamedQueryValidation:
             "runs_jobs_detail_with_cursor",
             "runs_jobs_detail_aggregation_summary",
             "runs_jobs_detail_aggregation_timeline_hourly_cursor",
+            "runs_jobs_detail_breakdowns_cursor",
         ],
     )
     def test_unknown_query_name_returns_400(
@@ -324,12 +348,12 @@ class TestHandlerAggregationQuery:
             source_app=None,
             tenant_id=None,
         )
+        mock_reader.read_breakdowns.assert_not_called()
 
-    def test_cursor_or_limit_in_body_returns_400(self, handler: HandlerNamedQuery) -> None:
+    @pytest.mark.parametrize("query_name", ["runs_jobs_detail_aggregation", "runs_jobs_detail_breakdowns"])
+    def test_cursor_or_limit_in_body_returns_400(self, handler: HandlerNamedQuery, query_name: str) -> None:
         """Test that `cursor`/`limit` are rejected (400) instead of silently ignored for aggregation queries."""
-        response = handler.handle_request(
-            _make_event(query_name="runs_jobs_detail_aggregation", body={"cursor": 1, "limit": 10})
-        )
+        response = handler.handle_request(_make_event(query_name=query_name, body={"cursor": 1, "limit": 10}))
 
         assert 400 == response["statusCode"]
         body = json.loads(response["body"])
@@ -345,6 +369,45 @@ class TestHandlerAggregationQuery:
         assert 500 == response["statusCode"]
         body = json.loads(response["body"])
         assert "database" == body["errors"][0]["type"]
+
+
+class TestHandlerBreakdownQuery:
+    """Return only the dedicated distributions with stable serialized field order."""
+
+    def test_response_shape_and_field_order(self, handler: HandlerNamedQuery, mock_reader: MagicMock) -> None:
+        response = handler.handle_request(_make_event(query_name="runs_jobs_detail_breakdowns"))
+
+        assert 200 == response["statusCode"]
+        body = json.loads(response["body"])
+        assert {"success", "statusCode", "breakdowns"} == set(body)
+        assert {"window", "by_tenant", "by_source"} == set(body["breakdowns"])
+        for dimension, identifier in (("by_tenant", "tenant_id"), ("by_source", "source_app")):
+            row = body["breakdowns"][dimension][0]
+            assert [identifier, "total", "succeeded", "failed", "killed", "skipped"] == list(row)
+            assert 4 == row["total"]
+            assert row["failed"] > row["succeeded"]
+        mock_reader.read_breakdowns.assert_called_once_with(
+            query_name="runs_jobs_detail_breakdowns",
+            timestamp_start=None,
+            timestamp_end=None,
+            source_app=None,
+            tenant_id=None,
+        )
+        mock_reader.read_named_query.assert_not_called()
+        mock_reader.read_aggregations.assert_not_called()
+
+    def test_database_error_is_sanitized_and_logged_once(
+        self, handler: HandlerNamedQuery, mock_reader: MagicMock, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        mock_reader.read_breakdowns.side_effect = RuntimeError("private database detail")
+
+        with caplog.at_level(logging.ERROR, logger="src.handlers.handler_named_query"):
+            response = handler.handle_request(_make_event(query_name="runs_jobs_detail_breakdowns"))
+
+        assert 500 == response["statusCode"]
+        assert "database" == json.loads(response["body"])["errors"][0]["type"]
+        assert "private database detail" not in response["body"]
+        assert 1 == len(caplog.records)
 
 
 class TestValidateAggregationEventBody:

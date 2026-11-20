@@ -92,6 +92,11 @@ def build_success_response(data: list[QueryRow], pagination: Pagination) -> dict
     )
 
 
+def _build_result_response(key: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Build a JSON success response carrying a non-paginated result under `key`."""
+    return _build_json_response(200, {"success": True, "statusCode": 200, key: result})
+
+
 def build_aggregations_response(aggregations: dict[str, Any]) -> dict[str, Any]:
     """Build a standardized JSON success response body for a window-wide aggregation result.
     Args:
@@ -99,14 +104,17 @@ def build_aggregations_response(aggregations: dict[str, Any]) -> dict[str, Any]:
     Returns:
         A dictionary compatible with API Gateway Lambda Proxy integration.
     """
-    return _build_json_response(
-        200,
-        {
-            "success": True,
-            "statusCode": 200,
-            "aggregations": aggregations,
-        },
-    )
+    return _build_result_response("aggregations", aggregations)
+
+
+def build_breakdowns_response(breakdowns: dict[str, Any]) -> dict[str, Any]:
+    """Build a standardized JSON success response body for a window-wide breakdown result.
+    Args:
+        breakdowns: The breakdown result, already converted to a plain dict.
+    Returns:
+        A dictionary compatible with API Gateway Lambda Proxy integration.
+    """
+    return _build_result_response("breakdowns", breakdowns)
 
 
 def resolve_request_topic(event: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:

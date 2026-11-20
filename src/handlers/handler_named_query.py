@@ -21,9 +21,15 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from src.readers.query_catalog import QueryFamily
 from src.readers.reader_postgres import ReaderPostgres
 from src.utils.constants import POSTGRES_DEFAULT_LIMIT, SUPPORTED_STATS_TOPICS
-from src.utils.utils import build_aggregations_response, build_error_response, build_success_response
+from src.utils.utils import (
+    build_aggregations_response,
+    build_breakdowns_response,
+    build_error_response,
+    build_success_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +57,7 @@ class JobsDetailQueryParams:
 
 @dataclass(frozen=True)
 class AggregationQueryParams:
-    """Validated query parameters ready to pass to `read_aggregations`.
+    """Validated window/filter parameters for aggregation and breakdown queries.
 
     Attributes:
         timestamp_start: Start of time window in epoch milliseconds.
@@ -103,8 +109,8 @@ class HandlerNamedQuery:
             logger.warning("Request rejected: query is not supported.", extra={"query_name": query_name})
             return build_error_response(400, "validation", f"Query '{query_name}' is not supported.")
 
-        if family == "aggregation":
-            return self._handle_aggregation_query(event.get("body"), query_name, topic_name)
+        if family in ("aggregation", "breakdown"):
+            return self._handle_non_paginated_query(event.get("body"), query_name, topic_name, family)
 
         return self._handle_jobs_detail_query(event.get("body"), query_name, topic_name)
 
@@ -137,12 +143,15 @@ class HandlerNamedQuery:
 
         return build_success_response(rows, pagination)
 
-    def _handle_aggregation_query(self, body: str | None, query_name: str, topic_name: str) -> dict[str, Any]:
-        """Handle a discovered window-wide aggregation named query.
+    def _handle_non_paginated_query(
+        self, body: str | None, query_name: str, topic_name: str, family: QueryFamily
+    ) -> dict[str, Any]:
+        """Handle a discovered window-wide aggregation or breakdown named query.
         Args:
             body: The raw request body (JSON string) from the API Gateway event.
             query_name: The lower-cased, already-validated `query_name` path parameter.
             topic_name: The lower-cased, already-validated `topic_name` path parameter.
+            family: The discovered non-paginated query family.
         Returns:
             API Gateway response dict.
         """
@@ -150,8 +159,13 @@ class HandlerNamedQuery:
         if not isinstance(body_params, AggregationQueryParams):
             return body_params
 
+        read, build_response = (
+            (self.reader_postgres.read_breakdowns, build_breakdowns_response)
+            if family == "breakdown"
+            else (self.reader_postgres.read_aggregations, build_aggregations_response)
+        )
         try:
-            aggregations = self.reader_postgres.read_aggregations(
+            result = read(
                 query_name=query_name,
                 timestamp_start=body_params.timestamp_start,
                 timestamp_end=body_params.timestamp_end,
@@ -162,7 +176,7 @@ class HandlerNamedQuery:
             logger.exception("Aggregation query %s failed for topic %s.", query_name, topic_name)
             return build_error_response(500, "database", "Aggregation query failed.")
 
-        return build_aggregations_response(asdict(aggregations))
+        return build_response(asdict(result))
 
     def _validate_event_path_params(self, topic_name: str, query_name: str) -> dict[str, Any] | None:
         """Validate the `topic_name`/`query_name` path parameters.

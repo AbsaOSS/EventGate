@@ -25,7 +25,9 @@ import pytest
 from pytest_mock import MockerFixture
 
 from src.handlers.handler_named_query import HandlerNamedQuery
+from src.readers.aggregation_models import AggregationsWindow, RunsJobsBreakdowns, SourceBreakdown, TenantBreakdown
 from src.readers.reader_postgres import ReaderPostgres
+from src.utils.constants import POSTGRES_DEFAULT_WINDOW_MS
 import src.utils.postgres_base as pb
 
 _DETAIL_DESCRIPTION = [
@@ -80,7 +82,8 @@ def test_query_discovery_is_lazy_cached_and_independent_of_database(mocker: Mock
 
     assert "jobs_detail" == reader.get_query_family("runs_jobs_detail")
     assert "aggregation" == reader.get_query_family("runs_jobs_detail_aggregation")
-    assert 3 == load.call_count
+    assert "breakdown" == reader.get_query_family("runs_jobs_detail_breakdowns")
+    assert 4 == load.call_count
     config.assert_not_called()
     connection.assert_not_called()
     aws_session.assert_not_called()
@@ -91,6 +94,8 @@ def test_query_discovery_is_lazy_cached_and_independent_of_database(mocker: Mock
     [
         ("read_named_query", "runs_jobs_detail_aggregation"),
         ("read_aggregations", "runs_jobs_detail"),
+        ("read_breakdowns", "runs_jobs_detail_aggregation"),
+        ("read_breakdowns", "runs_jobs_detail_breakdowns_cursor"),
     ],
 )
 def test_reader_rejects_private_or_wrong_family_queries_before_config(
@@ -113,6 +118,7 @@ def test_reader_rejects_private_or_wrong_family_queries_before_config(
                 "stats.sql": "-- name: get_stats()\nSELECT 1;",
                 "jobs_detail_queries.sql": "-- name: detail()\nSELECT 1;",
                 "aggregation_queries.sql": "",
+                "breakdown_queries.sql": "",
             },
             id="incomplete_group",
         ),
@@ -445,6 +451,61 @@ class TestReadAggregations:
             mock_client.get_secret_value.return_value = {"SecretString": json.dumps(pg_secret)}
             mock_session.return_value.client.return_value = mock_client
             reader.read_aggregations(query_name="does_not_exist")
+
+
+class TestReadBreakdowns:
+    """Execute singleton distributions through the existing read-only query path."""
+
+    def test_partitions_rows_and_forwards_window_and_filters(
+        self, reader: ReaderPostgres, mocker: MockerFixture
+    ) -> None:
+        columns = ["is_source", "identifier", "total", "succeeded", "failed", "killed", "skipped"]
+        connection = _make_mock_connection(
+            [(column,) for column in columns],
+            [(0, "Tenant", 4, 1, 2, 1, 0), (1, "App", 4, 1, 2, 1, 0)],
+        )
+        mocker.patch.object(reader, "_require_connection_config")
+        mocker.patch.object(reader, "_get_connection", return_value=connection)
+
+        result = reader.read_breakdowns("runs_jobs_detail_breakdowns", 0, 1000, "App", "Tenant")
+
+        assert (
+            RunsJobsBreakdowns(
+                window=AggregationsWindow(0, 1000),
+                by_tenant=[TenantBreakdown("Tenant", 4, 1, 2, 1, 0)],
+                by_source=[SourceBreakdown("App", 4, 1, 2, 1, 0)],
+            )
+            == result
+        )
+        db_cursor = connection.cursor.return_value.__enter__.return_value
+        db_cursor.execute.assert_called_once_with(
+            getattr(getattr(reader._queries, "breakdown"), "runs_jobs_detail_breakdowns").sql,
+            {"ts_start": 0, "ts_end": 1000, "source_app": "App", "tenant_id": "Tenant"},
+        )
+        connection.rollback.assert_called_once_with()
+
+    def test_uses_existing_default_window(self, reader: ReaderPostgres, mocker: MockerFixture) -> None:
+        mocker.patch.object(reader, "_require_connection_config")
+        execute = mocker.patch.object(reader, "_execute_with_retry", return_value=([], []))
+        mocker.patch("src.readers.reader_postgres.time.time", return_value=2_000_000_000)
+
+        result = reader.read_breakdowns("runs_jobs_detail_breakdowns")
+
+        assert AggregationsWindow(2_000_000_000_000 - POSTGRES_DEFAULT_WINDOW_MS, 2_000_000_000_000) == result.window
+        execute.assert_called_once()
+
+    def test_query_error_rolls_back_and_closes_connection(self, reader: ReaderPostgres, mocker: MockerFixture) -> None:
+        connection = _make_mock_connection([], [])
+        connection.cursor.return_value.__enter__.return_value.execute.side_effect = pb.PsycopgError("query failed")
+        mocker.patch.object(reader, "_require_connection_config")
+        mocker.patch.object(reader, "_get_connection", return_value=connection)
+        close = mocker.patch.object(reader, "_close_connection")
+
+        with pytest.raises(RuntimeError, match="Database breakdown query error"):
+            reader.read_breakdowns("runs_jobs_detail_breakdowns")
+
+        connection.rollback.assert_called_once_with()
+        close.assert_called_once_with()
 
 
 def _make_mock_multi_query_connection(
