@@ -26,7 +26,15 @@ import psycopg2.extensions
 from aiosql.queries import Queries
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.readers.aggregation_models import AggregationsWindow, RunsJobsAggregations, Timeline, TimelineEntry
+from src.readers.aggregation_models import (
+    AggregationsWindow,
+    RunsJobsAggregations,
+    RunsJobsBreakdowns,
+    SourceBreakdown,
+    TenantBreakdown,
+    Timeline,
+    TimelineEntry,
+)
 from src.readers.query_catalog import QueryFamily, load_queries, load_query_family
 from src.utils.constants import (
     AGGREGATION_BUCKET_THRESHOLD_MS,
@@ -284,13 +292,20 @@ class ReaderPostgres(PostgresBase):
             "source_app": source_app,
             "tenant_id": tenant_id,
         }
+        if cursor is not None:
+            params["cursor_id"] = cursor
+        return self._run_query(connection, sql_with_cursor if cursor is not None else sql, params)
+
+    def _run_query(
+        self,
+        connection: psycopg2.extensions.connection,
+        sql: str,
+        params: dict[str, Any],
+    ) -> RawQueryResult:
+        """Execute one named SELECT and release its implicit read-only transaction."""
         try:
             with connection.cursor() as db_cursor:
-                if cursor is not None:
-                    params["cursor_id"] = cursor
-                    db_cursor.execute(sql_with_cursor, params)
-                else:
-                    db_cursor.execute(sql, params)
+                db_cursor.execute(sql, params)
                 if db_cursor.description is None:
                     raise RuntimeError("Named query returned no result description.")
                 col_names = [desc[0] for desc in db_cursor.description]
@@ -304,6 +319,14 @@ class ReaderPostgres(PostgresBase):
                 logger.debug("Failed to close the implicit transaction. Closing cached connection.", exc_info=True)
                 self._close_connection()
         return col_names, raw_rows
+
+    @staticmethod
+    def _resolve_window(timestamp_start: int | None, timestamp_end: int | None) -> tuple[int, int]:
+        """Apply the default window (*now - 7 days* to *now*) to missing epoch-millisecond bounds."""
+        now_ms = int(time.time() * 1000)
+        ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
+        ts_end = timestamp_end if timestamp_end is not None else now_ms
+        return ts_start, ts_end
 
     def read_aggregations(
         self,
@@ -330,9 +353,7 @@ class ReaderPostgres(PostgresBase):
 
         self._require_connection_config()
 
-        now_ms = int(time.time() * 1000)  # Milliseconds since the Unix epoch.
-        ts_start = timestamp_start if timestamp_start is not None else (now_ms - POSTGRES_DEFAULT_WINDOW_MS)
-        ts_end = timestamp_end if timestamp_end is not None else now_ms
+        ts_start, ts_end = self._resolve_window(timestamp_start, timestamp_end)
 
         window_ms = ts_end - ts_start
         bucket = TIMELINE_BUCKET_HOUR if window_ms <= AGGREGATION_BUCKET_THRESHOLD_MS else TIMELINE_BUCKET_DAY
@@ -355,6 +376,57 @@ class ReaderPostgres(PostgresBase):
 
         logger.debug("Aggregation query %s returned %d timeline buckets.", query_name, len(timeline_rows))
         return aggregations
+
+    def read_breakdowns(
+        self,
+        query_name: str,
+        timestamp_start: int | None = None,
+        timestamp_end: int | None = None,
+        source_app: str | None = None,
+        tenant_id: str | None = None,
+    ) -> RunsJobsBreakdowns:
+        """Read complete tenant/source job-row distributions for the selected window.
+        Args:
+            query_name: Public query identifier discovered from the breakdown SQL file.
+            timestamp_start: Inclusive parent-run start in epoch milliseconds, default *now - 7 days*.
+            timestamp_end: Inclusive end bound on parent-run start in epoch milliseconds, default *now*.
+            source_app: Exact source application filter, or `None` for all applications.
+            tenant_id: Exact raw tenant identifier filter, or `None` for all tenants.
+        Returns:
+            Both distributions, ordered by identifier, with the resolved window.
+        Raises:
+            RuntimeError: On unknown query name or database connectivity/query errors.
+        """
+        if self.get_query_family(query_name) != "breakdown":
+            raise RuntimeError(f"Unknown breakdown query: {query_name}.")
+
+        self._require_connection_config()
+        ts_start, ts_end = self._resolve_window(timestamp_start, timestamp_end)
+        sql = getattr(getattr(self._queries, "breakdown"), query_name).sql
+        params = {"ts_start": ts_start, "ts_end": ts_end, "source_app": source_app, "tenant_id": tenant_id}
+
+        try:
+            columns, raw_rows = self._execute_with_retry(lambda conn: self._run_query(conn, sql, params))
+        except PsycopgError as exc:
+            self._close_connection()
+            raise RuntimeError(f"Database breakdown query error: {exc}") from exc
+
+        by_tenant: list[TenantBreakdown] = []
+        by_source: list[SourceBreakdown] = []
+        for values in raw_rows:
+            row = dict(zip(columns, values, strict=True))
+            identifier = row.pop("identifier")
+            if row.pop("is_source"):
+                by_source.append(SourceBreakdown(source_app=identifier, **row))
+            else:
+                by_tenant.append(TenantBreakdown(tenant_id=identifier, **row))
+
+        logger.debug("Breakdown query returned groups.", extra={"query_name": query_name, "group_count": len(raw_rows)})
+        return RunsJobsBreakdowns(
+            window=AggregationsWindow(timestamp_start=ts_start, timestamp_end=ts_end),
+            by_tenant=by_tenant,
+            by_source=by_source,
+        )
 
     def _run_aggregation_queries(
         self,

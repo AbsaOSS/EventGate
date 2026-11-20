@@ -19,9 +19,11 @@ import json
 import time
 import uuid
 from collections.abc import Generator
+from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any
 
+import psycopg2
 from psycopg2.extensions import TRANSACTION_STATUS_IDLE, cursor, parse_dsn
 import pytest
 
@@ -225,6 +227,80 @@ class TestNamedQueryFilters:
         entries = aggregations["timeline"]["entries"]
         assert total == sum(entry["total"] for entry in entries)
         assert counts == {status: sum(entry[status] for entry in entries) for status in counts}
+
+        response = stats_client.post_named_query("public.cps.za.runs", "runs_jobs_detail_breakdowns", body)
+
+        assert 200 == response["statusCode"]
+        breakdowns = json.loads(response["body"])["breakdowns"]
+        for dimension, identifier in (("by_tenant", "tenant_id"), ("by_source", "source_app")):
+            expected: dict[str, dict[str, Any]] = {}
+            for index in expected_indices:
+                event = filter_events[index]
+                group = expected.setdefault(
+                    event[identifier],
+                    {identifier: event[identifier], "total": 0, "succeeded": 0, "failed": 0, "killed": 0, "skipped": 0},
+                )
+                group["total"] += 1
+                group[event["jobs"][0]["status"]] += 1
+            assert [expected[key] for key in sorted(expected)] == breakdowns[dimension]
+
+
+class TestNamedQueryBreakdowns:
+    """Prove distribution SQL at job-row grain with raw identifiers and statuses."""
+
+    @pytest.fixture(scope="class")
+    def breakdown_window(
+        self, eventgate_client: EventGateTestClient, valid_token: str, postgres_container: str
+    ) -> dict[str, int]:
+        timestamp = int(datetime(2024, 8, 1, tzinfo=timezone.utc).timestamp() * 1000)
+        event = _post_job(eventgate_client, valid_token, "succeeded", None, "zApp", timestamp, "Ztenant")
+        _post_job(eventgate_client, valid_token, "failed", None, "AApp", timestamp + 1000, "atenant")
+        _post_job(eventgate_client, valid_token, "succeeded", None, "aApp", timestamp, "Atenant")
+        _post_job(eventgate_client, valid_token, "failed", None, "excluded", timestamp - 1, "excluded")
+        # Include multiple jobs, a DB-supported status outside the ingestion enum, and job times outside the window.
+        with closing(psycopg2.connect(postgres_container)) as connection, connection:
+            with connection.cursor() as db_cursor:
+                db_cursor.executemany(
+                    """INSERT INTO public_cps_za_runs_jobs (event_id, catalog_id, status, timestamp_start, timestamp_end)
+                       VALUES (%s, 'db.schema.extra', %s, %s, %s)""",
+                    [
+                        (event["event_id"], status, timestamp + 100_000, timestamp + 160_000)
+                        for status in ("failed", "failed", "killed", "skipped", "running")
+                    ],
+                )
+        return {"timestamp_start": timestamp, "timestamp_end": timestamp + 1000}
+
+    def test_complete_alphabetical_distributions(
+        self, stats_client: EventStatsTestClient, breakdown_window: dict[str, int]
+    ) -> None:
+        response = stats_client.post_named_query("public.cps.za.runs", "runs_jobs_detail_breakdowns", breakdown_window)
+
+        assert 200 == response["statusCode"]
+        result = json.loads(response["body"])["breakdowns"]
+        assert breakdown_window == result["window"]
+        assert [
+            {"tenant_id": "Atenant", "total": 1, "succeeded": 1, "failed": 0, "killed": 0, "skipped": 0},
+            {"tenant_id": "Ztenant", "total": 6, "succeeded": 1, "failed": 2, "killed": 1, "skipped": 1},
+            {"tenant_id": "atenant", "total": 1, "succeeded": 0, "failed": 1, "killed": 0, "skipped": 0},
+        ] == result["by_tenant"]
+        assert [
+            {"source_app": "AApp", "total": 1, "succeeded": 0, "failed": 1, "killed": 0, "skipped": 0},
+            {"source_app": "aApp", "total": 1, "succeeded": 1, "failed": 0, "killed": 0, "skipped": 0},
+            {"source_app": "zApp", "total": 6, "succeeded": 1, "failed": 2, "killed": 1, "skipped": 1},
+        ] == result["by_source"]
+
+    def test_empty_window_releases_transaction(
+        self, aggregation_reader: ReaderPostgres, breakdown_window: dict[str, int]
+    ) -> None:
+        result = aggregation_reader.read_breakdowns(
+            "runs_jobs_detail_breakdowns",
+            breakdown_window["timestamp_end"] + 1,
+            breakdown_window["timestamp_end"] + 2,
+        )
+
+        assert [] == result.by_tenant
+        assert [] == result.by_source
+        assert TRANSACTION_STATUS_IDLE == aggregation_reader._get_connection().get_transaction_status()
 
 
 def test_unknown_query_name_returns_400(stats_client: EventStatsTestClient) -> None:
