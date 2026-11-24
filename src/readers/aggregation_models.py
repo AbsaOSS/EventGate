@@ -16,7 +16,7 @@
 
 """Typed result shapes for window-wide named-query aggregations.
 
-These dataclasses are built by `ReaderPostgres.read_aggregations` and converted to a plain
+These dataclasses are built by the reader's aggregation/breakdown methods and converted to a plain
 dict (via `dataclasses.asdict`) only at the handler boundary, so the reader's internal
 aggregation logic stays fully typed end to end.
 """
@@ -103,3 +103,36 @@ class RunsJobsAggregations:
     success_rate: float = 0.0
     avg_duration_ms: int | None = None
     timeline: Timeline = field(default_factory=lambda: Timeline(bucket=TIMELINE_BUCKET_HOUR, entries=[]))
+
+
+@dataclass(frozen=True)
+class TenantBreakdown:
+    """Job-row counts for a tenant, with raw-status counters."""
+
+    tenant_id: str
+    total: int
+    succeeded: int
+    failed: int
+    killed: int
+    skipped: int
+
+
+@dataclass(frozen=True)
+class SourceBreakdown:
+    """Job-row counts for a source application, with raw-status counters."""
+
+    source_app: str
+    total: int
+    succeeded: int
+    failed: int
+    killed: int
+    skipped: int
+
+
+@dataclass(frozen=True)
+class RunsJobsBreakdowns:
+    """Complete breakdowns detail."""
+
+    window: AggregationsWindow
+    by_tenant: list[TenantBreakdown]
+    by_source: list[SourceBreakdown]
