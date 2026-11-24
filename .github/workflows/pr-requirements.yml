@@ -18,7 +18,7 @@ permissions:
 jobs:
   check-pr:
     name: PR Requirements
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # A stacked PR targets the layer below it rather than main, so a fixed
       # allow-list of `master` fails every layer but the bottom one. Allow the
@@ -41,15 +41,10 @@ jobs:
 
       - name: Check PR requirements
         uses: AbsaOSS/check-pr-requirements@40a8970bea7014f119ec34a044082ac304999873 # v0.4.0
+        # All options and their meaning:
+        # https://github.com/AbsaOSS/check-pr-requirements#check-configuration
+        # PR data and the GitHub token default to the pull_request event.
         with:
-          pr-title: ${{ github.event.pull_request.title }}
-          pr-body: ${{ github.event.pull_request.body }}
-          pr-branch: ${{ github.event.pull_request.head.ref }}
-          pr-number: ${{ github.event.pull_request.number }}
-          target-branch: ${{ github.event.pull_request.base.ref }}
-          files-changed: ${{ github.event.pull_request.changed_files }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
           # Enabled checks
           check-title: "true"
           check-description: "true"
@@ -58,10 +53,12 @@ jobs:
           warn-checks: "branch-name"
           check-pr-size: "true"
           check-target-branch: "true"
-          check-release-notes: "false" # no release-notes convention yet
+          check-release-notes: "true" # tag, skip label and placeholder use action defaults
           check-label: "false"
 
           # Configuration
+          # title-formats: allowed title styles (conventional, issue-number, custom);
+          # allowed-target-branches: branches a PR may target (resolved above).
           title-formats: "conventional"
           title-types: "feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
           description-min-length: "20"
