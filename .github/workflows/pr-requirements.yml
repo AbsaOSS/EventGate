@@ -41,11 +41,9 @@ jobs:
 
       - name: Check PR requirements
         uses: AbsaOSS/check-pr-requirements@40a8970bea7014f119ec34a044082ac304999873 # v0.4.0
-        # All options and their meaning:
-        # https://github.com/AbsaOSS/check-pr-requirements#check-configuration
         # PR data and the GitHub token default to the pull_request event.
         with:
-          # Enabled checks
+          # Enabled checks : https://github.com/AbsaOSS/check-pr-requirements#available-checks
           check-title: "true"
           check-description: "true"
           check-issue-reference: "true"
@@ -53,12 +51,9 @@ jobs:
           warn-checks: "branch-name"
           check-pr-size: "true"
           check-target-branch: "true"
-          check-release-notes: "true" # tag, skip label and placeholder use action defaults
-          check-label: "false"
+          check-release-notes: "true"
 
-          # Configuration
-          # title-formats: allowed title styles (conventional, issue-number, custom);
-          # allowed-target-branches: branches a PR may target (resolved above).
+          # Check configuration: https://github.com/AbsaOSS/check-pr-requirements#available-checks
           title-formats: "conventional"
           title-types: "feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
           description-min-length: "20"
@@ -67,3 +62,9 @@ jobs:
           branch-pattern: "^(feat|feature|fix|bugfix|hotfix|release|support|chore|docs|ci|test|dependabot)/[a-zA-Z0-9._/-]+$"
           max-files-changed: "50"
           allowed-target-branches: ${{ steps.targets.outputs.list }}
+
+          # Release notes configuration (same values the former
+          # check_pr_release_notes.yml used; keep aligned with release_draft.yml).
+          release-notes-tag: "## [Rr]elease [Nn]otes"
+          release-notes-skip-labels: "no RN"
+          release-notes-skip-placeholders: "TBD"
